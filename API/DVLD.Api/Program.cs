@@ -113,6 +113,11 @@ builder.Services
                         .FindFirst("sst")?
                         .Value;
 
+                var sessionIdClaim =
+                    principal?
+                        .FindFirst("sid")?
+                        .Value;
+
                 if (!int.TryParse(userIdClaim, out var userId) ||
                     userId <= 0 ||
                     string.IsNullOrWhiteSpace(securityStampClaim))
@@ -121,18 +126,26 @@ builder.Services
                     return;
                 }
 
+                if (string.IsNullOrWhiteSpace(sessionIdClaim) ||
+                    !Guid.TryParse(sessionIdClaim, out var sessionId) ||
+                    sessionId == Guid.Empty)
+                {
+                    context.Fail("Missing or invalid session identifier claim.");
+                    return;
+                }
+
                 var authService =
                     context.HttpContext.RequestServices
                         .GetRequiredService<IAuthService>();
 
-                // Activation state and security stamp are read server-side on every
-                // request. Password, role, or activation changes rotate the stamp,
-                // which invalidates tokens carrying the previous value immediately.
-                var principalIsCurrent =
-                    await authService.IsPrincipalCurrentAsync(
-                        userId,
-                        securityStampClaim,
-                        context.HttpContext.RequestAborted);
+                // Activation state, security stamp, and active session state are validated
+                // server-side on every request. Password, role, or activation changes rotate
+                // the stamp, and logout revokes the session family, invalidating tokens immediately.
+                var principalIsCurrent = await authService.IsPrincipalCurrentAsync(
+                    userId,
+                    securityStampClaim,
+                    sessionId,
+                    context.HttpContext.RequestAborted);
 
                 if (!principalIsCurrent)
                 {

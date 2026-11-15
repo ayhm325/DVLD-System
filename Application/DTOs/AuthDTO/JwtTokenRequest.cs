@@ -19,6 +19,9 @@ public sealed class JwtTokenRequest
 
     /// <summary>Security stamp the token is bound to; changes invalidate the token.</summary>
     public string SecurityStamp { get; init; } = string.Empty;
+
+    /// <summary>Session family identifier (TokenFamilyId) the access token belongs to.</summary>
+    public Guid? SessionId { get; init; }
 }
 
 /// <summary>
@@ -29,4 +32,6 @@ public sealed class UserSecurityState
     public bool IsActive { get; init; }
 
     public string SecurityStamp { get; init; } = string.Empty;
+
+    public bool IsSessionActive { get; init; } = true;
 }

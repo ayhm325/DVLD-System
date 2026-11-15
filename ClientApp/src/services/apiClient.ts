@@ -161,6 +161,10 @@ async function throwApiError(response: Response): Promise<never> {
   throw apiError
 }
 
+export type RefreshResult =
+  | { success: true; session: LoginResponse }
+  | { success: false; status: number | 'network'; isFatal: boolean }
+
 // ---------------------------------------------------------------------------
 // Refresh single-flight
 //
@@ -169,9 +173,9 @@ async function throwApiError(response: Response): Promise<never> {
 // handled entirely by the HttpOnly cookie.
 // ---------------------------------------------------------------------------
 
-let inFlightRefresh: Promise<LoginResponse | null> | null = null
+let inFlightRefresh: Promise<RefreshResult> | null = null
 
-export function refreshSession(): Promise<LoginResponse | null> {
+export function refreshSession(): Promise<RefreshResult> {
   if (!inFlightRefresh) {
     inFlightRefresh = performRefresh(0).finally(() => {
       inFlightRefresh = null
@@ -181,7 +185,7 @@ export function refreshSession(): Promise<LoginResponse | null> {
   return inFlightRefresh
 }
 
-async function performRefresh(attempt: number): Promise<LoginResponse | null> {
+async function performRefresh(attempt: number): Promise<RefreshResult> {
   try {
     const response = await fetch(`${API_BASE_URL}/Auth/refresh`, {
       method: 'POST',
@@ -202,25 +206,31 @@ async function performRefresh(attempt: number): Promise<LoginResponse | null> {
     if (!response.ok) {
       if (response.status === 401) {
         setAccessToken(null)
+        return { success: false, status: 401, isFatal: true }
       }
 
-      return null
+      // Non-fatal failures (409, 429 rate limit, 500 server error, etc.)
+      return { success: false, status: response.status, isFatal: false }
     }
 
     const session = (await response.json()) as LoginResponse
     setAccessToken(session.accessToken)
-    return session
+    return { success: true, session }
   } catch {
-    return null
+    // Network / fetch error (offline, DNS failure, aborted)
+    return { success: false, status: 'network', isFatal: false }
   }
 }
 
 export async function logoutSession(): Promise<void> {
   try {
+    const headers = buildHeaders({
+      headers: { [CSRF_HEADER]: '1' },
+    })
     await fetch(`${API_BASE_URL}/Auth/logout`, {
       method: 'POST',
       credentials: 'include',
-      headers: { [CSRF_HEADER]: '1' },
+      headers,
     })
   } catch {
     // Logout is best-effort locally; the cookie is cleared by the browser only on
@@ -293,15 +303,22 @@ async function sendWithRefresh(
     return response
   }
 
-  const refreshed = await refreshSession()
+  const refreshResult = await refreshSession()
 
-  if (!refreshed) {
+  if (refreshResult.success) {
+    // Retry the original request exactly once with the new access token.
+    response = await send(path, init, refreshResult.session.accessToken)
+    return response
+  }
+
+  if (refreshResult.isFatal) {
     unauthorizedHandler?.('Your session has expired. Please log in again.')
     return response
   }
 
-  // Retry the original request exactly once with the new access token.
-  response = await send(path, init, refreshed.accessToken)
+  // Non-fatal error (offline/500/429): do NOT trigger unauthorizedHandler.
+  // Return the original response so the caller fails with the appropriate error
+  // without terminating the user's active authentication state.
   return response
 }
 

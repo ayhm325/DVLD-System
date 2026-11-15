@@ -667,6 +667,7 @@ public sealed class UserPasswordChangeConcurrencyRegressionTests : IClassFixture
         public Task<bool> IsUserExistsByPersonIdAsync(int personId, CancellationToken cancellationToken = default) => _inner.IsUserExistsByPersonIdAsync(personId, cancellationToken);
         public Task<bool> IsUserActiveAsync(int userId, CancellationToken cancellationToken = default) => _inner.IsUserActiveAsync(userId, cancellationToken);
         public Task<UserSecurityState?> GetSecurityStateAsync(int userId, CancellationToken cancellationToken = default) => _inner.GetSecurityStateAsync(userId, cancellationToken);
+        public Task<UserSecurityState?> GetSecurityStateAsync(int userId, Guid? sessionId, DateTime nowUtc, CancellationToken cancellationToken = default) => _inner.GetSecurityStateAsync(userId, sessionId, nowUtc, cancellationToken);
         public Task<int> GetActiveAdminCountAsync(CancellationToken cancellationToken = default) => _inner.GetActiveAdminCountAsync(cancellationToken);
         public Task<bool> AcquireAdminMutationLockAsync(CancellationToken cancellationToken = default) => _inner.AcquireAdminMutationLockAsync(cancellationToken);
         public Task AddUserAsync(User user, CancellationToken cancellationToken = default) => _inner.AddUserAsync(user, cancellationToken);

@@ -26,7 +26,7 @@ public sealed class JwtTokenService(
 
         var expiresAtUtc = _clock.UtcNow.AddMinutes(_options.ExpirationMinutes);
 
-        var claims = new[]
+        var claims = new List<Claim>
         {
             new Claim(ClaimTypes.NameIdentifier, request.UserId.ToString()),
             new Claim(ClaimTypes.Name, request.UserName),
@@ -41,6 +41,11 @@ public sealed class JwtTokenService(
 
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString("N"))
         };
+
+        if (request.SessionId.HasValue && request.SessionId.Value != Guid.Empty)
+        {
+            claims.Add(new Claim("sid", request.SessionId.Value.ToString("D")));
+        }
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.SecretKey));
 

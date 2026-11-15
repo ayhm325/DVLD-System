@@ -238,7 +238,39 @@ public sealed class UserRepository : IUserRepository
             .Select(u => new UserSecurityState
             {
                 IsActive = u.IsActive,
-                SecurityStamp = u.SecurityStamp
+                SecurityStamp = u.SecurityStamp,
+                IsSessionActive = true
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public Task<UserSecurityState?> GetSecurityStateAsync(
+        int userId,
+        Guid? sessionId,
+        DateTime nowUtc,
+        CancellationToken cancellationToken = default)
+    {
+        if (userId <= 0)
+            return Task.FromResult<UserSecurityState?>(null);
+
+        if (!sessionId.HasValue || sessionId.Value == Guid.Empty)
+        {
+            return GetSecurityStateAsync(userId, cancellationToken);
+        }
+
+        var sid = sessionId.Value;
+
+        return _context.Users
+            .AsNoTracking()
+            .Where(u => u.UserId == userId)
+            .Select(u => new UserSecurityState
+            {
+                IsActive = u.IsActive,
+                SecurityStamp = u.SecurityStamp,
+                IsSessionActive = u.Sessions.Any(s =>
+                    s.TokenFamilyId == sid &&
+                    s.RevokedAtUtc == null &&
+                    s.ExpiresAtUtc > nowUtc)
             })
             .FirstOrDefaultAsync(cancellationToken);
     }

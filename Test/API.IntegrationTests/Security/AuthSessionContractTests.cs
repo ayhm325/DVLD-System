@@ -2,6 +2,9 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+
 using API.IntegrationTests.Infrastructure;
 
 using Application.Common.Results;
@@ -263,6 +266,51 @@ public sealed class AuthSessionContractTests
     }
 
     [Fact]
+    public async Task Logout_WithBearerTokenContainingSid_RevokesBySessionId()
+    {
+        await using var factory = new ApiWebApplicationFactory();
+        var expectedSessionId = Guid.NewGuid();
+
+        factory.AuthServiceMock
+            .Setup(x => x.LogoutAsync(null, expectedSessionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success());
+
+        using var client = factory.CreateClient();
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/Auth/logout");
+        request.Headers.Add(CsrfHeader, "1");
+
+        // Attach bearer token with sid claim
+        var key = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(
+            System.Text.Encoding.UTF8.GetBytes(new string('k', 64)));
+        var credentials = new Microsoft.IdentityModel.Tokens.SigningCredentials(
+            key, Microsoft.IdentityModel.Tokens.SecurityAlgorithms.HmacSha256);
+        var token = new System.IdentityModel.Tokens.Jwt.JwtSecurityToken(
+            issuer: "DVLD.Api",
+            audience: "DVLD.Client",
+            claims: new[]
+            {
+                new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, "10"),
+                new System.Security.Claims.Claim("sst", "stamp"),
+                new System.Security.Claims.Claim("sid", expectedSessionId.ToString("D"))
+            },
+            expires: DateTime.UtcNow.AddMinutes(15),
+            signingCredentials: credentials);
+        var jwtString = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler().WriteToken(token);
+
+        request.Headers.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", jwtString);
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        factory.AuthServiceMock.Verify(
+            x => x.LogoutAsync(null, expectedSessionId, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task LogoutAll_WithoutAuthentication_Returns401()
     {
         await using var factory = new ApiWebApplicationFactory();
@@ -306,6 +354,186 @@ public sealed class AuthSessionContractTests
         factory.AuthServiceMock.Verify(
             x => x.LogoutAllAsync(10, It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task TokenValidation_WithoutSidClaim_IsRejected()
+    {
+        await using var factory = new ApiWebApplicationFactory();
+        var (jwtFactory, jwtService) = CreateJwtTestEnvironment(factory);
+
+        var tokenNoSid = jwtService.GenerateToken(new JwtTokenRequest
+        {
+            UserId = 10,
+            PersonId = 20,
+            UserName = "user10",
+            FullName = "User 10",
+            Role = UserRole.Staff,
+            SecurityStamp = "stamp-10",
+            SessionId = null
+        });
+
+        using var client = jwtFactory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", tokenNoSid.AccessToken);
+
+        var response = await client.GetAsync("/api/Auth/me");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task TwoDevices_IndependentSessions_LogoutDeviceA_LeavesDeviceBActive_LogoutAll_RevokesBoth()
+    {
+        await using var factory = new ApiWebApplicationFactory();
+        var (jwtFactory, jwtService) = CreateJwtTestEnvironment(factory);
+
+        var sessionIdA = Guid.NewGuid();
+        var sessionIdB = Guid.NewGuid();
+        var otherUserSessionId = Guid.NewGuid();
+
+        var activeSessions = new HashSet<Guid> { sessionIdA, sessionIdB, otherUserSessionId };
+        var revokedUsers = new HashSet<int>();
+
+        factory.AuthServiceMock
+            .Setup(x => x.IsPrincipalCurrentAsync(
+                It.IsAny<int>(), It.IsAny<string>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((int userId, string stamp, Guid? sid, CancellationToken _) =>
+            {
+                if (revokedUsers.Contains(userId)) return false;
+                return sid.HasValue && activeSessions.Contains(sid.Value);
+            });
+
+        factory.AuthServiceMock
+            .Setup(x => x.LogoutAsync(It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string? _, Guid? sid, CancellationToken _) =>
+            {
+                if (sid.HasValue) activeSessions.Remove(sid.Value);
+                return Result.Success();
+            });
+
+        factory.AuthServiceMock
+            .Setup(x => x.LogoutAllAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((int userId, CancellationToken _) =>
+            {
+                revokedUsers.Add(userId);
+                return Result.Success();
+            });
+
+        var tokenA = jwtService.GenerateToken(new JwtTokenRequest
+        {
+            UserId = 10,
+            PersonId = 20,
+            UserName = "user10",
+            FullName = "User 10",
+            Role = UserRole.Staff,
+            SecurityStamp = "stamp-10",
+            SessionId = sessionIdA
+        });
+
+        var tokenB = jwtService.GenerateToken(new JwtTokenRequest
+        {
+            UserId = 10,
+            PersonId = 20,
+            UserName = "user10",
+            FullName = "User 10",
+            Role = UserRole.Staff,
+            SecurityStamp = "stamp-10",
+            SessionId = sessionIdB
+        });
+
+        var tokenOther = jwtService.GenerateToken(new JwtTokenRequest
+        {
+            UserId = 99,
+            PersonId = 99,
+            UserName = "otherUser",
+            FullName = "Other User",
+            Role = UserRole.Staff,
+            SecurityStamp = "stamp-99",
+            SessionId = otherUserSessionId
+        });
+
+        using var clientA = jwtFactory.CreateClient();
+        clientA.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", tokenA.AccessToken);
+
+        using var clientB = jwtFactory.CreateClient();
+        clientB.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", tokenB.AccessToken);
+
+        using var clientOther = jwtFactory.CreateClient();
+        clientOther.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", tokenOther.AccessToken);
+
+        // 1. Both devices (and other user) can access protected endpoint
+        var resA1 = await clientA.GetAsync("/api/Auth/me");
+        Assert.Equal(HttpStatusCode.OK, resA1.StatusCode);
+
+        var resB1 = await clientB.GetAsync("/api/Auth/me");
+        Assert.Equal(HttpStatusCode.OK, resB1.StatusCode);
+
+        var resOther1 = await clientOther.GetAsync("/api/Auth/me");
+        Assert.Equal(HttpStatusCode.OK, resOther1.StatusCode);
+
+        // 2. Logging out from device A invalidates device A
+        using var logoutRequestA = new HttpRequestMessage(HttpMethod.Post, "/api/Auth/logout");
+        logoutRequestA.Headers.Add(CsrfHeader, "1");
+        var logoutResponseA = await clientA.SendAsync(logoutRequestA);
+        Assert.Equal(HttpStatusCode.NoContent, logoutResponseA.StatusCode);
+
+        // Verify device A is now rejected
+        var resA2 = await clientA.GetAsync("/api/Auth/me");
+        Assert.Equal(HttpStatusCode.Unauthorized, resA2.StatusCode);
+
+        // 3. Device B remains authorized
+        var resB2 = await clientB.GetAsync("/api/Auth/me");
+        Assert.Equal(HttpStatusCode.OK, resB2.StatusCode);
+
+        // Other user remains authorized
+        var resOther2 = await clientOther.GetAsync("/api/Auth/me");
+        Assert.Equal(HttpStatusCode.OK, resOther2.StatusCode);
+
+        // 4. Logout-All from Device B invalidates all sessions for User 10
+        using var logoutAllRequestB = new HttpRequestMessage(HttpMethod.Post, "/api/Auth/logout-all");
+        logoutAllRequestB.Headers.Add(CsrfHeader, "1");
+        var logoutAllResponseB = await clientB.SendAsync(logoutAllRequestB);
+        Assert.Equal(HttpStatusCode.NoContent, logoutAllResponseB.StatusCode);
+
+        // Both Device A and Device B are now rejected
+        var resA3 = await clientA.GetAsync("/api/Auth/me");
+        Assert.Equal(HttpStatusCode.Unauthorized, resA3.StatusCode);
+
+        var resB3 = await clientB.GetAsync("/api/Auth/me");
+        Assert.Equal(HttpStatusCode.Unauthorized, resB3.StatusCode);
+
+        // Other user (User 99) is NOT affected
+        var resOther3 = await clientOther.GetAsync("/api/Auth/me");
+        Assert.Equal(HttpStatusCode.OK, resOther3.StatusCode);
+    }
+
+    private static (Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> Factory, Application.Interfaces.IJwtTokenService JwtService)
+        CreateJwtTestEnvironment(ApiWebApplicationFactory factory)
+    {
+        var jwtFactory = factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.PostConfigure<Microsoft.AspNetCore.Authentication.AuthenticationOptions>(options =>
+                {
+                    options.DefaultAuthenticateScheme =
+                        Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
+                    options.DefaultChallengeScheme =
+                        Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
+                });
+
+                services.RemoveAll<Application.Interfaces.ICurrentUserService>();
+                services.AddScoped<Application.Interfaces.ICurrentUserService, DVLD.Api.Security.ApiCurrentUserService>();
+            });
+        });
+
+        var scope = jwtFactory.Services.CreateScope();
+        var jwtService = scope.ServiceProvider.GetRequiredService<Application.Interfaces.IJwtTokenService>();
+        return (jwtFactory, jwtService);
     }
 
     private static LoginResponseDto Session(string refreshToken) =>

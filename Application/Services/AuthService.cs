@@ -174,7 +174,7 @@ public sealed class AuthService(
                     await transaction.CommitAsync(cancellationToken);
 
                     return Result<LoginResponseDto>.Success(
-                        BuildResponse(user, newRawToken, newSession.ExpiresAtUtc));
+                        BuildResponse(user, newRawToken, newSession.ExpiresAtUtc, newSession.TokenFamilyId));
                 },
                 IsolationLevel.ReadCommitted,
                 cancellationToken);
@@ -192,19 +192,32 @@ public sealed class AuthService(
         }
     }
 
+    public Task<Result> LogoutAsync(
+        string? refreshToken, CancellationToken cancellationToken = default) =>
+        LogoutAsync(refreshToken, null, cancellationToken);
+
     public async Task<Result> LogoutAsync(
-        string? refreshToken, CancellationToken cancellationToken = default)
+        string? refreshToken, Guid? sessionId, CancellationToken cancellationToken = default)
     {
-        if (!_refreshTokenService.LooksLikeValidToken(refreshToken))
+        var now = _clock.UtcNow;
+
+        if (_refreshTokenService.LooksLikeValidToken(refreshToken))
         {
-            return Result.Success();
+            await _sessionRepository.RevokeByTokenHashAsync(
+                _refreshTokenService.HashToken(refreshToken!),
+                now,
+                SessionRevocationReasons.Logout,
+                cancellationToken);
         }
 
-        await _sessionRepository.RevokeByTokenHashAsync(
-            _refreshTokenService.HashToken(refreshToken!),
-            _clock.UtcNow,
-            SessionRevocationReasons.Logout,
-            cancellationToken);
+        if (sessionId.HasValue && sessionId.Value != Guid.Empty)
+        {
+            await _sessionRepository.RevokeFamilyAsync(
+                sessionId.Value,
+                now,
+                SessionRevocationReasons.Logout,
+                cancellationToken);
+        }
 
         return Result.Success();
     }
@@ -218,13 +231,28 @@ public sealed class AuthService(
                 "Authenticated user is required.");
         }
 
-        await _sessionRepository.RevokeAllForUserAsync(
-            userId,
-            _clock.UtcNow,
-            SessionRevocationReasons.LogoutAll,
-            cancellationToken);
+        var user = await _userRepository.GetUserForUpdateAsync(userId, cancellationToken);
+        if (user is null)
+        {
+            return Result.Unauthorized("User not found.");
+        }
 
-        return Result.Success();
+        return await _unitOfWork.ExecuteInTransactionAsync(
+            async transaction =>
+            {
+                user.SecurityStamp = Guid.NewGuid().ToString("N");
+
+                await _sessionRepository.RevokeAllForUserAsync(
+                    userId,
+                    _clock.UtcNow,
+                    SessionRevocationReasons.LogoutAll,
+                    cancellationToken);
+
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+                return Result.Success();
+            },
+            IsolationLevel.ReadCommitted,
+            cancellationToken);
     }
 
     public async Task<Result<LoginResponseDto>> StartSessionAsync(
@@ -263,6 +291,31 @@ public sealed class AuthService(
                    state.SecurityStamp,
                    securityStamp,
                    StringComparison.Ordinal);
+    }
+
+    public async Task<bool> IsPrincipalCurrentAsync(
+        int userId, string securityStamp, Guid? sessionId, CancellationToken cancellationToken = default)
+    {
+        if (!sessionId.HasValue || sessionId.Value == Guid.Empty)
+        {
+            return await IsPrincipalCurrentAsync(userId, securityStamp, cancellationToken);
+        }
+
+        if (userId <= 0 || string.IsNullOrWhiteSpace(securityStamp))
+        {
+            return false;
+        }
+
+        var state = await _userRepository.GetSecurityStateAsync(
+            userId, sessionId, _clock.UtcNow, cancellationToken);
+
+        return state is not null &&
+               state.IsActive &&
+               string.Equals(
+                   state.SecurityStamp,
+                   securityStamp,
+                   StringComparison.Ordinal) &&
+               state.IsSessionActive;
     }
 
     private async Task<Result<LoginResponseDto>> HandleConsumedTokenAsync(
@@ -333,13 +386,14 @@ public sealed class AuthService(
         }
 
         return Result<LoginResponseDto>.Success(
-            BuildResponse(user, rawToken, session.ExpiresAtUtc));
+            BuildResponse(user, rawToken, session.ExpiresAtUtc, session.TokenFamilyId));
     }
 
     private LoginResponseDto BuildResponse(
         User user,
         string refreshToken,
-        DateTime refreshExpiresAtUtc)
+        DateTime refreshExpiresAtUtc,
+        Guid? sessionId = null)
     {
         var fullName = user.Person?.FullName ?? user.UserName;
 
@@ -351,7 +405,8 @@ public sealed class AuthService(
                 FullName = fullName,
                 PersonId = user.PersonId,
                 Role = user.Role,
-                SecurityStamp = user.SecurityStamp
+                SecurityStamp = user.SecurityStamp,
+                SessionId = sessionId
             });
 
         return new LoginResponseDto

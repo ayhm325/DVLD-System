@@ -65,4 +65,39 @@ public sealed class JwtTokenServiceClockTests
         var parsed = new JwtSecurityTokenHandler().ReadJwtToken(result.AccessToken);
         Assert.Equal(expectedExpiryUtc, parsed.ValidTo);
     }
+
+    [Fact]
+    public void GenerateToken_WhenSessionIdIsProvided_IncludesSidClaim()
+    {
+        var clock = new FixedJordanClock(
+            new DateTime(2026, 11, 3, 22, 15, 0, DateTimeKind.Utc));
+
+        var options = Microsoft.Extensions.Options.Options.Create(new JwtOptions
+        {
+            SecretKey = new string('k', 64),
+            Issuer = "DVLD.Api",
+            Audience = "DVLD.Client",
+            ExpirationMinutes = 15
+        });
+
+        var sut = new JwtTokenService(options, clock);
+        var expectedSessionId = Guid.NewGuid();
+
+        var result = sut.GenerateToken(new JwtTokenRequest
+        {
+            UserId = 42,
+            PersonId = 100,
+            UserName = "staff.jordan",
+            FullName = "Jordan Staff",
+            Role = UserRole.Staff,
+            SecurityStamp = "stamp-clock",
+            SessionId = expectedSessionId
+        });
+
+        var parsed = new JwtSecurityTokenHandler().ReadJwtToken(result.AccessToken);
+        var sidClaim = parsed.Claims.FirstOrDefault(c => c.Type == "sid");
+
+        Assert.NotNull(sidClaim);
+        Assert.Equal(expectedSessionId.ToString("D"), sidClaim.Value);
+    }
 }

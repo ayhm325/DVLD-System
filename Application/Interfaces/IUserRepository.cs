@@ -62,6 +62,16 @@ public interface IUserRepository
         int userId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Reads the user's activation state, current security stamp, and verifies if the specified session family is still active.
+    /// Used on authenticated requests to reject tokens from revoked sessions or before a security change.
+    /// </summary>
+    Task<UserSecurityState?> GetSecurityStateAsync(
+        int userId,
+        Guid? sessionId,
+        DateTime nowUtc,
+        CancellationToken cancellationToken = default);
+
     Task<int> GetActiveAdminCountAsync(
         CancellationToken cancellationToken = default);
 

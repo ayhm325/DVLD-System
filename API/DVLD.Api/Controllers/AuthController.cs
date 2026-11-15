@@ -115,7 +115,47 @@ public sealed class AuthController(
             return CsrfFailure();
         }
 
-        await authService.LogoutAsync(ReadRefreshCookie(), cancellationToken);
+        Guid? sessionId = null;
+        var sidClaim = User.FindFirst("sid")?.Value;
+        if (!Guid.TryParse(sidClaim, out var parsedSid) || parsedSid == Guid.Empty)
+        {
+            if (Request.Headers.TryGetValue("Authorization", out var authHeader) &&
+                authHeader.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            {
+                var rawToken = authHeader.ToString()["Bearer ".Length..].Trim();
+                try
+                {
+                    var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+                    if (handler.CanReadToken(rawToken))
+                    {
+                        var jwt = handler.ReadJwtToken(rawToken);
+                        var tokenSid = jwt.Claims.FirstOrDefault(c => c.Type == "sid")?.Value;
+                        if (Guid.TryParse(tokenSid, out var jwtParsedSid) && jwtParsedSid != Guid.Empty)
+                        {
+                            parsedSid = jwtParsedSid;
+                        }
+                    }
+                }
+                catch
+                {
+                    // Fall back to cookie lookup
+                }
+            }
+        }
+
+        if (parsedSid != Guid.Empty)
+        {
+            sessionId = parsedSid;
+        }
+
+        if (sessionId.HasValue && sessionId.Value != Guid.Empty)
+        {
+            await authService.LogoutAsync(ReadRefreshCookie(), sessionId, cancellationToken);
+        }
+        else
+        {
+            await authService.LogoutAsync(ReadRefreshCookie(), cancellationToken);
+        }
 
         ClearRefreshCookie();
         return NoContent();

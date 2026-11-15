@@ -16,9 +16,13 @@ public interface IAuthService
     Task<Result<LoginResponseDto>> RefreshAsync(
         string refreshToken, CancellationToken cancellationToken = default);
 
-    /// <summary>Revokes the session that owns the token. Idempotent and never throws for unknown tokens.</summary>
+    /// <summary>Revokes the session family that owns the token or matching sessionId. Idempotent and never throws for unknown tokens.</summary>
     Task<Result> LogoutAsync(
         string? refreshToken, CancellationToken cancellationToken = default);
+
+    /// <summary>Revokes the session family that owns the token or matching sessionId. Idempotent and never throws for unknown tokens.</summary>
+    Task<Result> LogoutAsync(
+        string? refreshToken, Guid? sessionId, CancellationToken cancellationToken = default);
 
     /// <summary>Revokes every active session belonging to the user.</summary>
     Task<Result> LogoutAllAsync(
@@ -31,4 +35,8 @@ public interface IAuthService
     /// <summary>Validates the token's security stamp against the current persisted state.</summary>
     Task<bool> IsPrincipalCurrentAsync(
         int userId, string securityStamp, CancellationToken cancellationToken = default);
+
+    /// <summary>Validates the token's security stamp and session active state against the current persisted state.</summary>
+    Task<bool> IsPrincipalCurrentAsync(
+        int userId, string securityStamp, Guid? sessionId, CancellationToken cancellationToken = default);
 }

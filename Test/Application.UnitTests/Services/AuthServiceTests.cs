@@ -52,6 +52,17 @@ public sealed class AuthServiceTests
                     CancellationToken cancellationToken) =>
                     operation(_transaction.Object));
 
+        _unitOfWork
+            .Setup(unit => unit.ExecuteInTransactionAsync<Result>(
+                It.IsAny<Func<IUnitOfWorkTransaction, Task<Result>>>(),
+                It.IsAny<IsolationLevel>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(
+                (Func<IUnitOfWorkTransaction, Task<Result>> operation,
+                    IsolationLevel _,
+                    CancellationToken cancellationToken) =>
+                    operation(_transaction.Object));
+
         _jwtTokenService
             .Setup(service => service.GenerateToken(It.IsAny<JwtTokenRequest>()))
             .Returns(new JwtTokenResult
@@ -466,15 +477,30 @@ public sealed class AuthServiceTests
     [Fact]
     public async Task LogoutAll_RevokesEverySessionForTheUser()
     {
+        var user = new Domain.Entities.User
+        {
+            UserId = 7,
+            IsActive = true,
+            SecurityStamp = "initial-stamp-7"
+        };
+
+        _userRepository
+            .Setup(repo => repo.GetUserForUpdateAsync(7, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+
         var result = await CreateService().LogoutAllAsync(7);
 
         Assert.True(result.IsSuccess);
+        Assert.NotEqual("initial-stamp-7", user.SecurityStamp);
         _sessionRepository.Verify(
             repository => repository.RevokeAllForUserAsync(
                 7,
                 NowUtc,
                 SessionRevocationReasons.LogoutAll,
                 It.IsAny<CancellationToken>()),
+            Times.Once);
+        _unitOfWork.Verify(
+            unit => unit.SaveChangesAsync(It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -508,6 +534,61 @@ public sealed class AuthServiceTests
 
         Assert.False(
             await CreateService().IsPrincipalCurrentAsync(5, "stamp-1"));
+    }
+
+    [Fact]
+    public async Task Logout_WhenSessionIdIsProvided_RevokesFamily()
+    {
+        var familyId = Guid.NewGuid();
+
+        var result = await CreateService().LogoutAsync(null, familyId);
+
+        Assert.True(result.IsSuccess);
+        _sessionRepository.Verify(
+            repository => repository.RevokeFamilyAsync(
+                familyId,
+                NowUtc,
+                SessionRevocationReasons.Logout,
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task IsPrincipalCurrent_WhenSessionIsActive_ReturnsTrue()
+    {
+        var familyId = Guid.NewGuid();
+
+        _userRepository
+            .Setup(repository => repository.GetSecurityStateAsync(
+                5, familyId, NowUtc, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new UserSecurityState
+            {
+                IsActive = true,
+                SecurityStamp = "stamp-1",
+                IsSessionActive = true
+            });
+
+        Assert.True(
+            await CreateService().IsPrincipalCurrentAsync(5, "stamp-1", familyId));
+    }
+
+    [Fact]
+    public async Task IsPrincipalCurrent_WhenSessionIsRevoked_ReturnsFalse()
+    {
+        var familyId = Guid.NewGuid();
+
+        _userRepository
+            .Setup(repository => repository.GetSecurityStateAsync(
+                5, familyId, NowUtc, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new UserSecurityState
+            {
+                IsActive = true,
+                SecurityStamp = "stamp-1",
+                IsSessionActive = false
+            });
+
+        Assert.False(
+            await CreateService().IsPrincipalCurrentAsync(5, "stamp-1", familyId));
     }
 
     private AuthService CreateService() =>

@@ -17,10 +17,10 @@ import { setAccessToken } from '../utils/authTokenStore'
 import { purgeLegacyTokenStorage } from '../utils/sessionStorage'
 import { AuthContext, type AuthContextValue } from './authContextInstance'
 
-type AuthChannelMessage = {
-  type?: 'login' | 'logout'
-  reason?: string
-}
+type AuthChannelMessage =
+  | { type: 'login' }
+  | { type: 'logout'; reason?: string }
+  | { type: 'token-refreshed'; expiresAtUtc: string }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(null)
@@ -83,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clearLocalState])
 
   // Cross-tab coordination: one tab logging out clears every tab; a login in one
-  // tab lets the others pick up the shared refresh cookie.
+  // tab lets the others pick up the shared refresh cookie; token refresh updates timers.
   useEffect(() => {
     if (typeof BroadcastChannel === 'undefined') {
       return
@@ -101,9 +101,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (message?.type === 'login') {
-        void refreshSession().then((restored) => {
-          if (restored) {
-            applySession(restored)
+        void refreshSession().then((result) => {
+          if (result.success) {
+            applySession(result.session)
+          }
+        })
+      }
+
+      if (message?.type === 'token-refreshed' && message.expiresAtUtc) {
+        setSession((previous) => {
+          if (!previous) return null
+          return {
+            ...previous,
+            expiresAtUtc: message.expiresAtUtc,
           }
         })
       }
@@ -125,9 +135,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     purgeLegacyTokenStorage()
 
     void refreshSession()
-      .then((restored) => {
-        if (active && restored) {
-          applySession(restored)
+      .then((result) => {
+        if (active && result.success) {
+          applySession(result.session)
         }
       })
       .finally(() => {
@@ -158,6 +168,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
 
+    let retryTimerId: number | null = null
+    let retryAttempt = 0
+    let active = true
+
     const expiresAt = new Date(session.expiresAtUtc).getTime()
 
     if (!Number.isFinite(expiresAt)) {
@@ -169,18 +183,80 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       Math.min(expiresAt - Date.now() - 60_000, 2_147_483_647),
     )
 
-    const timerId = window.setTimeout(() => {
-      void refreshSession().then((restored) => {
-        if (restored) {
-          applySession(restored)
-        } else {
+    const getRetryDelay = (attempt: number): number => {
+      // Bounded exponential backoff: 15s -> 30s -> 60s (capped at 60s)
+      if (attempt <= 0) return 15_000
+      if (attempt === 1) return 30_000
+      return 60_000
+    }
+
+    const executeRenewal = () => {
+      void refreshSession().then((result) => {
+        if (!active) return
+
+        if (result.success) {
+          retryAttempt = 0
+          applySession(result.session)
+          channelRef.current?.postMessage({
+            type: 'token-refreshed',
+            expiresAtUtc: result.session.expiresAtUtc,
+          } satisfies AuthChannelMessage)
+        } else if (result.isFatal) {
+          retryAttempt = 0
           clearLocalState('Your session has expired. Please log in again.')
+        } else {
+          // Transient failure (network/500/429): retry with bounded backoff
+          const delay = getRetryDelay(retryAttempt)
+          retryAttempt++
+          retryTimerId = window.setTimeout(executeRenewal, delay)
         }
       })
-    }, delayMs)
+    }
+
+    const timerId = window.setTimeout(executeRenewal, delayMs)
 
     return () => {
+      active = false
       window.clearTimeout(timerId)
+      if (retryTimerId !== null) {
+        window.clearTimeout(retryTimerId)
+      }
+    }
+  }, [session, applySession, clearLocalState])
+
+  // When a tab resumes from background/sleep, check if the token is close to expiry or already expired.
+  useEffect(() => {
+    if (!session) {
+      return
+    }
+
+    let active = true
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        const expiresAt = new Date(session.expiresAtUtc).getTime()
+        if (Number.isFinite(expiresAt) && expiresAt - Date.now() <= 90_000) {
+          void refreshSession().then((result) => {
+            if (!active) return
+
+            if (result.success) {
+              applySession(result.session)
+              channelRef.current?.postMessage({
+                type: 'token-refreshed',
+                expiresAtUtc: result.session.expiresAtUtc,
+              } satisfies AuthChannelMessage)
+            } else if (result.isFatal) {
+              clearLocalState('Your session has expired. Please log in again.')
+            }
+          })
+        }
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      active = false
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [session, applySession, clearLocalState])
 

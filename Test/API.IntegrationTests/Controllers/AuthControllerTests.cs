@@ -540,6 +540,12 @@ public sealed class AuthControllerTests
 
         SetupCurrentUser(factory, 10, "jwtuser", "Jwt User", UserRole.Staff);
 
+        var expectedSessionId = Guid.NewGuid();
+        factory.AuthServiceMock
+            .Setup(x => x.IsPrincipalCurrentAsync(
+                10, "stamp-jwt", expectedSessionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
         await using var jwtFactory = factory.WithWebHostBuilder(builder =>
         {
             builder.ConfigureServices(services =>
@@ -565,7 +571,8 @@ public sealed class AuthControllerTests
             UserName = "jwtuser",
             FullName = "Jwt User",
             Role = UserRole.Staff,
-            SecurityStamp = "stamp-jwt"
+            SecurityStamp = "stamp-jwt",
+            SessionId = expectedSessionId
         });
 
         var client = jwtFactory.CreateClient();
@@ -577,7 +584,7 @@ public sealed class AuthControllerTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         factory.AuthServiceMock.Verify(
             x => x.IsPrincipalCurrentAsync(
-                10, "stamp-jwt", It.IsAny<CancellationToken>()),
+                10, "stamp-jwt", expectedSessionId, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -586,9 +593,10 @@ public sealed class AuthControllerTests
     {
         await using var factory = new ApiWebApplicationFactory();
 
+        var expectedSessionId = Guid.NewGuid();
         factory.AuthServiceMock
             .Setup(x => x.IsPrincipalCurrentAsync(
-                10, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                10, It.IsAny<string>(), expectedSessionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
 
         await using var jwtFactory = factory.WithWebHostBuilder(builder =>
@@ -616,7 +624,8 @@ public sealed class AuthControllerTests
             UserName = "inactiveuser",
             FullName = "Inactive User",
             Role = UserRole.Staff,
-            SecurityStamp = "stamp-inactive"
+            SecurityStamp = "stamp-inactive",
+            SessionId = expectedSessionId
         });
 
         var client = jwtFactory.CreateClient();
@@ -628,7 +637,7 @@ public sealed class AuthControllerTests
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         factory.AuthServiceMock.Verify(
             x => x.IsPrincipalCurrentAsync(
-                10, It.IsAny<string>(), It.IsAny<CancellationToken>()),
+                10, It.IsAny<string>(), expectedSessionId, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
