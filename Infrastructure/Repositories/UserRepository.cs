@@ -127,6 +127,54 @@ public sealed class UserRepository : IUserRepository
                 cancellationToken);
     }
 
+    public async Task<User?> GetUserForPasswordChangeAsync(
+        int id,
+        CancellationToken cancellationToken = default)
+    {
+        if (id <= 0)
+            return null;
+
+        if (_context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException(
+                $"GetUserForPasswordChangeAsync for User {id} requires an active transaction to guarantee lock retention.");
+        }
+
+        var entity = await _context.Users
+            .FromSqlInterpolated(
+                $"""
+                SELECT *
+                FROM [Users] WITH (UPDLOCK, ROWLOCK)
+                WHERE [UserId] = {id}
+                """)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (entity is not null)
+        {
+            _context.ChangeTracker.DetectChanges();
+            var entry = _context.Entry(entity);
+
+            switch (entry.State)
+            {
+                case EntityState.Modified:
+                case EntityState.Deleted:
+                case EntityState.Added:
+                    throw new InvalidOperationException(
+                        $"Cannot acquire password change lock for User {id} because the tracked entity has pending local changes (EntityState.{entry.State}).");
+
+                case EntityState.Unchanged:
+                    await entry.ReloadAsync(cancellationToken);
+                    break;
+
+                case EntityState.Detached:
+                    // Detached entities are not tracked; no reload is necessary.
+                    break;
+            }
+        }
+
+        return entity;
+    }
+
     public Task<bool> IsUsernameTakenAsync(
         string username,
         CancellationToken cancellationToken = default)

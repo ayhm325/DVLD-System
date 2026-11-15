@@ -2430,6 +2430,12 @@ public class UserServiceTests
 
         _userRepositoryMock.Verify(
             repository =>
+                repository.GetUserForPasswordChangeAsync(
+                    It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+
+        _userRepositoryMock.Verify(
+            repository =>
                 repository.GetUserForUpdateAsync(
                     It.IsAny<int>(), It.IsAny<CancellationToken>()),
             Times.Never);
@@ -2459,6 +2465,12 @@ public class UserServiceTests
 
         _userRepositoryMock.Verify(
             repository =>
+                repository.GetUserForPasswordChangeAsync(
+                    It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+
+        _userRepositoryMock.Verify(
+            repository =>
                 repository.GetUserForUpdateAsync(
                     It.IsAny<int>(), It.IsAny<CancellationToken>()),
             Times.Never);
@@ -2480,7 +2492,7 @@ public class UserServiceTests
 
         _userRepositoryMock
             .Setup(repository =>
-                repository.GetUserForUpdateAsync(userId, It.IsAny<CancellationToken>()))
+                repository.GetUserForPasswordChangeAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync((User?)null);
 
         // Act
@@ -2498,8 +2510,13 @@ public class UserServiceTests
 
         _userRepositoryMock.Verify(
             repository =>
-                repository.GetUserForUpdateAsync(userId, It.IsAny<CancellationToken>()),
+                repository.GetUserForPasswordChangeAsync(userId, It.IsAny<CancellationToken>()),
             Times.Once);
+
+        _userRepositoryMock.Verify(
+            repository =>
+                repository.GetUserForUpdateAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never);
 
         _sessionRepositoryMock.Verify(
             sessionRepo =>
@@ -2540,7 +2557,7 @@ public class UserServiceTests
 
         _userRepositoryMock
             .Setup(repository =>
-                repository.GetUserForUpdateAsync(userId, It.IsAny<CancellationToken>()))
+                repository.GetUserForPasswordChangeAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(user);
 
         // Act
@@ -2557,6 +2574,16 @@ public class UserServiceTests
             result.Error);
         Assert.Equal(originalPasswordHash, user.Password);
         Assert.Equal(originalSecurityStamp, user.SecurityStamp);
+
+        _userRepositoryMock.Verify(
+            repository =>
+                repository.GetUserForPasswordChangeAsync(userId, It.IsAny<CancellationToken>()),
+            Times.Once);
+
+        _userRepositoryMock.Verify(
+            repository =>
+                repository.GetUserForUpdateAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never);
 
         _sessionRepositoryMock.Verify(
             sessionRepo =>
@@ -2591,7 +2618,7 @@ public class UserServiceTests
 
         _userRepositoryMock
             .Setup(repository =>
-                repository.GetUserForUpdateAsync(userId, It.IsAny<CancellationToken>()))
+                repository.GetUserForPasswordChangeAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(user);
 
         // Act
@@ -2620,8 +2647,13 @@ public class UserServiceTests
 
         _userRepositoryMock.Verify(
             repository =>
-                repository.GetUserForUpdateAsync(userId, It.IsAny<CancellationToken>()),
+                repository.GetUserForPasswordChangeAsync(userId, It.IsAny<CancellationToken>()),
             Times.Once);
+
+        _userRepositoryMock.Verify(
+            repository =>
+                repository.GetUserForUpdateAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never);
 
         _sessionRepositoryMock.Verify(
             sessionRepo =>
@@ -2655,7 +2687,7 @@ public class UserServiceTests
 
         _userRepositoryMock
             .Setup(repository =>
-                repository.GetUserForUpdateAsync(userId, It.IsAny<CancellationToken>()))
+                repository.GetUserForPasswordChangeAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(user);
 
         _sessionRepositoryMock
@@ -2696,7 +2728,7 @@ public class UserServiceTests
 
         _userRepositoryMock
             .Setup(repository =>
-                repository.GetUserForUpdateAsync(userId, It.IsAny<CancellationToken>()))
+                repository.GetUserForPasswordChangeAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(user);
 
         _transactionMock
@@ -2734,7 +2766,7 @@ public class UserServiceTests
 
         _userRepositoryMock
             .Setup(repository =>
-                repository.GetUserForUpdateAsync(userId, cts.Token))
+                repository.GetUserForPasswordChangeAsync(userId, cts.Token))
             .ReturnsAsync(user);
 
         _sessionRepositoryMock
@@ -2779,7 +2811,7 @@ public class UserServiceTests
 
         _userRepositoryMock
             .Setup(repository =>
-                repository.GetUserForUpdateAsync(userId, cts.Token))
+                repository.GetUserForPasswordChangeAsync(userId, cts.Token))
             .ThrowsAsync(new OperationCanceledException(cts.Token));
 
         // Act & Assert

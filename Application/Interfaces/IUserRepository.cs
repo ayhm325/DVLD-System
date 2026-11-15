@@ -33,6 +33,10 @@ public interface IUserRepository
         int id,
         CancellationToken cancellationToken = default);
 
+    Task<User?> GetUserForPasswordChangeAsync(
+        int id,
+        CancellationToken cancellationToken = default);
+
     Task<bool> IsUsernameTakenAsync(
         string username,
         CancellationToken cancellationToken = default);

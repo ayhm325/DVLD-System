@@ -731,7 +731,7 @@ public sealed class UserService : IUserService
             {
                 var user =
                     await _userRepository
-                        .GetUserForUpdateAsync(userId, cancellationToken);
+                        .GetUserForPasswordChangeAsync(userId, cancellationToken);
 
                 if (user is null)
                 {

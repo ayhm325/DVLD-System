@@ -658,6 +658,178 @@ public sealed class UserRepositoryTests
         Assert.Throws<ArgumentNullException>(
             () => repository.DeleteUser(null!));
     }
+
+    // =========================================================
+    // GET FOR PASSWORD CHANGE
+    // =========================================================
+
+    [Fact]
+    public async Task GetUserForPasswordChangeAsync_WhenEntityAlreadyTracked_ReflectsCommittedDatabaseStatusUnderLock()
+    {
+        await using var contextA = _fixture.Database.CreateContext();
+        await using var contextB = _fixture.Database.CreateContext();
+
+        var repoA = new UserRepository(contextA);
+
+        var trackedInA = await contextA.Users.FindAsync(_fixture.AdminUserId);
+        Assert.NotNull(trackedInA);
+        var originalSecurityStamp = trackedInA.SecurityStamp;
+
+        var entityInB = await contextB.Users.FindAsync(_fixture.AdminUserId);
+        Assert.NotNull(entityInB);
+        var updatedSecurityStamp = Guid.NewGuid().ToString("N");
+        entityInB.SecurityStamp = updatedSecurityStamp;
+        await contextB.SaveChangesAsync();
+
+        await using var tx = await contextA.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted);
+        var result = await repoA.GetUserForPasswordChangeAsync(_fixture.AdminUserId);
+
+        Assert.NotNull(result);
+        Assert.Same(trackedInA, result);
+        Assert.Equal(updatedSecurityStamp, result.SecurityStamp);
+        Assert.NotEqual(originalSecurityStamp, result.SecurityStamp);
+    }
+
+    [Fact]
+    public async Task GetUserForPasswordChangeAsync_WhenEntityHasPendingModifications_ThrowsInvalidOperationException()
+    {
+        await using var context = _fixture.Database.CreateContext();
+        var repository = new UserRepository(context);
+
+        var tracked = await context.Users.FindAsync(_fixture.AdminUserId);
+        Assert.NotNull(tracked);
+
+        tracked.Password = "PendingModifiedPasswordHash";
+        Assert.Equal(EntityState.Modified, context.Entry(tracked).State);
+
+        await using var tx = await context.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => repository.GetUserForPasswordChangeAsync(_fixture.AdminUserId));
+
+        Assert.Contains("pending local changes", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("EntityState.Modified", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task GetUserForPasswordChangeAsync_WhenEntityIsPendingDeletion_ThrowsInvalidOperationException()
+    {
+        await using var context = _fixture.Database.CreateContext();
+        var repository = new UserRepository(context);
+
+        var tracked = await context.Users.FindAsync(_fixture.AdminUserId);
+        Assert.NotNull(tracked);
+
+        context.Users.Remove(tracked);
+        Assert.Equal(EntityState.Deleted, context.Entry(tracked).State);
+
+        await using var tx = await context.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => repository.GetUserForPasswordChangeAsync(_fixture.AdminUserId));
+
+        Assert.Contains("pending local changes", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("EntityState.Deleted", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task GetUserForPasswordChangeAsync_WhenEntityIsPendingAddition_ThrowsInvalidOperationException()
+    {
+        await using var context = _fixture.Database.CreateContext();
+        var repository = new UserRepository(context);
+
+        var tracked = await context.Users.FindAsync(_fixture.AdminUserId);
+        Assert.NotNull(tracked);
+
+        context.Entry(tracked).State = EntityState.Added;
+        Assert.Equal(EntityState.Added, context.Entry(tracked).State);
+
+        await using var tx = await context.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => repository.GetUserForPasswordChangeAsync(_fixture.AdminUserId));
+
+        Assert.Contains("pending local changes", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("EntityState.Added", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task GetUserForPasswordChangeAsync_WhenCalledOutsideTransaction_ThrowsInvalidOperationException()
+    {
+        await using var context = _fixture.Database.CreateContext();
+        var repository = new UserRepository(context);
+
+        Assert.Null(context.Database.CurrentTransaction);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => repository.GetUserForPasswordChangeAsync(_fixture.AdminUserId));
+
+        Assert.Contains("requires an active transaction", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task GetUserForPasswordChangeAsync_WhenEntityHasUndetectedLocalChanges_DoesNotLoseLocalChanges()
+    {
+        await using var context = _fixture.Database.CreateContext();
+        var repository = new UserRepository(context);
+
+        var tracked = await context.Users.FindAsync(_fixture.AdminUserId);
+        Assert.NotNull(tracked);
+
+        await using var tx = await context.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted);
+
+        context.ChangeTracker.AutoDetectChangesEnabled = false;
+
+        try
+        {
+            tracked.SecurityStamp = $"modified_{Guid.NewGuid():N}";
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => repository.GetUserForPasswordChangeAsync(_fixture.AdminUserId));
+
+            Assert.Contains(
+                "pending local changes",
+                exception.Message,
+                StringComparison.OrdinalIgnoreCase);
+
+            Assert.Contains(
+                "EntityState.Modified",
+                exception.Message,
+                StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            context.ChangeTracker.AutoDetectChangesEnabled = true;
+        }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task GetUserForPasswordChangeAsync_WhenIdIsZeroOrNegative_ReturnsNullWithoutRequiringTransaction(int invalidId)
+    {
+        await using var context = _fixture.Database.CreateContext();
+        var repository = new UserRepository(context);
+
+        Assert.Null(context.Database.CurrentTransaction);
+
+        var result = await repository.GetUserForPasswordChangeAsync(invalidId);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task GetUserForPasswordChangeAsync_WhenUserNotFound_ReturnsNull()
+    {
+        await using var context = _fixture.Database.CreateContext();
+        var repository = new UserRepository(context);
+
+        await using var tx = await context.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted);
+
+        var result = await repository.GetUserForPasswordChangeAsync(int.MaxValue);
+
+        Assert.Null(result);
+    }
 }
 
 public sealed class UserRepositoryDatabaseFixture
