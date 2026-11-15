@@ -1,7 +1,7 @@
 namespace DVLD.Contracts.User;
 
 /// <summary>
-/// Role is optional for backward compatibility with existing clients (WPF):
+/// Role is optional for backward compatibility:
 /// null means "keep the current role unchanged".
 /// </summary>
 public sealed record UpdateUserRequest(

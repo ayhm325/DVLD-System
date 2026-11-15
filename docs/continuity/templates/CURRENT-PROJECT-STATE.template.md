@@ -33,14 +33,12 @@ Apply explicit confidence labels:
 
 <!--
 Document active components and stack boundaries.
-Explicitly state that WPF is frozen and out of scope.
 -->
 
 - **Backend Architecture:** ASP.NET Core 8 Web API (`API/DVLD.Api`), Clean/Onion layering (`Domain`, `Application`, `Infrastructure`).
 - **Persistence:** SQL Server, Entity Framework Core 8, UnitOfWork pattern.
 - **Shared Contracts:** `DVLD.Contracts` (DTOs and enums).
 - **Frontend Architecture:** React 19 Single Page Application (`ClientApp/`), TypeScript 6, Vite 8, Tailwind CSS.
-- **Frozen Components:** `Presentation (WPF)/` is legacy, frozen, and strictly excluded from development.
 
 ---
 
@@ -113,7 +111,6 @@ Catalog known project risks, safety constraints, and unresolved dependencies.
 1. **Database Protection:** Zero interaction with `DVLDf`. Tests run strictly against dynamic `DVLD_IntegrationTests_<GUID>`.
 2. **Policy Verification Blockers:** `<e.g., ADR-O02 department policy verification required>`.
 3. **Unresolved Technical Decisions:** `<e.g., SEC-05 Option A vs C, Policy 1 vs 2>`.
-4. **Frozen Codebases:** Zero modifications permitted to WPF client.
 
 ---
 

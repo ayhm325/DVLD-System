@@ -1,6 +1,6 @@
 # DVLD — Driving & Vehicle License Department System
 
-DVLD is a .NET 8 driving-license department management system with an ASP.NET Core Web API, SQL Server persistence, transactional business workflows, authentication/authorization, a WPF desktop client (`Presentation (WPF)`), a browser-based React frontend (`ClientApp`), and automated testing.
+DVLD is a .NET 8 driving-license department management system with an ASP.NET Core Web API, SQL Server persistence, transactional business workflows, authentication/authorization, a browser-based React frontend (`ClientApp`), and automated testing.
 
 ## Functional scope
 
@@ -22,39 +22,40 @@ The system manages:
 ## Architecture
 
 ```text
-Presentation (WPF)          ClientApp (React)
-        │                           │
-        └─────────────┬─────────────┘
-                      │ HTTP + JSON + JWT
-                      v
-                  DVLD.Api
-                      │
-                      v
-                 Application
-                      │
-                      v
-               Infrastructure
-                      │
-                      v
-                 SQL Server
+  ClientApp (React 19 + Vite)
+              │
+              │ HTTP + JSON + JWT
+              v
+          DVLD.Api
+              │
+              v
+         Application
+              │
+              v
+        Infrastructure
+              │
+              v
+          SQL Server
 ```
 
-`DVLD.Contracts` is the shared .NET HTTP contract boundary between `DVLD.Api` and `Presentation (WPF)`. The WPF project does not reference the API project directly. `ClientApp` is a standalone React + TypeScript + Vite frontend that communicates with `DVLD.Api` over HTTP + JSON + JWT (`http://localhost:5260/api`) via the `"ReactApp"` CORS policy (`http://localhost:5173`).
+`DVLD.Contracts` is the shared .NET HTTP contract boundary referenced by `DVLD.Api` and backend test suites. `ClientApp` is a standalone React + TypeScript + Vite frontend that communicates with `DVLD.Api` over HTTP + JSON + JWT (`http://localhost:5260/api`) via the `"ReactApp"` CORS policy (`http://localhost:5173`).
 
 ## Solution structure
 
 ```text
+DVLD.sln
 Domain/
 Application/
 Infrastructure/
 DVLD.Contracts/
 API/DVLD.Api/
-Presentation (WPF)/
-  └── DVLD_WPF.sln
 ClientApp/
   ├── README.md
   └── docs/
 Test/
+  ├── Application.UnitTests/
+  ├── API.IntegrationTests/
+  └── Infrastructure.IntegrationTests/
 docs/
 ```
 
@@ -64,7 +65,6 @@ docs/
 - ASP.NET Core Web API
 - Entity Framework Core 8
 - SQL Server
-- WPF (`Presentation (WPF)`) with `CommunityToolkit.Mvvm`
 - React 19 + TypeScript + Vite (`ClientApp`)
 - JWT bearer authentication
 - ASP.NET Core policy-based authorization (`AdminOnly`, `StaffOnly`, `StaffOrAdmin`)
@@ -73,7 +73,7 @@ docs/
 - Repository + Unit of Work
 - Result / Result<T> pattern
 - DTOs and API contracts (`DVLD.Contracts`)
-- HttpClientFactory (WPF) / Fetch API (React)
+- Fetch API (React / ClientApp)
 - Unit and integration testing (xUnit, Moq, `WebApplicationFactory`)
 - Azure DevOps Pipelines
 
@@ -88,18 +88,17 @@ docs/
 - Database constraints (unique and filtered unique indexes) and `UPDLOCK` row-lock reads on base tables reinforce business invariants
 - Backend authorization is the security boundary
 - Client role-based UI is a usability mechanism, not the security boundary
-- WPF Presentation is MVVM-oriented, not claimed to be pure MVVM
 - React frontend (`ClientApp`) is under active iterative development and documented separately under [`ClientApp/README.md`](ClientApp/README.md) and [`ClientApp/AGENTS.md`](ClientApp/AGENTS.md)
 
 ## Run the API and Clients
 
 ### 1. Build and run the .NET API
 
-From the repository root, pass `"Presentation (WPF)\DVLD_WPF.sln"` to solution-level `.NET` CLI commands:
+From the repository root, pass `"DVLD.sln"` to solution-level `.NET` CLI commands:
 
 ```powershell
-dotnet restore "Presentation (WPF)\DVLD_WPF.sln"
-dotnet build "Presentation (WPF)\DVLD_WPF.sln" --configuration Release
+dotnet restore DVLD.sln
+dotnet build DVLD.sln --configuration Release
 dotnet run --project ".\API\DVLD.Api\DVLD.Api.csproj" --launch-profile http
 ```
 
@@ -120,7 +119,7 @@ See [`ClientApp/README.md`](ClientApp/README.md) and [`ClientApp/AGENTS.md`](Cli
 ## Run all .NET tests
 
 ```powershell
-dotnet test "Presentation (WPF)\DVLD_WPF.sln" --configuration Release
+dotnet test DVLD.sln --configuration Release
 ```
 
 Individual suites:
@@ -195,7 +194,7 @@ These are historical user-reported results, not a claim that the documentation u
 
 ## Continuous Integration
 
-The Azure DevOps pipeline (`azure-pipelines.yml`) currently provides Continuous Integration for the `.NET` solution (`"Presentation (WPF)/DVLD_WPF.sln"`):
+The Azure DevOps pipeline (`azure-pipelines.yml`) currently provides Continuous Integration for the `.NET` solution (`DVLD.sln`):
 
 ```text
 main push

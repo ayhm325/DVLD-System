@@ -7,7 +7,6 @@
 > **Repository Root:** `D:\DVLD-WPF`  
 > **Active Backend:** ASP.NET Core 8 Web API (`DVLD.Api`)  
 > **Active Frontend:** React 19 SPA (`ClientApp/`)  
-> **Legacy Scope:** Presentation (WPF) — **FROZEN / EXCLUDED**  
 > **Current Status:** CONSOLIDATED BASELINE (Zero Implementation Authorization Granted)
 
 ---
@@ -26,8 +25,6 @@ The active production system consists of:
 - **Client Application:** React 19 Single Page Application (`ClientApp/`) built with TypeScript, Vite, Tailwind CSS, and Radix UI primitives.
 - **Automated Verification:** Multi-tier automated test harness (`Test/Application.UnitTests`, `Test/Infrastructure.IntegrationTests`, `Test/API.IntegrationTests`).
 
-**Strict Operational Freeze:** The legacy desktop client located in `Presentation (WPF)/` is completely frozen and excluded from all active development, refactoring, and auditing.
-
 ```mermaid
 graph TD
     subgraph Active Production Scope
@@ -42,10 +39,6 @@ graph TD
     subgraph Data & Verification Boundaries
         DB_TEST["DVLD_IntegrationTests_<GUID> (Isolated LocalDB)"]
         DB_PROD["DVLDf (Protected Dev/Production DB - STRICTLY PROTECTED)"]
-    end
-
-    subgraph Frozen Scope
-        WPF["Presentation (WPF) - FROZEN"]
     end
 
     CLIENT -->|HTTPS / REST / JWT| API

@@ -50,7 +50,7 @@ To maintain strict historical and semantic integrity, the decision accounting is
 | **`ADR-003`** | JWT Bearer Token Authentication with Dynamic DB Revocation | **ACCEPTED** | Security Architect | `DVLD.Api`, `Program.cs` | Implemented / Active |
 | **`ADR-004`** | Distributed Slot Mutual Exclusion via `sp_getapplock` | **ACCEPTED** | Database Architect | `Infrastructure` | Implemented / Active |
 | **`ADR-005`** | Functional `Result<T>` Modeling over Domain Exceptions | **ACCEPTED** | Application Architect | `Application` Services | Implemented / Active |
-| **`ADR-C01`** | Exclusion and Freeze of Legacy WPF Desktop Client | **CONSTRAINT** | Governance Authority | `Presentation (WPF)/` | Enforced / Frozen |
+| **`ADR-C01`** | Decommissioning and Permanent Removal of Legacy WPF Desktop Client | **COMPLETED** | Governance Authority | `Presentation (WPF)/` | Decommissioned / Removed |
 | **`ADR-C02`** | Isolation of Production Database (`DVLDf`) from Automated Testing | **CONSTRAINT** | Governance Authority | All Test Suites, CI | Enforced / Protected |
 | **`ADR-P01`** | Separation of Non-Locking Reads from Update-Locking Queries (`PERF-02`) | **ACCEPTED** | Performance Architect | `PERF-02`, Phase 12.2 | Implemented / Active |
 | **`ADR-P02`** | Standardized RFC 7807 ProblemDetails across All Endpoints (`REST-01`) | **ACCEPTED** | API Lead | `REST-01`, Phase 12.3 | Implemented / Active |
@@ -166,10 +166,10 @@ flowchart LR
 
 ## 5. Architectural Constraints
 
-### ADR-C01: Exclusion and Freeze of Legacy WPF Desktop Client
-- **Status:** `CONSTRAINT` (Enforced & Frozen)
-- **Context:** The repository contains a legacy desktop client in `Presentation (WPF)/`.
-- **Constraint:** The WPF desktop application is **frozen** and explicitly excluded from active engineering, audits, refactoring, and test execution unless explicitly commissioned in writing by the Project Owner.
+### ADR-C01: Decommissioning and Permanent Removal of Legacy WPF Desktop Client
+- **Status:** `COMPLETED` (Decommissioned & Removed)
+- **Context:** The repository previously contained a legacy desktop client in `Presentation (WPF)/`.
+- **Decision:** The legacy WPF client, its dependencies, project files, solution references, and configurations have been completely and permanently removed. The repository architecture is streamlined to ASP.NET Core Web API and the React SPA (`ClientApp/`).
 
 ### ADR-C02: Isolation of Production Database (`DVLDf`) from Automated Testing
 - **Status:** `CONSTRAINT` (Enforced & Protected)

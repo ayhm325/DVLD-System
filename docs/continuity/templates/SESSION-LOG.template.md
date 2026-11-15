@@ -16,7 +16,7 @@
 ### 1.1 Objective and Scope
 - **Primary Objective:** `<Clear statement of what this session aimed to accomplish>`
 - **Scope Boundaries:** `<Explicit list of layers, projects, or documents included>`
-- **Exclusions:** `<Explicit list of excluded areas, e.g. WPF, DVLDf, source code>`
+- **Exclusions:** `<Explicit list of excluded areas, e.g. DVLDf, source code>`
 
 ### 1.2 Authorization Reference
 - **Authorizing Role:** `Project Owner` | `<Authorized Lead Engineer>`
@@ -120,7 +120,6 @@ If tests were not run, state the reason (e.g. prohibited by user instructions, d
 - [ ] **No Destructive Operations:** Zero deletions, resets, or overwrites performed.
 - [ ] **Git Authority Compliance:** Git commands executed strictly within granted authority (or zero Git commands if not authorized).
 - [ ] **Database Safety:** Zero interaction with `DVLDf`. Test isolation respected.
-- [ ] **WPF Exclusion:** WPF client remained completely untouched.
 - [ ] **Documentation Obligation Respected:** Record prepared in conversation if write permission was not granted.
 
 ---

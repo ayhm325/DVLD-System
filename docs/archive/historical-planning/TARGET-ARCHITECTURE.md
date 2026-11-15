@@ -25,7 +25,6 @@ The target backend architecture enforces strict **Clean Architecture (Layered He
 graph TD
     subgraph "External Consumers"
         REACT["React 19 SPA (ClientApp/)"]
-        WPF["WPF Desktop (Frozen Legacy)"]
     end
 
     subgraph "API Layer (DVLD.Api)"
@@ -57,7 +56,6 @@ graph TD
     end
 
     REACT -->|HTTP / JSON| CTRL
-    WPF -.->|Legacy HTTP / JSON| CTRL
     CTRL --> SVC
     CTRL --> DTO
     SVC --> DTO
@@ -103,7 +101,7 @@ To eliminate ambiguity between current code, approved decisions, and future prop
 
 | Component / Subsystem | Architectural Classification | Source / Reference | Description & Status |
 |---|---|---|---|
-| **Clean Architecture Layering** | `Existing Verified Implementation` | `DVLD_WPF.sln` | Strict inwards dependency rule enforced across all projects. |
+| **Clean Architecture Layering** | `Existing Verified Implementation` | `DVLD.sln` | Strict inwards dependency rule enforced across all projects. |
 | **Result Pattern (`Result<T>`)** | `Existing Verified Implementation` | `Application.Common.Results` | Explicit error handling replacing exception-based control flow. |
 | **UnitOfWork & EF Core 8** | `Existing Verified Implementation` | `Infrastructure/DVLDDbContext.cs` | Centralized `SaveChangesAsync` within atomic transactions. |
 | **Jordan Clock Standard** | `Existing Verified Implementation` | `Application/Interfaces/IJordanClock.cs` | UTC storage in database; singleton conversion to `Asia/Amman`. |

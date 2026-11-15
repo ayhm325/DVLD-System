@@ -101,6 +101,6 @@ The user interface layer is anchored entirely by `ClientApp/`, a modern React 19
 
 To preserve architectural clarity and eliminate project drift, the following boundaries are non-negotiable:
 
-1. **WPF Client Frozen:** The legacy desktop application located in `Presentation (WPF)/` is **frozen** and explicitly out of scope. No engineering effort, refactoring, or modernization applies to WPF unless authorized in writing by the Project Owner.
+1. **WPF Client Decommissioned:** The legacy desktop application has been completely and permanently removed from the repository. All client-side development targets the React 19 SPA (`ClientApp/`).
 2. **Production/Local Database `DVLDf` Strictly Protected:** No automated test runner, AI assistant, or engineering script may connect to, migrate, query, or drop `DVLDf`.
 3. **No Speculative Complex Frameworks:** Introduction of external message brokers (RabbitMQ/Kafka), microservices, Redis distributed caching, or CQRS/MediatR frameworks is prohibited without an approved ADR in `ENGINEERING-DECISIONS.md`.

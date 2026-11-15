@@ -73,7 +73,7 @@ flowchart TD
 - Evaluate transaction semantics: Does the change participate in `UnitOfWork`? Can an exception leave orphaned database rows or files?
 - Evaluate concurrency semantics: Does the operation acquire appropriate locks (`sp_getapplock`, row-level locks)?
 - Evaluate authorization impacts: Does the change alter permissions between `Admin` and `Staff`?
-- Evaluate client impacts: Does the change affect `DVLD.Contracts` consumed by WPF or the JSON schema consumed by `ClientApp`?
+- Evaluate client impacts: Does the change affect `DVLD.Contracts` or the JSON schema consumed by `ClientApp`?
 
 ### Step 6: Present Plan & Request Approval (High-Impact Changes)
 If the proposed change involves an **Approval Gate** (see Section 3), the agent must:
@@ -94,7 +94,7 @@ If the proposed change involves an **Approval Gate** (see Section 3), the agent 
 ### Step 9: Inspect Final Diff and Git Status
 - Run `git status --short --untracked-files=all` to ensure no unintended files were created or modified.
 - Inspect the diff to confirm that only authorized changes were introduced.
-- Confirm zero changes were made to protected files, database connections, or excluded components (such as WPF).
+- Confirm zero changes were made to protected files or database connections.
 
 ### Step 10: Deliver Report & Explicitly Document Risks
 - Report the baseline commit, exact files modified, and exact commands executed with exit codes.
@@ -181,14 +181,12 @@ AI agents are prone to optimistic confirmation bias. The following rules are abs
 
 ---
 
-## 7. Development Scopes & Excluded Modules
+## 7. Development Scopes
 
 - **Backend .NET Scope:**
   Active scope encompasses `API/`, `Application/`, `Infrastructure/`, `Domain/`, `DVLD.Contracts/`, and backend test projects in `Test/`. All backend work must follow the standards defined in [`ENGINEERING-STANDARDS.md`](./ENGINEERING-STANDARDS.md).
 - **React Frontend Scope (`ClientApp/`):**
   Frontend work is confined strictly to `ClientApp/` and governed by [`ClientApp/AGENTS.md`](./ClientApp/AGENTS.md). All frontend verification must use `npm.cmd --prefix ClientApp run build` and `npm.cmd --prefix ClientApp test`.
-- **WPF Desktop Client (`Presentation (WPF)/`):**
-  The legacy WPF client is **frozen** and explicitly outside the current modernization and engineering program. AI agents must **never** describe WPF as the primary active development target, nor modify WPF code, project files, or XAML files unless explicitly instructed in writing by the user. Do not execute or audit WPF test fixtures.
 
 ---
 

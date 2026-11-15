@@ -28,7 +28,7 @@ Authentication is stateless and implemented using JWT Bearer tokens signed via H
 sequenceDiagram
     autonumber
     actor User as Staff / Admin
-    participant Client as ClientApp / WPF
+    participant Client as ClientApp (React)
     participant Auth as AuthController
     participant JWT as JwtTokenService
     participant API as Protected Endpoints

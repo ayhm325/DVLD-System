@@ -4,7 +4,7 @@
 #   Stage 1 (Frontend_CI): Node.js 22 LTS, npm cache, npm ci, ESLint, tsc -b,
 #                          Vite production build, and frontend artifact upload.
 #   Stage 2 (Backend_CI):  .NET 8 SDK (from global.json), NuGet cache, Release
-#                          solution restore & build (including WPF on Windows),
+#                          solution restore & build,
 #                          Application Unit Tests, dedicated run-specific SQL
 #                          Server LocalDB readiness & ownership verification,
 #                          API Integration Tests, Infrastructure Integration
@@ -31,7 +31,6 @@ trigger:
       - Domain/**
       - DVLD.Contracts/**
       - Infrastructure/**
-      - Presentation (WPF)/**
       - Test/**
       - eng/**
       - azure-pipelines.yml
@@ -81,7 +80,6 @@ pr:
       - Domain/**
       - DVLD.Contracts/**
       - Infrastructure/**
-      - Presentation (WPF)/**
       - Test/**
       - eng/**
       - azure-pipelines.yml
@@ -121,7 +119,7 @@ pr:
 variables:
   vmImageName: 'windows-latest'
   buildConfiguration: 'Release'
-  solutionPath: 'Presentation (WPF)/DVLD_WPF.sln'
+  solutionPath: 'DVLD.sln'
   apiProjectPath: 'API/DVLD.Api/DVLD.Api.csproj'
   unitTestProject: 'Test/Application.UnitTests/Application.UnitTests.csproj'
   apiIntegrationTestProject: 'Test/API.IntegrationTests/API.IntegrationTests.csproj'

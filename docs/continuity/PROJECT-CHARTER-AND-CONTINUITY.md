@@ -19,7 +19,7 @@ The objective of this continuity framework is to ensure seamless, evidence-drive
 2. Silent drift or unauthorized alteration of approved architecture and security policies.
 3. Conflation of local project file access with Git state management or commit/push authority.
 4. Conflation of documentation preparation duties with repository write authorization.
-5. Inadvertent damage to protected operational databases (`DVLDf`) or frozen client codebases (`Presentation (WPF)/`).
+5. Inadvertent damage to protected operational databases (`DVLDf`).
 
 ---
 
@@ -75,7 +75,7 @@ All technical topics, work items, and proposals across the repository must stric
 | `PROVISIONAL` | Provisionally selected direction pending external policy verification, empirical validation, or business sign-off. |
 | `NEEDS VALIDATION` | Theoretical or plausible approach requiring empirical runtime proof or profiling before approval. |
 | `NOT AUTHORIZED` | Explicitly prohibited from execution during the active phase. |
-| `PROHIBITED` | Strictly forbidden by safety gates or governance (e.g., modifying `DVLDf`, editing WPF). |
+| `PROHIBITED` | Strictly forbidden by safety gates or governance (e.g., modifying `DVLDf`). |
 | `SUPERSEDED` | Replaced by a subsequent formally approved decision or corrected architecture. |
 | `CLOSED` | Formally concluded or rejected; not open for implementation. |
 
@@ -104,7 +104,7 @@ When the Project Owner grants authorization, it is strictly bounded by:
 - **Paths:** Explicit list of authorized files or directories.
 - **Operation Types:** Read, Create, Edit, or Verify.
 - **Permitted Tools:** Explicit set of allowed IDE or CLI capabilities.
-- **Exclusions:** Explicitly prohibited areas (e.g., WPF, `DVLDf`).
+- **Exclusions:** Explicitly prohibited areas (e.g., `DVLDf`).
 
 ### 4.3 Stop-on-Risk Protocol
 An AI assistant must immediately halt execution and request user guidance if:
@@ -262,9 +262,9 @@ The system strictly partitions logging into three distinct operational domains:
 - Under **NO CIRCUMSTANCES** may any script, command, migration, or test connect to, query, modify, truncate, or drop the development/production database `DVLDf`.
 - Integration tests must strictly run against dynamic ephemeral test databases named `DVLD_IntegrationTests_<GUID>` under `DVLD_TEST_CONNECTION`.
 
-### 9.2 Frozen Codebases (`Presentation (WPF)/`)
-- The legacy WPF desktop client located in `Presentation (WPF)/` is **frozen** and explicitly out of scope.
-- No AI assistant may audit, refactor, or modify WPF code unless explicitly instructed in writing by the Project Owner.
+### 9.2 Decommissioned Codebases (`Presentation (WPF)/`)
+- The legacy WPF desktop client located in `Presentation (WPF)/` has been completely and permanently removed from the repository.
+- The active repository architecture consists solely of the ASP.NET Core Web API and the React SPA (`ClientApp/`).
 
 ---
 

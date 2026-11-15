@@ -10,7 +10,7 @@
 > **Protected Boundaries:**  
 > 1. Production/Development Database `DVLDf` is strictly protected: NEVER connect to, query, migrate, drop, or wipe `DVLDf`.  
 > 2. Ephemeral test database lifecycle (`DVLD_IntegrationTests_<GUID>`) strictly enforced for all automated integration testing.  
-> 3. WPF Desktop Client (`Presentation (WPF)/`) is FROZEN and EXCLUDED from this security plan.  
+> 3. WPF Desktop Client has been decommissioned and permanently removed from the repository.  
 > 4. SEC-05 / Phases 12.2, 12.3, and 12.4 are STRICTLY UNAUTHORIZED and deferred.  
 > 5. ADR-O01 Model B accepted as policy only; administrative read-only license inspection implementation remains unauthorized.  
 > 6. ADR-O02 (Detained License Replacement) is provisionally selected pending official Jordanian regulatory verification.  
@@ -54,7 +54,7 @@ Every package defined herein represents a structured proposal submitted for form
 The following non-negotiable governance invariants are enforced across all planning and future execution:
 1. **Zero Premature Implementation:** Under no circumstances shall an AI agent interpret this document as authorization to begin source code or schema remediation. The current status of all packages is `READY FOR PROJECT OWNER REVIEW`.
 2. **Absolute Protection of Production Database (`DVLDf`):** `DVLDf` is strictly protected from automated tools. Schema modifications require isolated EF Core migrations executed only against ephemeral test databases during testing, with production migration requiring separate human engineering sign-off and verified database backups.
-3. **WPF Client Exclusion:** The legacy desktop client in `Presentation (WPF)/` is frozen. All client-side security remediations target the active React SPA (`ClientApp/`).
+3. **WPF Client Decommissioned:** The legacy desktop client has been completely removed from the repository. All client-side security remediations target the active React SPA (`ClientApp/`).
 4. **Prohibition of Speculative Architectural Additions:** No unapproved frameworks or external dependencies (e.g., MediatR, CQRS libraries, Redis, distributed message brokers) may be introduced without an approved Architectural Decision Record (ADR).
 5. **Phase Deferrals:** Multi-session token rotation and refresh token mechanics (SEC-05 / Phase 12.2), performance optimizations (Phase 12.3), and distributed enterprise messaging (Phase 12.4) remain unauthorized and out of scope.
 
@@ -313,7 +313,7 @@ Under decision `DEC-APP-01`, two alternatives are evaluated:
 Revert the commit modifying `ApplicationsController.cs` and `ApplicationService.cs` via standard Git commit reversal. Zero database schema rollback required.
 
 #### H. Governance
-Preserves WPF frozen status. Does not touch `DVLDf`. Requires Gate 6 API sign-off.
+Does not touch `DVLDf`. Requires Gate 6 API sign-off.
 
 ---
 
@@ -372,7 +372,7 @@ Under decision `DEC-FILE-01`:
 Revert DTO and controller modifications via Git. Ensure client API types match backend contracts.
 
 #### H. Governance
-Preserves WPF frozen status. No database schema changes. Requires Gate 6 API sign-off.
+No database schema changes. Requires Gate 6 API sign-off.
 
 ---
 
@@ -434,7 +434,7 @@ Preserves WPF frozen status. No database schema changes. Requires Gate 6 API sig
 Revert controller parameter defaults via Git.
 
 #### H. Governance
-Preserves WPF frozen status. No database schema changes.
+No database schema changes.
 
 ---
 
@@ -487,7 +487,7 @@ Preserves WPF frozen status. No database schema changes.
 Revert `UserService.cs` changes via Git.
 
 #### H. Governance
-Preserves WPF frozen status. No database schema changes.
+No database schema changes.
 
 ---
 
@@ -534,7 +534,7 @@ ADR-O01 Model B (Strict Segregation of Duties) is an accepted and binding archit
 Revert frontend permissions or backend controller attribute changes.
 
 #### H. Governance
-Preserves WPF frozen status. No database schema changes.
+No database schema changes.
 
 ---
 
@@ -605,7 +605,7 @@ Preserves WPF frozen status. No database schema changes.
 Unregister `ISecurityAuditService` from DI container or register a null-object implementation.
 
 #### H. Governance
-Preserves WPF frozen status. No database schema changes if file sink is selected.
+No database schema changes if file sink is selected.
 
 ---
 
@@ -660,7 +660,7 @@ Instrument key operations using `ISecurityAuditService`:
 Revert controller and service modifications via Git.
 
 #### H. Governance
-Preserves WPF frozen status. Zero database schema modifications.
+Zero database schema modifications.
 
 
 ---
@@ -724,7 +724,7 @@ Preserves WPF frozen status. Zero database schema modifications.
 Revert `AuthService.cs` via Git. Zero database schema impact.
 
 #### H. Governance
-Preserves WPF frozen status. No database schema changes.
+No database schema changes.
 
 ---
 
@@ -773,7 +773,7 @@ Under decision `DEC-CRED-01`, two primary policy standards are submitted for sel
 Revert `UserValidator.cs` via Git.
 
 #### H. Governance
-Preserves WPF frozen status. Zero database schema modifications.
+Zero database schema modifications.
 
 ---
 
@@ -825,7 +825,7 @@ Preserves WPF frozen status. Zero database schema modifications.
 Revert `JwtTokenService.cs` and `appsettings.json` via Git.
 
 #### H. Governance
-Preserves WPF frozen status. No database schema changes.
+No database schema changes.
 
 ---
 
@@ -892,7 +892,7 @@ Preserves WPF frozen status. No database schema changes.
 Rollback EF Core migration via verified down-script on ephemeral database. Revert domain and service changes via Git.
 
 #### H. Governance
-Preserves WPF frozen status. Strictly requires Gate 5 database schema sign-off.
+Strictly requires Gate 5 database schema sign-off.
 
 ---
 
@@ -942,7 +942,7 @@ Preserves WPF frozen status. Strictly requires Gate 5 database schema sign-off.
 Remove middleware from `Program.cs` pipeline.
 
 #### H. Governance
-Preserves WPF frozen status. No database schema changes.
+No database schema changes.
 
 ---
 
@@ -994,7 +994,7 @@ Preserves WPF frozen status. No database schema changes.
 Revert configuration validation additions in `Program.cs`.
 
 #### H. Governance
-Preserves WPF frozen status. No database schema changes.
+No database schema changes.
 
 ---
 
@@ -1036,7 +1036,7 @@ Preserves WPF frozen status. No database schema changes.
 Disable scanner step in build script.
 
 #### H. Governance
-Preserves WPF frozen status. Zero database schema modifications.
+Zero database schema modifications.
 
 ---
 
@@ -1085,7 +1085,7 @@ Upon confirmation of `DEC-POL-01`:
 Revert `LicenseReplacementService.cs` via Git.
 
 #### H. Governance
-Preserves WPF frozen status. Zero database schema modifications.
+Zero database schema modifications.
 
 ---
 
@@ -1133,7 +1133,7 @@ Upon confirmation of `DEC-POL-02`:
 Revert `InternationalService.cs` via Git.
 
 #### H. Governance
-Preserves WPF frozen status. Zero database schema modifications.
+Zero database schema modifications.
 
 ---
 
@@ -1175,7 +1175,7 @@ When Phase 12.2 is formally authorized:
 Revert schema and authentication pipeline additions.
 
 #### H. Governance
-Preserves WPF frozen status. Requires Gate 5 and Gate 8 approvals.
+Requires Gate 5 and Gate 8 approvals.
 
 
 ---
@@ -1442,5 +1442,5 @@ The following matrix provides comprehensive, bidirectional traceability across a
 - [x] **Dependency Integrity:** Every package dependency states its exact technical or policy rationale; no artificial linear blocking.
 - [x] **Technical Validity of Acceptance Criteria:** Acceptance criteria are measurable and technically valid.
 - [x] **Zero Implementation Authorization:** No package is marked `APPROVED FOR IMPLEMENTATION`; all packages remain `READY FOR PROJECT OWNER REVIEW`, `BLOCKED ON POLICY`, or `STRICTLY UNAUTHORIZED`.
-- [x] **Boundary Preservation:** `DVLDf` is strictly protected; WPF client is frozen and excluded; SEC-05 / Phase 12.2 remains unauthorized.
+- [x] **Boundary Preservation:** `DVLDf` is strictly protected; WPF client is decommissioned and removed; SEC-05 / Phase 12.2 remains unauthorized.
 - [x] **Evidence-Backed Classification:** Every confirmed vulnerability has documented static evidence and verified runtime exploitability criteria; unverified scenarios are classified accordingly.

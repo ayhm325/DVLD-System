@@ -46,12 +46,7 @@ graph TD
         TESTS["Test Projects (Unit & Integration Tests)"]
     end
 
-    subgraph Frozen / Out of Scope
-        WPF["Presentation (WPF Desktop Client)"]
-    end
-
     CLIENT -->|REST / JSON| API
-    WPF -.->|Legacy / Frozen| API
     API --> APP
     API --> INFRA
     INFRA --> DOMAIN
@@ -62,7 +57,6 @@ graph TD
 
 - **Backend (.NET 8):** Clean / Onion architecture with strict boundary enforcement. `Domain` and `Application` maintain no dependencies on `Infrastructure`. Persistence is handled via Entity Framework Core 8 and UnitOfWork.
 - **Frontend (React 19):** Single Page Application located in `ClientApp/` using TypeScript, Tailwind CSS, and Vite.
-- **Frozen Legacy Client:** The desktop client in `Presentation (WPF)/` is completely frozen and out of scope.
 
 ---
 
@@ -142,7 +136,6 @@ Current engineering activity is focused on governance finalization and preparati
 1. **Production Database Safety (`DVLDf`):** Direct connections, queries, schema changes, or test executions against `DVLDf` are strictly forbidden.
 2. **ADR-O02 Policy Verification Blocker:** Phase 12.3 cannot implement `INT-03` without human confirmation of official licensing department policy regarding active detentions during license replacements.
 3. **Cryptographic Suite Selection (SEC-05):** ASP.NET Core Data Protection is a proposed direction only. No cipher (such as AES-256-GCM) has been approved or benchmarked.
-4. **Frozen WPF Scope:** The WPF client remains completely frozen and out of scope.
 
 ---
 

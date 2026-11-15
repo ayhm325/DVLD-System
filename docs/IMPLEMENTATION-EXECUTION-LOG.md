@@ -17,7 +17,7 @@
 - **Architecture Style:** Modular Monolith + Clean Architecture + SOLID (`Domain` $\leftarrow$ `Application` $\leftarrow$ `Infrastructure` / `DVLD.Api`).
 - **Product Scope:** Single Organization civic licensing department management system. Explicitly **not** a multi-tenant SaaS platform (`ENGINEERING-DECISIONS.md` §10 Item 9).
 - **Transactional Consistency:** Strong ACID transactional consistency enforced across all licensing, examination, and fee workflows. Fail-safe partition behavior on external dependency failure.
-- **Excluded / Frozen Modules:** `Presentation (WPF)/` is completely frozen and outside active development.
+- **Decommissioned Modules:** `Presentation (WPF)/` has been completely and permanently removed from the repository.
 - **Database Protection:** The development/production database `DVLDf` is strictly protected (never accessed, queried, modified, or migrated during automated testing). Ephemeral databases (`DVLD_IntegrationTests_<GUID>`) are exclusively used for integration tests.
 
 ### 1.2 Technology Baseline Summary

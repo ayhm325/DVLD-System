@@ -60,7 +60,7 @@ The DVLD backend is structured as an evidence-based Onion / Clean Architecture. 
 
 ## 2. Shared Contracts & DTO Boundaries
 
-- `DVLD.Contracts` serves as the shared binary contract project referenced by `DVLD.Api` and `Presentation (WPF)`.
+- `DVLD.Contracts` serves as the shared binary contract project referenced by `DVLD.Api` and test suites.
 - `ClientApp` consumes JSON contracts over HTTP matching the API schema.
 - **DTO Consolidation Principle (ARCH-01):** Duplicate DTOs currently exist across `DVLD.Contracts` and `Application/DTOs`. Where identical structures exist, prefer referencing shared definitions or maintaining explicit mapping via extension methods rather than scattered object initializers.
 

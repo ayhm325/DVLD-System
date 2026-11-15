@@ -6,13 +6,12 @@
 > **Governance Status:** ACTIVE & ENFORCED  
 > **Active Backend:** ASP.NET Core Web API (`DVLD.Api`)  
 > **Active Frontend:** React SPA in `ClientApp/`  
-> **WPF Scope:** Legacy / Frozen / Out of Scope  
 
 ---
 
 ## 1. Overview and Mission
 
-This repository contains the **Driver & Vehicle Licensing Department (DVLD)** management system. The architecture comprises a .NET 8 Web API backend (`DVLD.Api`), enterprise persistence with SQL Server and Entity Framework Core 8 (`Infrastructure`), business use-case orchestration (`Application`), pure domain models (`Domain`), a shared contract boundary (`DVLD.Contracts`), automated test suites (`Test/`), a modern React 19 single-page application (`ClientApp/`), and a legacy WPF desktop client (`Presentation (WPF)/`).
+This repository contains the **Driver & Vehicle Licensing Department (DVLD)** management system. The architecture comprises a .NET 8 Web API backend (`DVLD.Api`), enterprise persistence with SQL Server and Entity Framework Core 8 (`Infrastructure`), business use-case orchestration (`Application`), pure domain models (`Domain`), a shared contract boundary (`DVLD.Contracts`), automated test suites (`Test/`), and a modern React 19 single-page application (`ClientApp/`).
 
 All AI agents operating within this repository **must** strictly adhere to the operational constraints, protected boundaries, safety gates, and documentation standards defined across this governance suite.
 
@@ -51,17 +50,12 @@ graph TD
         CLIENT["ClientApp/ (React 19 + TypeScript 6 + Vite 8)"]
     end
 
-    subgraph Frozen / Out of Scope
-        WPF["Presentation (WPF Desktop Client)"]
-    end
-
     subgraph Protected Data
         DB_PROD["DVLDf (Local / Production Database)"]
         DB_TEST["DVLD_IntegrationTests_<GUID> (Ephemeral)"]
     end
 
     CLIENT -->|HTTP + JSON + JWT| API
-    WPF -.->|Legacy HTTP + JSON| API
     API --> APP
     API --> INFRA
     INFRA --> APP
@@ -81,7 +75,6 @@ graph TD
 - **Backend .NET Tasks:** Encompass `API/`, `Application/`, `Infrastructure/`, `Domain/`, `DVLD.Contracts/`, and `Test/`.
 - **Frontend React Tasks:** Encompass `ClientApp/` only. Frontend-specific workflows are further governed by [`ClientApp/AGENTS.md`](./ClientApp/AGENTS.md).
 - **Cross-Layer / Full-Stack Tasks:** Root governance overrides component rules in any conflict.
-- **WPF Exclusion:** The WPF desktop client located in `Presentation (WPF)/` is **frozen** and explicitly **excluded** from this engineering modernization and remediation program. AI agents must not describe WPF as the primary active development target, nor refactor, audit, or modify WPF code unless explicitly instructed in writing by the user.
 
 ---
 

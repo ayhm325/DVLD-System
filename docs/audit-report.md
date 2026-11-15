@@ -230,7 +230,7 @@ There are 27 protected route pages; Login is a separate unauthenticated screen. 
 - No chart tokens or chart library; the dashboard currently has no charts and the user confirmed none are needed.
 
 **Explicitly untouched**
-- API services/contracts, authentication and authorization behavior, page permissions, protected pages other than their inherited existing styling, business rules, and backend/WPF projects.
+- API services/contracts, authentication and authorization behavior, page permissions, protected pages other than their inherited existing styling, business rules, and backend projects.
 - `components.json` is intentionally retained: it is harmless IDE/tooling metadata, the project does not use the shadcn CLI, and the user explicitly directed that it remain.
 
 ---

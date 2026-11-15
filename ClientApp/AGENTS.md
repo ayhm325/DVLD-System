@@ -88,7 +88,6 @@ flowchart TD
 Unless explicitly authorized by the user, the following areas are **STRICTLY OFF-LIMITS**:
 - Backend C# code (`API/`, `Core/`, `Infrastructure/`, `Application/`)
 - Database schemas, migrations, and SQL procedures
-- WPF desktop client (`Presentation (WPF)/`)
 - Backend authorization policies and controller attributes
 - Production authentication contracts (`POST /api/Auth/login`)
 

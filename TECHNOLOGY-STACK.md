@@ -34,7 +34,6 @@ All version records in this document are derived from static inspection of confi
 | **BCrypt.Net-Next** | `4.2.0` | `Application.csproj` | `Application` | Secure password hashing (WorkFactor = 11) | **Verified Active** |
 | **SkiaSharp** | `4.154.0` | `Application.csproj` | `Application` | Server-side image resizing and profile photo processing | **Verified Active** |
 | **Swashbuckle.AspNetCore** | `6.6.2` | `DVLD.Api.csproj` | `DVLD.Api` | Swagger UI and OpenAPI 3.0 document generation | **Verified Active** |
-| **CommunityToolkit.Mvvm** | `8.2.2` | `Presentation.csproj` | `Presentation (WPF)` | MVVM messaging, observable objects, relay commands | **Frozen / Excluded Scope** |
 
 ---
 
@@ -82,7 +81,7 @@ Backend testing is partitioned across three projects in `Test/`:
 ### 5.1 Pipeline Configuration (`azure-pipelines.yml`)
 - **CI Platform:** Azure Pipelines (`windows-latest` VM image).
 - **Database Service:** Dynamic SQL Server LocalDB instance (`DVLD_CI_$(Build.BuildId)_$(System.JobAttempt)`).
-- **Build Step:** `dotnet build Presentation (WPF)/DVLD_WPF.sln --configuration Release`.
+- **Build Step:** `dotnet build DVLD.sln --configuration Release`.
 - **Test Execution Steps (Configured in YAML — Runtime Status: Needs Verification):**
   - `Application.UnitTests`: Configured in YAML.
   - `Infrastructure.IntegrationTests`: Configured in YAML with `DVLD_TEST_CONNECTION`.

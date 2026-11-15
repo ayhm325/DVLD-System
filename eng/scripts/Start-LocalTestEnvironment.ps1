@@ -109,7 +109,7 @@ $identityKeepAlive = $null
 try {
     if ([string]::IsNullOrWhiteSpace($SolutionPath)) {
         $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-        $SolutionPath = Join-Path $repoRoot 'Presentation (WPF)\DVLD_WPF.sln'
+        $SolutionPath = Join-Path $repoRoot 'DVLD.sln'
     }
 
     # ---- 1. Prerequisites -------------------------------------------------
