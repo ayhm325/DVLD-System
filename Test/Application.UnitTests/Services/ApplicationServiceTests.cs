@@ -1228,6 +1228,101 @@ public sealed class ApplicationServiceTests
             () => service.CancelApplicationAsync(1));
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task CancelApplicationStateAsync_WhenIdIsInvalid_ReturnsValidation(int id)
+    {
+        var service = CreateService();
+
+        var result = await service.CancelApplicationStateAsync(id);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.Validation, result.ErrorType);
+        _repository.Verify(
+            x => x.GetApplicationForCancellationAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task CancelApplicationStateAsync_WhenApplicationDoesNotExist_ReturnsNotFound()
+    {
+        var service = CreateService();
+
+        _repository
+            .Setup(x => x.GetApplicationForCancellationAsync(1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ApplicationD?)null);
+
+        var result = await service.CancelApplicationStateAsync(1);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.NotFound, result.ErrorType);
+    }
+
+    [Fact]
+    public async Task CancelApplicationStateAsync_WhenCompleted_ReturnsConflict()
+    {
+        var service = CreateService();
+
+        var entity = CreateApplication(status: AppStatus.Completed);
+        _repository
+            .Setup(x => x.GetApplicationForCancellationAsync(1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(entity);
+
+        var result = await service.CancelApplicationStateAsync(1);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.Conflict, result.ErrorType);
+        Assert.Equal("Cannot cancel completed application.", result.Error);
+    }
+
+    [Fact]
+    public async Task CancelApplicationStateAsync_WhenAlreadyCancelled_ReturnsConflict()
+    {
+        var service = CreateService();
+
+        var entity = CreateApplication(status: AppStatus.Cancelled);
+        _repository
+            .Setup(x => x.GetApplicationForCancellationAsync(1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(entity);
+
+        var result = await service.CancelApplicationStateAsync(1);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.Conflict, result.ErrorType);
+        Assert.Equal("Application already cancelled.", result.Error);
+    }
+
+    [Fact]
+    public async Task CancelApplicationStateAsync_WhenValid_ChangesStatusWithoutTransactionOrCommit()
+    {
+        var service = CreateService();
+
+        var entity = CreateApplication(status: AppStatus.New);
+        var oldStatusDate = entity.LastStatusDate;
+
+        _repository
+            .Setup(x => x.GetApplicationForCancellationAsync(1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(entity);
+
+        var result = await service.CancelApplicationStateAsync(1);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(AppStatus.Cancelled, entity.ApplicationStatus);
+        Assert.True(entity.LastStatusDate >= oldStatusDate);
+
+        _unitOfWork.Verify(
+            x => x.ExecuteInTransactionAsync(
+                It.IsAny<Func<IUnitOfWorkTransaction, Task<Result>>>(),
+                It.IsAny<IsolationLevel>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+
+        _transaction.Verify(
+            x => x.CommitAsync(It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     // =========================================================
     // COMPLETE
     // =========================================================

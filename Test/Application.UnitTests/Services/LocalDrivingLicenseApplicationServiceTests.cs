@@ -369,7 +369,7 @@ public sealed class LocalDrivingLicenseApplicationServiceTests
 
         Assert.Equal(ErrorType.Validation, result.ErrorType);
         _applicationService.Verify(
-            x => x.CancelApplicationAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+            x => x.CancelApplicationStateAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -402,12 +402,12 @@ public sealed class LocalDrivingLicenseApplicationServiceTests
         SetupTransaction();
         _repository.Setup(x => x.GetByIdAsync(5, It.IsAny<CancellationToken>())).ReturnsAsync(CreateEntity(5));
         var expected = Result.Success();
-        _applicationService.Setup(x => x.CancelApplicationAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(expected);
+        _applicationService.Setup(x => x.CancelApplicationStateAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(expected);
 
         var result = await CreateService().CancelLocalDrivingLicenseApplicationAsync(5);
 
         Assert.True(result.IsSuccess);
-        _applicationService.Verify(x => x.CancelApplicationAsync(10, It.IsAny<CancellationToken>()), Times.Once);
+        _applicationService.Verify(x => x.CancelApplicationStateAsync(10, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -415,7 +415,7 @@ public sealed class LocalDrivingLicenseApplicationServiceTests
     {
         SetupTransaction();
         _repository.Setup(x => x.GetByIdAsync(5, It.IsAny<CancellationToken>())).ReturnsAsync(CreateEntity(5));
-        _applicationService.Setup(x => x.CancelApplicationAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(Result.Success());
+        _applicationService.Setup(x => x.CancelApplicationStateAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(Result.Success());
 
         var activeAppointment = new TestAppointment
         {

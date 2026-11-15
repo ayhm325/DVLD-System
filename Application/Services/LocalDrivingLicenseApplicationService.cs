@@ -483,7 +483,7 @@ public sealed class LocalDrivingLicenseApplicationService(
         return await _unitOfWork.ExecuteInTransactionAsync(
             async transaction =>
             {
-                var cancelResult = await _applicationService.CancelApplicationAsync(existing.ApplicationID, cancellationToken);
+                var cancelResult = await _applicationService.CancelApplicationStateAsync(existing.ApplicationID, cancellationToken);
                 if (cancelResult.IsFailure)
                     return cancelResult;
 
@@ -504,13 +504,9 @@ public sealed class LocalDrivingLicenseApplicationService(
                         apt.CancelledByUserID = currentUserId;
                         apt.IsLocked = true;
                     }
-
-                    if (activeAppointments.Count > 0)
-                    {
-                        await _unitOfWork.SaveChangesAsync(cancellationToken);
-                    }
                 }
 
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
                 return Result.Success();
             },

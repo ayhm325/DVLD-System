@@ -64,6 +64,16 @@ public interface IApplicationService
             CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Mutates the application status to Cancelled without calling SaveChangesAsync or opening a transaction.
+    /// Intended for use by outer workflow services that manage their own transaction
+    /// and persistence boundary (e.g. CancelLocalDrivingLicenseApplicationAsync).
+    /// </summary>
+    Task<Result>
+        CancelApplicationStateAsync(
+            int id,
+            CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Mutates the application status to Completed without calling SaveChangesAsync.
     /// Intended for use by outer workflow services that manage their own transaction
     /// and persistence boundary. The outer caller is responsible for flushing changes.

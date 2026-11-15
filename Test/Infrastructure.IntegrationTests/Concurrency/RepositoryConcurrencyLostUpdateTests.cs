@@ -39,11 +39,11 @@ public sealed class RepositoryConcurrencyLostUpdateTests : IClassFixture<SqlServ
     /// Scenario A: Person Update with a Stale Client Payload
     /// 
     /// Note on Concurrency Model:
-    /// This test reproduces a stale client payload overwrite (the classical web application disconnected
-    /// Last-Write-Wins defect), where a client submits a complete DTO based on an earlier read while retaining
-    /// unchanged properties, rather than overlapping database transactions on the same DbContext.
-    /// It proves that because Person has no concurrency token (rowversion), EF Core's default tracking
-    /// executes an unconstrained UPDATE that silently overwrites concurrent field updates.
+    /// In the disconnected web model, Client B captures the initial state including RowVersion.
+    /// Client A concurrently updates Phone and commits, causing SQL Server to increment RowVersion.
+    /// When Client B subsequently submits with the stale RowVersion, EF Core detects the concurrency token
+    /// mismatch, throws DbUpdateConcurrencyException, and PersonService returns Result.Conflict.
+    /// This proves that the optimistic concurrency token prevents the lost update of Client A's phone.
     /// </summary>
     [Fact]
     public async Task ScenarioA_PersonUpdate_WithStaleClientPayload_SilentlyOverwritesConcurrentPhoneUpdate()
@@ -51,7 +51,17 @@ public sealed class RepositoryConcurrencyLostUpdateTests : IClassFixture<SqlServ
         var nationalNo = Random.Shared.NextInt64(1000000000, 9999999999).ToString();
         var (personId, countryId) = await SeedPersonAsync(nationalNo, "0790000000", "Old Street 100");
 
-        // 1. Client B opens the Person edit form in the web UI and captures the stale state in a DTO
+        // 1. Capture initial RowVersion as read by both clients
+        string initialRowVersion;
+        await using (var initialContext = _database.CreateContext())
+        {
+            var initialPerson = await initialContext.People.AsNoTracking().SingleAsync(p => p.PersonId == personId);
+            Assert.NotNull(initialPerson.RowVersion);
+            Assert.NotEmpty(initialPerson.RowVersion);
+            initialRowVersion = Convert.ToBase64String(initialPerson.RowVersion);
+        }
+
+        // 2. Client B opens the Person edit form and captures the stale state and original RowVersion
         var staleClientBDto = new PersonUpdateDto
         {
             NationalNo = nationalNo,
@@ -62,10 +72,11 @@ public sealed class RepositoryConcurrencyLostUpdateTests : IClassFixture<SqlServ
             Gender = 0,
             Phone = "0790000000", // Stale original phone retained in Client B's form
             Address = "New Street 200", // Intended change by Client B
-            NationalityCountryID = countryId
+            NationalityCountryID = countryId,
+            RowVersion = initialRowVersion
         };
 
-        // 2. Client A submits an update changing Phone to "0791111111" while keeping Address as "Old Street 100"
+        // 3. Client A submits an update changing Phone to "0791111111" with valid RowVersion
         await using (var contextA = _database.CreateContext())
         {
             var serviceA = CreatePersonService(contextA);
@@ -79,49 +90,59 @@ public sealed class RepositoryConcurrencyLostUpdateTests : IClassFixture<SqlServ
                 Gender = 0,
                 Phone = "0791111111", // Valid change by Client A
                 Address = "Old Street 100",
-                NationalityCountryID = countryId
+                NationalityCountryID = countryId,
+                RowVersion = initialRowVersion
             };
 
             var resultA = await serviceA.UpdatePersonAsync(personId, clientADto);
             Assert.True(resultA.IsSuccess, $"{resultA.ErrorType}: {resultA.Error}");
         }
 
-        // 3. Verify that Client A's update was persisted to SQL Server
+        // 4. Verify that Client A's update was persisted to SQL Server and RowVersion changed
+        string afterARowVersion;
         await using (var verifyContextA = _database.CreateContext())
         {
             var personAfterA = await verifyContextA.People.AsNoTracking().SingleAsync(p => p.PersonId == personId);
             Assert.Equal("0791111111", personAfterA.Phone);
             Assert.Equal("Old Street 100", personAfterA.Address);
+            Assert.NotNull(personAfterA.RowVersion);
+            afterARowVersion = Convert.ToBase64String(personAfterA.RowVersion);
+            Assert.NotEqual(initialRowVersion, afterARowVersion);
         }
 
-        // 4. Client B submits the previously captured stale DTO (containing "New Street 200" and stale phone "0790000000")
+        // 5. Client B submits the previously captured stale DTO (containing original stale RowVersion)
         await using (var contextB = _database.CreateContext())
         {
             var serviceB = CreatePersonService(contextB);
             var resultB = await serviceB.UpdatePersonAsync(personId, staleClientBDto);
-            Assert.True(resultB.IsSuccess, $"{resultB.ErrorType}: {resultB.Error}");
+
+            // Optimistic concurrency check detects stale RowVersion and rejects with Conflict
+            Assert.False(resultB.IsSuccess, "Stale update must fail due to optimistic concurrency conflict.");
+            Assert.Equal(ErrorType.Conflict, resultB.ErrorType);
+            Assert.Equal("The person record was modified by another user. Please reload and try again.", resultB.Error);
         }
 
-        // 5. Verify the final persisted state in SQL Server using a fresh verification context
+        // 6. Verify the final persisted state in SQL Server using a fresh verification context
         await using (var finalVerifyContext = _database.CreateContext())
         {
             var finalPerson = await finalVerifyContext.People.AsNoTracking().SingleAsync(p => p.PersonId == personId);
 
-            // Client B's address change was applied
-            Assert.Equal("New Street 200", finalPerson.Address);
+            // Client A's phone update was PRESERVED (Lost Update PREVENTED)
+            Assert.Equal("0791111111", finalPerson.Phone);
+            Assert.NotEqual("0790000000", finalPerson.Phone);
 
-            // REPRODUCED LOST UPDATE DEFECT:
-            // Client A's phone update ("0791111111") was silently overwritten and reverted back to "0790000000"
-            Assert.Equal("0790000000", finalPerson.Phone);
-            Assert.NotEqual("0791111111", finalPerson.Phone);
+            // Client B's address change was rejected and NOT persisted
+            Assert.Equal("Old Street 100", finalPerson.Address);
+            Assert.NotEqual("New Street 200", finalPerson.Address);
         }
     }
 
     /// <summary>
     /// Scenario B: Application Cancellation vs. First License Issuance
-    /// Proves that when CancelApplicationAsync reads an application as New, pauses, and LicenseIssuanceService
-    /// subsequently completes the application and issues a license, resuming CancelApplicationAsync allows it to
-    /// overwrite Completed with Cancelled in SQL Server, leaving a live driving license referencing a Cancelled application.
+    /// Proves that because CancelApplicationAsync executes inside a transaction acquiring an UPDLOCK
+    /// on the Application row via GetApplicationForCancellationAsync, concurrent LicenseIssuanceService
+    /// is serialized at the database level. When Cancellation commits first, Issuance unblocks,
+    /// observes the Cancelled status, and fails with Conflict, preventing state overwrite.
     /// </summary>
     [Fact]
     public async Task ScenarioB_ApplicationCancellation_ConcurrentWithLicenseIssuance_OverwritesCompletedStatus()
@@ -131,67 +152,69 @@ public sealed class RepositoryConcurrencyLostUpdateTests : IClassFixture<SqlServ
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var (personId, userId, applicationId, localAppId) = await SeedApplicationAndExaminationsAsync(suffix);
 
-        var cancelReadCompleted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var allowCancelToSave = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cancelLockAcquired = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowCancelToProceed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         using var cancelCts = new CancellationTokenSource();
+        using var issuanceCts = new CancellationTokenSource();
         var cancelContext = _database.CreateContext();
+        var issuanceContext = _database.CreateContext();
         Task<Result>? cancelTask = null;
+        Task<Result<int>>? issuanceTask = null;
         Exception? primaryException = null;
 
         try
         {
-            // 1. Start Cancellation request on Context 1, pausing immediately after its repository read
-            var cancelService = CreatePausingCancelService(cancelContext, userId, cancelReadCompleted, allowCancelToSave, DefaultTimeout);
+            // 1. Start Cancellation request on Context 1, pausing after acquiring UPDLOCK via GetApplicationForCancellationAsync
+            var cancelService = CreatePausingCancelService(
+                cancelContext,
+                userId,
+                onAfterGetForCancellation: async ct =>
+                {
+                    cancelLockAcquired.TrySetResult(true);
+                    await allowCancelToProceed.Task.WaitAsync(DefaultTimeout, ct);
+                });
 
             cancelTask = Task.Run(async () =>
             {
                 return await cancelService.CancelApplicationAsync(applicationId, cancelCts.Token);
             });
 
-            // 2. Wait with bounded timeout until Cancellation has read the application as New
-            await cancelReadCompleted.Task.WaitAsync(DefaultTimeout);
+            // 2. Wait with bounded timeout until Cancellation has acquired the UPDLOCK on the Application row
+            await cancelLockAcquired.Task.WaitAsync(DefaultTimeout);
 
-            // 3. Concurrently execute LicenseIssuanceService on Context 2 to issue the license and complete the application
-            await using (var issuanceContext = _database.CreateContext())
+            // 3. Concurrently execute LicenseIssuanceService on Context 2; it will be blocked by SQL Server on UPDLOCK
+            var issuanceService = CreateLicenseIssuanceService(issuanceContext, userId);
+            issuanceTask = Task.Run(async () =>
             {
-                var issuanceService = CreateLicenseIssuanceService(issuanceContext, userId);
-                var issuanceResult = await issuanceService.IssueFirstLicenseAsync(localAppId, "Issued first time");
-                Assert.True(issuanceResult.IsSuccess, $"{issuanceResult.ErrorType}: {issuanceResult.Error}");
-            }
+                return await issuanceService.IssueFirstLicenseAsync(localAppId, "Issued first time", issuanceCts.Token);
+            });
 
-            // 4. Verify in SQL Server that the application is now Completed and the license exists and is active
-            await using (var midVerifyContext = _database.CreateContext())
-            {
-                var midApp = await midVerifyContext.Applications.AsNoTracking().SingleAsync(a => a.ApplicationID == applicationId);
-                Assert.Equal(AppStatus.Completed, midApp.ApplicationStatus);
+            // 4. Verify that Issuance is blocked by SQL Server on the row lock held by Cancellation
+            await Task.Delay(250);
+            Assert.False(issuanceTask.IsCompleted, "Issuance must be blocked waiting for Cancellation's UPDLOCK.");
 
-                var midLicense = await midVerifyContext.Licenses.AsNoTracking().SingleOrDefaultAsync(l => l.ApplicationID == applicationId);
-                Assert.NotNull(midLicense);
-                Assert.True(midLicense.IsActive, "The issued license should be active.");
-            }
-
-            // 5. Resume Cancellation and let it attempt to save with bounded timeout
-            allowCancelToSave.TrySetResult(true);
+            // 5. Resume Cancellation and let it persist and commit
+            allowCancelToProceed.TrySetResult(true);
             var cancelResult = await cancelTask.WaitAsync(DefaultTimeout);
-
-            // Cancellation returned success because its in-memory status check happened before issuance
             Assert.True(cancelResult.IsSuccess, $"{cancelResult.ErrorType}: {cancelResult.Error}");
 
-            // 6. Verify final database state in SQL Server using a fresh verification context
+            // 6. Issuance unblocks in SQL Server, observes Cancelled status, and fails with Conflict
+            var issuanceResult = await issuanceTask.WaitAsync(DefaultTimeout);
+            Assert.False(issuanceResult.IsSuccess, "Issuance must fail when application is already Cancelled.");
+            Assert.Equal(ErrorType.Conflict, issuanceResult.ErrorType);
+            Assert.Equal("The application is not in a valid state for license issuance.", issuanceResult.Error);
+
+            // 7. Verify final database state in SQL Server using a fresh verification context
             await using (var finalVerifyContext = _database.CreateContext())
             {
                 var finalApp = await finalVerifyContext.Applications.AsNoTracking().SingleAsync(a => a.ApplicationID == applicationId);
                 var finalLicense = await finalVerifyContext.Licenses.AsNoTracking().SingleOrDefaultAsync(l => l.ApplicationID == applicationId);
 
-                // A live driving license was issued and committed
-                Assert.NotNull(finalLicense);
-                Assert.True(finalLicense.IsActive, "The issued license should remain active.");
-
-                // REPRODUCED STATE OVERWRITE DEFECT:
-                // CancelApplicationAsync overwrote the Completed status with Cancelled in SQL Server!
+                // Application remains Cancelled and NO license was created
                 Assert.Equal(AppStatus.Cancelled, finalApp.ApplicationStatus);
                 Assert.NotEqual(AppStatus.Completed, finalApp.ApplicationStatus);
+                Assert.Null(finalLicense);
             }
         }
         catch (Exception ex)
@@ -203,13 +226,12 @@ public sealed class RepositoryConcurrencyLostUpdateTests : IClassFixture<SqlServ
         {
             var cleanupErrors = new List<Exception>();
 
-            // Unblock allowCancelToSave so the workflow is not suspended on the TaskCompletionSource
-            allowCancelToSave.TrySetResult(true);
+            cancelLockAcquired.TrySetResult(true);
+            allowCancelToProceed.TrySetResult(true);
 
-            // Await actual completion of cancelTask with cooperative cancellation before disposing cancelContext
             await AwaitTaskWithCooperativeCancellationAsync(cancelTask, cancelCts, DefaultTimeout, cleanupErrors);
+            await AwaitTaskWithCooperativeCancellationAsync(issuanceTask, issuanceCts, DefaultTimeout, cleanupErrors);
 
-            // Dispose cancelContext only after cancelTask has completely terminated
             try
             {
                 await cancelContext.DisposeAsync();
@@ -219,7 +241,15 @@ public sealed class RepositoryConcurrencyLostUpdateTests : IClassFixture<SqlServ
                 cleanupErrors.Add(ex);
             }
 
-            // Preserve exceptions without masking primary test failure
+            try
+            {
+                await issuanceContext.DisposeAsync();
+            }
+            catch (Exception ex)
+            {
+                cleanupErrors.Add(ex);
+            }
+
             if (cleanupErrors.Count > 0)
             {
                 if (primaryException != null)
@@ -241,9 +271,12 @@ public sealed class RepositoryConcurrencyLostUpdateTests : IClassFixture<SqlServ
 
     /// <summary>
     /// Scenario C: Concurrent Password Changes
-    /// Proves that two concurrent ChangePasswordAsync requests both read the original password hash,
-    /// both verify the old password, both return Success, but the second request silently overwrites
-    /// the first request's password change in SQL Server (Lost Update).
+    /// Proves that because ChangePasswordAsync executes inside a transaction acquiring an UPDLOCK
+    /// on the User row via GetUserForPasswordChangeAsync:
+    /// 1. Concurrent password changes are serialized at the database level.
+    /// 2. Request 1 acquires the lock, changes the password to NewPassword1, and commits.
+    /// 3. Request 2 unblocks, reloads the committed hash, fails old password verification, and returns Validation failure.
+    /// 4. Lost update is prevented: NewPassword1 remains active and NewPassword2 is never applied.
     /// </summary>
     [Fact]
     public async Task ScenarioC_ConcurrentPasswordChanges_BothSucceedAndSilentlyOverwritesFirstChange()
@@ -255,12 +288,8 @@ public sealed class RepositoryConcurrencyLostUpdateTests : IClassFixture<SqlServ
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var (userId, initialSecurityStamp) = await SeedUserWithSessionsAsync($"user_{suffix}", oldPassword);
 
-        var req1ReadDone = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var req2ReadDone = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var req1VerifiedDone = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var req2VerifiedDone = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var allowReq1ToSave = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var allowReq2ToSave = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var req1LockAcquired = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowReq1ToProceed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         using var cts1 = new CancellationTokenSource();
         using var cts2 = new CancellationTokenSource();
@@ -275,34 +304,17 @@ public sealed class RepositoryConcurrencyLostUpdateTests : IClassFixture<SqlServ
         {
             var service1 = CreateSynchronizedUserService(
                 context1,
-                onAfterRead: async ct =>
+                onAfterPasswordRead: async ct =>
                 {
-                    req1ReadDone.TrySetResult(true);
-                    await req2ReadDone.Task.WaitAsync(DefaultTimeout, ct);
-                },
-                onBeforeRevokeAndSave: async ct =>
-                {
-                    // Reaching RevokeAllForUserAsync proves BCrypt password verification succeeded
-                    req1VerifiedDone.TrySetResult(true);
-                    await req2VerifiedDone.Task.WaitAsync(DefaultTimeout, ct);
-                    await allowReq1ToSave.Task.WaitAsync(DefaultTimeout, ct);
+                    req1LockAcquired.TrySetResult(true);
+                    await allowReq1ToProceed.Task.WaitAsync(DefaultTimeout, ct);
                 });
 
             var service2 = CreateSynchronizedUserService(
                 context2,
-                onAfterRead: async ct =>
-                {
-                    await req1ReadDone.Task.WaitAsync(DefaultTimeout, ct);
-                    req2ReadDone.TrySetResult(true);
-                },
-                onBeforeRevokeAndSave: async ct =>
-                {
-                    // Reaching RevokeAllForUserAsync proves BCrypt password verification succeeded
-                    req2VerifiedDone.TrySetResult(true);
-                    await allowReq2ToSave.Task.WaitAsync(DefaultTimeout, ct);
-                });
+                onAfterPasswordRead: null);
 
-            // 1. Run both password change requests concurrently
+            // 1. Run Request 1
             task1 = Task.Run(async () =>
             {
                 return await service1.ChangePasswordAsync(userId, new ChangePasswordDto
@@ -312,6 +324,10 @@ public sealed class RepositoryConcurrencyLostUpdateTests : IClassFixture<SqlServ
                 }, cts1.Token);
             });
 
+            // 2. Wait until Request 1 has acquired the UPDLOCK on the user row
+            await req1LockAcquired.Task.WaitAsync(DefaultTimeout);
+
+            // 3. Run Request 2; it will be blocked by SQL Server on UPDLOCK held by Request 1
             task2 = Task.Run(async () =>
             {
                 return await service2.ChangePasswordAsync(userId, new ChangePasswordDto
@@ -321,33 +337,25 @@ public sealed class RepositoryConcurrencyLostUpdateTests : IClassFixture<SqlServ
                 }, cts2.Token);
             });
 
-            // 2. Wait until both requests have completed their initial read and BCrypt password verification
-            await Task.WhenAll(
-                req1ReadDone.Task.WaitAsync(DefaultTimeout),
-                req2ReadDone.Task.WaitAsync(DefaultTimeout));
+            // 4. Verify Request 2 is blocked waiting for Request 1
+            await Task.Delay(250);
+            Assert.False(task2.IsCompleted, "Request 2 must be blocked waiting for Request 1's UPDLOCK.");
 
-            await Task.WhenAll(
-                req1VerifiedDone.Task.WaitAsync(DefaultTimeout),
-                req2VerifiedDone.Task.WaitAsync(DefaultTimeout));
-
-            // 3. Allow Request 1 to persist and commit its transaction first
-            allowReq1ToSave.TrySetResult(true);
+            // 5. Allow Request 1 to complete and commit its transaction
+            allowReq1ToProceed.TrySetResult(true);
             var result1 = await task1.WaitAsync(DefaultTimeout);
             Assert.True(result1.IsSuccess, $"{result1.ErrorType}: {result1.Error}");
 
-            // 4. Now allow Request 2 to persist and commit its transaction
-            allowReq2ToSave.TrySetResult(true);
+            // 6. Request 2 unblocks, reloads the newly committed password, fails old password check, and returns Validation error
             var result2 = await task2.WaitAsync(DefaultTimeout);
-            Assert.True(result2.IsSuccess, $"{result2.ErrorType}: {result2.Error}");
+            Assert.False(result2.IsSuccess, "Request 2 must fail because old password was changed by Request 1.");
+            Assert.Equal(ErrorType.Validation, result2.ErrorType);
+            Assert.Equal("Current password is incorrect.", result2.Error);
 
-            // 5. Verify the final persisted state in SQL Server using a fresh verification context
+            // 7. Verify the final persisted state in SQL Server using a fresh verification context
             await using (var verifyContext = _database.CreateContext())
             {
                 var user = await verifyContext.Users.AsNoTracking().SingleAsync(u => u.UserId == userId);
-
-                // Both service calls reported Success
-                Assert.True(result1.IsSuccess);
-                Assert.True(result2.IsSuccess);
 
                 // SecurityStamp was rotated
                 Assert.NotEqual(initialSecurityStamp, user.SecurityStamp);
@@ -362,10 +370,11 @@ public sealed class RepositoryConcurrencyLostUpdateTests : IClassFixture<SqlServ
                     Assert.Equal(SessionRevocationReasons.PasswordChanged, s.RevocationReason);
                 });
 
-                // REPRODUCED LOST UPDATE DEFECT:
-                // NewPassword1 was completely wiped out by NewPassword2
-                Assert.False(BCrypt.Net.BCrypt.Verify(newPassword1, user.Password), "NewPassword1 should have been overwritten.");
-                Assert.True(BCrypt.Net.BCrypt.Verify(newPassword2, user.Password), "NewPassword2 should be the active password.");
+                // Lost update PREVENTED:
+                // NewPassword1 is the active password; NewPassword2 was never applied
+                Assert.True(BCrypt.Net.BCrypt.Verify(newPassword1, user.Password), "NewPassword1 should be the active password.");
+                Assert.False(BCrypt.Net.BCrypt.Verify(newPassword2, user.Password), "NewPassword2 should NOT have been applied.");
+                Assert.False(BCrypt.Net.BCrypt.Verify(oldPassword, user.Password), "Old password should no longer be valid.");
             }
         }
         catch (Exception ex)
@@ -377,21 +386,12 @@ public sealed class RepositoryConcurrencyLostUpdateTests : IClassFixture<SqlServ
         {
             var cleanupErrors = new List<Exception>();
 
-            // 1. Unblock all completion sources so background tasks are not left waiting
-            req1ReadDone.TrySetResult(true);
-            req2ReadDone.TrySetResult(true);
-            req1VerifiedDone.TrySetResult(true);
-            req2VerifiedDone.TrySetResult(true);
-            allowReq1ToSave.TrySetResult(true);
-            allowReq2ToSave.TrySetResult(true);
+            req1LockAcquired.TrySetResult(true);
+            allowReq1ToProceed.TrySetResult(true);
 
-            // 2. Await task1 actual completion with cooperative cancellation
             await AwaitTaskWithCooperativeCancellationAsync(task1, cts1, DefaultTimeout, cleanupErrors);
-
-            // 3. Await task2 actual completion with cooperative cancellation
             await AwaitTaskWithCooperativeCancellationAsync(task2, cts2, DefaultTimeout, cleanupErrors);
 
-            // 4. Safe disposal of contexts only after tasks have completely terminated
             try
             {
                 await context1.DisposeAsync();
@@ -410,7 +410,6 @@ public sealed class RepositoryConcurrencyLostUpdateTests : IClassFixture<SqlServ
                 cleanupErrors.Add(ex);
             }
 
-            // 5. Preserve exceptions without masking primary test failure
             if (cleanupErrors.Count > 0)
             {
                 if (primaryException != null)
@@ -448,12 +447,10 @@ public sealed class RepositoryConcurrencyLostUpdateTests : IClassFixture<SqlServ
     private ApplicationService CreatePausingCancelService(
         DVLDDbContext context,
         int userId,
-        TaskCompletionSource<bool> readCompleted,
-        TaskCompletionSource<bool> allowProceed,
-        TimeSpan timeout)
+        Func<CancellationToken, Task>? onAfterGetForCancellation)
     {
         var innerRepo = new ApplicationRepository(context);
-        var pausingRepo = new PausingApplicationRepositoryDecorator(innerRepo, readCompleted, allowProceed, timeout);
+        var pausingRepo = new PausingApplicationRepositoryDecorator(innerRepo, onAfterGetForCancellation);
         var uow = new UnitOfWork(context);
         var appTypeRepo = new ApplicationTypeRepository(context);
         var currentUser = new TestCurrentUser(userId);
@@ -498,16 +495,14 @@ public sealed class RepositoryConcurrencyLostUpdateTests : IClassFixture<SqlServ
 
     private UserService CreateSynchronizedUserService(
         DVLDDbContext context,
-        Func<CancellationToken, Task> onAfterRead,
-        Func<CancellationToken, Task> onBeforeRevokeAndSave)
+        Func<CancellationToken, Task>? onAfterPasswordRead)
     {
         var innerUserRepo = new UserRepository(context);
-        var pausingUserRepo = new PausingUserRepositoryDecorator(innerUserRepo, onAfterRead);
-        var innerSessionRepo = new UserSessionRepository(context);
-        var pausingSessionRepo = new PausingUserSessionRepositoryDecorator(innerSessionRepo, onBeforeRevokeAndSave);
+        var pausingUserRepo = new PausingUserRepositoryDecorator(innerUserRepo, onAfterPasswordRead);
+        var sessionRepo = new UserSessionRepository(context);
         var uow = new UnitOfWork(context);
 
-        return new UserService(pausingUserRepo, uow, pausingSessionRepo, _clock);
+        return new UserService(pausingUserRepo, uow, sessionRepo, _clock);
     }
 
     private static async Task AwaitTaskWithCooperativeCancellationAsync(
@@ -792,30 +787,27 @@ public sealed class RepositoryConcurrencyLostUpdateTests : IClassFixture<SqlServ
     private sealed class PausingApplicationRepositoryDecorator : IApplicationRepository
     {
         private readonly IApplicationRepository _inner;
-        private readonly TaskCompletionSource<bool> _readCompleted;
-        private readonly TaskCompletionSource<bool> _allowProceed;
-        private readonly TimeSpan _timeout;
+        private readonly Func<CancellationToken, Task>? _onAfterGetForCancellation;
 
         public PausingApplicationRepositoryDecorator(
             IApplicationRepository inner,
-            TaskCompletionSource<bool> readCompleted,
-            TaskCompletionSource<bool> allowProceed,
-            TimeSpan timeout)
+            Func<CancellationToken, Task>? onAfterGetForCancellation = null)
         {
             _inner = inner;
-            _readCompleted = readCompleted;
-            _allowProceed = allowProceed;
-            _timeout = timeout;
+            _onAfterGetForCancellation = onAfterGetForCancellation;
         }
 
-        public async Task<ApplicationD?> GetApplicationForUpdateAsync(int id, CancellationToken cancellationToken = default)
+        public async Task<ApplicationD?> GetApplicationForCancellationAsync(int id, CancellationToken cancellationToken = default)
         {
-            var result = await _inner.GetApplicationForUpdateAsync(id, cancellationToken);
-            _readCompleted.TrySetResult(true);
-            await _allowProceed.Task.WaitAsync(_timeout, cancellationToken);
+            var result = await _inner.GetApplicationForCancellationAsync(id, cancellationToken);
+            if (_onAfterGetForCancellation != null)
+            {
+                await _onAfterGetForCancellation(cancellationToken);
+            }
             return result;
         }
 
+        public Task<ApplicationD?> GetApplicationForUpdateAsync(int id, CancellationToken cancellationToken = default) => _inner.GetApplicationForUpdateAsync(id, cancellationToken);
         public Task<ApplicationD?> GetApplicationByIdAsync(int id, CancellationToken cancellationToken = default) => _inner.GetApplicationByIdAsync(id, cancellationToken);
         public Task<List<ApplicationD>> GetAllApplicationsAsync(CancellationToken cancellationToken = default) => _inner.GetAllApplicationsAsync(cancellationToken);
         public Task<List<ApplicationD>> GetApplicationsByPersonIdAsync(int personId, CancellationToken cancellationToken = default) => _inner.GetApplicationsByPersonIdAsync(personId, cancellationToken);
@@ -823,7 +815,6 @@ public sealed class RepositoryConcurrencyLostUpdateTests : IClassFixture<SqlServ
         public Task<List<ApplicationD>> GetApplicationsByUserIdAsync(int userId, CancellationToken cancellationToken = default) => _inner.GetApplicationsByUserIdAsync(userId, cancellationToken);
         public Task<List<ApplicationD>> GetApplicationsByStatusAsync(AppStatus status, CancellationToken cancellationToken = default) => _inner.GetApplicationsByStatusAsync(status, cancellationToken);
         public Task<ApplicationD?> GetApplicationForIssuanceAsync(int id, CancellationToken cancellationToken = default) => _inner.GetApplicationForIssuanceAsync(id, cancellationToken);
-        public Task<ApplicationD?> GetApplicationForCancellationAsync(int id, CancellationToken cancellationToken = default) => _inner.GetApplicationForCancellationAsync(id, cancellationToken);
         public Task<bool> IsApplicationExistsByIdAsync(int id, CancellationToken cancellationToken = default) => _inner.IsApplicationExistsByIdAsync(id, cancellationToken);
         public Task<bool> IsPersonHasActiveApplicationAsync(int personId, CancellationToken cancellationToken = default) => _inner.IsPersonHasActiveApplicationAsync(personId, cancellationToken);
         public Task<bool> IsPersonHasActiveApplicationOfTypeAsync(int personId, int applicationTypeId, CancellationToken cancellationToken = default) => _inner.IsPersonHasActiveApplicationOfTypeAsync(personId, applicationTypeId, cancellationToken);
@@ -834,25 +825,24 @@ public sealed class RepositoryConcurrencyLostUpdateTests : IClassFixture<SqlServ
     private sealed class PausingUserRepositoryDecorator : IUserRepository
     {
         private readonly IUserRepository _inner;
-        private readonly Func<CancellationToken, Task> _onAfterRead;
+        private readonly Func<CancellationToken, Task>? _onAfterPasswordRead;
 
         public PausingUserRepositoryDecorator(
             IUserRepository inner,
-            Func<CancellationToken, Task> onAfterRead)
+            Func<CancellationToken, Task>? onAfterPasswordRead = null)
         {
             _inner = inner;
-            _onAfterRead = onAfterRead;
+            _onAfterPasswordRead = onAfterPasswordRead;
         }
 
-        public async Task<User?> GetUserForUpdateAsync(int id, CancellationToken cancellationToken = default)
+        public async Task<User?> GetUserForPasswordChangeAsync(int id, CancellationToken cancellationToken = default)
         {
-            var user = await _inner.GetUserForUpdateAsync(id, cancellationToken);
-            if (_onAfterRead != null) await _onAfterRead(cancellationToken);
+            var user = await _inner.GetUserForPasswordChangeAsync(id, cancellationToken);
+            if (_onAfterPasswordRead != null) await _onAfterPasswordRead(cancellationToken);
             return user;
         }
 
-        public Task<User?> GetUserForPasswordChangeAsync(int id, CancellationToken cancellationToken = default) => _inner.GetUserForPasswordChangeAsync(id, cancellationToken);
-
+        public Task<User?> GetUserForUpdateAsync(int id, CancellationToken cancellationToken = default) => _inner.GetUserForUpdateAsync(id, cancellationToken);
         public Task<User?> GetUserByUserIdAsync(int id, CancellationToken cancellationToken = default) => _inner.GetUserByUserIdAsync(id, cancellationToken);
         public Task<User?> GetUserProfileAsync(int userId, CancellationToken cancellationToken = default) => _inner.GetUserProfileAsync(userId, cancellationToken);
         public Task<UserDetailsDto?> GetUserDetailsByIdAsync(int userId, CancellationToken cancellationToken = default) => _inner.GetUserDetailsByIdAsync(userId, cancellationToken);
@@ -868,36 +858,6 @@ public sealed class RepositoryConcurrencyLostUpdateTests : IClassFixture<SqlServ
         public Task<bool> AcquireAdminMutationLockAsync(CancellationToken cancellationToken = default) => _inner.AcquireAdminMutationLockAsync(cancellationToken);
         public Task AddUserAsync(User user, CancellationToken cancellationToken = default) => _inner.AddUserAsync(user, cancellationToken);
         public void DeleteUser(User user) => _inner.DeleteUser(user);
-    }
-
-    private sealed class PausingUserSessionRepositoryDecorator : IUserSessionRepository
-    {
-        private readonly IUserSessionRepository _inner;
-        private readonly Func<CancellationToken, Task> _onBeforeRevokeAndSave;
-
-        public PausingUserSessionRepositoryDecorator(
-            IUserSessionRepository inner,
-            Func<CancellationToken, Task> onBeforeRevokeAndSave)
-        {
-            _inner = inner;
-            _onBeforeRevokeAndSave = onBeforeRevokeAndSave;
-        }
-
-        public async Task<int> RevokeAllForUserAsync(int userId, DateTime nowUtc, string reason, CancellationToken cancellationToken = default)
-        {
-            if (_onBeforeRevokeAndSave != null)
-            {
-                await _onBeforeRevokeAndSave(cancellationToken);
-            }
-            return await _inner.RevokeAllForUserAsync(userId, nowUtc, reason, cancellationToken);
-        }
-
-        public Task<UserSession?> GetByTokenHashAsync(string tokenHash, CancellationToken cancellationToken = default) => _inner.GetByTokenHashAsync(tokenHash, cancellationToken);
-        public Task<bool> TryConsumeAsync(Guid sessionId, DateTime nowUtc, Guid replacedBySessionId, CancellationToken cancellationToken = default) => _inner.TryConsumeAsync(sessionId, nowUtc, replacedBySessionId, cancellationToken);
-        public Task AddAsync(UserSession session, CancellationToken cancellationToken = default) => _inner.AddAsync(session, cancellationToken);
-        public Task<int> RevokeFamilyAsync(Guid tokenFamilyId, DateTime nowUtc, string reason, CancellationToken cancellationToken = default) => _inner.RevokeFamilyAsync(tokenFamilyId, nowUtc, reason, cancellationToken);
-        public Task<bool> HasActiveSessionInFamilyAsync(Guid tokenFamilyId, DateTime nowUtc, CancellationToken cancellationToken = default) => _inner.HasActiveSessionInFamilyAsync(tokenFamilyId, nowUtc, cancellationToken);
-        public Task<int> RevokeByTokenHashAsync(string tokenHash, DateTime nowUtc, string reason, CancellationToken cancellationToken = default) => _inner.RevokeByTokenHashAsync(tokenHash, nowUtc, reason, cancellationToken);
     }
 
     private sealed class TestCurrentUser(int userId) : ICurrentUserService

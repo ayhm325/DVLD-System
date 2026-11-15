@@ -158,6 +158,29 @@ public sealed class ApplicationService(
         return await SaveAsync("Delete application failed.", cancellationToken);
     }
 
+    public async Task<Result> CancelApplicationStateAsync(
+        int applicationId,
+        CancellationToken cancellationToken = default)
+    {
+        var validation = ApplicationValidator.ValidateId(applicationId);
+        if (validation.IsFailure)
+            return Result.ValidationFailure(validation.Error);
+
+        var entity = await _repository.GetApplicationForCancellationAsync(applicationId, cancellationToken);
+        if (entity is null)
+            return Result.NotFound("Application not found.");
+
+        if (entity.ApplicationStatus == AppStatus.Completed)
+            return Result.Conflict("Cannot cancel completed application.");
+        if (entity.ApplicationStatus == AppStatus.Cancelled)
+            return Result.Conflict("Application already cancelled.");
+
+        entity.ApplicationStatus = AppStatus.Cancelled;
+        entity.LastStatusDate = _clock.Now;
+
+        return Result.Success();
+    }
+
     public async Task<Result> CancelApplicationAsync(
         int applicationId,
         CancellationToken cancellationToken = default)
@@ -169,18 +192,11 @@ public sealed class ApplicationService(
         return await _unitOfWork.ExecuteInTransactionAsync(
             async transaction =>
             {
-                var entity = await _repository.GetApplicationForCancellationAsync(applicationId, cancellationToken);
-                if (entity is null)
-                    return Result.NotFound("Application not found.");
+                var result = await CancelApplicationStateAsync(applicationId, cancellationToken);
+                if (result.IsFailure)
+                    return result;
 
-                if (entity.ApplicationStatus == AppStatus.Completed)
-                    return Result.Conflict("Cannot cancel completed application.");
-                if (entity.ApplicationStatus == AppStatus.Cancelled)
-                    return Result.Conflict("Application already cancelled.");
-
-                entity.ApplicationStatus = AppStatus.Cancelled;
-                entity.LastStatusDate = _clock.Now;
-
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
                 return Result.Success();
             },
