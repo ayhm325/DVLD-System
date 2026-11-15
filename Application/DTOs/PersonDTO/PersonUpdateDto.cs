@@ -26,4 +26,6 @@ public class PersonUpdateDto
     public int NationalityCountryID { get; set; }
 
     public string? ImagePath { get; set; }
+
+    public string RowVersion { get; set; } = string.Empty;
 }

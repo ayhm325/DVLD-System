@@ -182,7 +182,8 @@ public sealed class AuthController(
                 profile.Email,
                 profile.NationalityCountryID,
                 profile.CountryName,
-                profile.ImagePath));
+                profile.ImagePath,
+                profile.RowVersion));
     }
 
     [HttpPost("change-password")]

@@ -198,7 +198,8 @@ public sealed class PeopleController(
                     Email = request.Email,
                     NationalityCountryID =
                         request.NationalityCountryID,
-                    ImagePath = request.ImagePath
+                    ImagePath = request.ImagePath,
+                    RowVersion = request.RowVersion
                 },
                 cancellationToken);
 
@@ -320,7 +321,8 @@ public sealed class PeopleController(
             NationalityCountryID =
                 dto.NationalityCountryID,
             CountryName = dto.CountryName,
-            ImagePath = dto.ImagePath
+            ImagePath = dto.ImagePath,
+            RowVersion = dto.RowVersion
         };
 
     private static ContractPerson.PersonListResponse
@@ -337,6 +339,7 @@ public sealed class PeopleController(
             Email = dto.Email,
             CountryName = dto.CountryName,
             HasPhoto = !string.IsNullOrWhiteSpace(dto.ImagePath),
-            ImagePath = dto.ImagePath
+            ImagePath = dto.ImagePath,
+            RowVersion = dto.RowVersion
         };
 }

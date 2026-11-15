@@ -57,7 +57,8 @@ public sealed class AuthControllerTests
                 Phone = "0790000000",
                 Email = "test@example.com",
                 NationalityCountryID = 1,
-                CountryName = "Jordan"
+                CountryName = "Jordan",
+                RowVersion = "AQIDBAUGBwg="
             }));
 
         var response = await Authenticated(factory, 10)
@@ -79,6 +80,7 @@ public sealed class AuthControllerTests
         Assert.Equal("0790000000", body.Phone);
         Assert.Equal("test@example.com", body.Email);
         Assert.Equal("Jordan", body.CountryName);
+        Assert.Equal("AQIDBAUGBwg=", body.RowVersion);
 
         factory.UserServiceMock.Verify(
             x => x.GetCurrentProfileAsync(10, It.IsAny<CancellationToken>()), Times.Once);

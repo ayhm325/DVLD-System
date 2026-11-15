@@ -1,3 +1,4 @@
+﻿using Application.Common.Exceptions;
 using Application.Common.Pagination;
 using Application.Common.Results;
 using Application.DTOs.PersonDTO;
@@ -967,6 +968,164 @@ public class PersonServiceTests
             Times.Once);
     }
 
+    [Fact]
+    public async Task UpdatePersonAsync_WhenConcurrencyConflictExceptionOccurs_ReturnsConflict()
+    {
+        // Arrange
+        const int personId = 10;
+        var dto = CreateValidUpdateDto();
+        var existingPerson = CreatePerson(personId);
+
+        _personRepositoryMock
+            .Setup(r => r.GetPersonForUpdateAsync(personId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existingPerson);
+
+        _personRepositoryMock
+            .Setup(r => r.IsNationalNoDuplicatedAsync(dto.NationalNo, personId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        _unitOfWorkMock
+            .Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ConcurrencyConflictException("Concurrency conflict occurred"));
+
+        // Act
+        Result result = await _sut.UpdatePersonAsync(personId, dto);
+
+        // Assert
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorType.Conflict, result.ErrorType);
+        Assert.Equal("The person record was modified by another user. Please reload and try again.", result.Error);
+    }
+
+    [Fact]
+    public async Task UpdatePersonAsync_NoOpWithCurrentRowVersion_ReturnsSuccessWithoutSaving()
+    {
+        // Arrange
+        const int personId = 10;
+        var existingPerson = CreatePerson(personId);
+        var dto = new PersonUpdateDto
+        {
+            NationalNo = existingPerson.NationalNo,
+            FirstName = existingPerson.FirstName,
+            SecondName = existingPerson.SecondName,
+            ThirdName = existingPerson.ThirdName,
+            LastName = existingPerson.LastName,
+            DateOfBirth = existingPerson.DateOfBirth,
+            Gender = (int)existingPerson.Gender,
+            Address = existingPerson.Address,
+            Phone = existingPerson.Phone,
+            Email = existingPerson.Email,
+            NationalityCountryID = existingPerson.NationalityCountryID,
+            ImagePath = existingPerson.ImagePath,
+            RowVersion = DefaultRowVersionBase64
+        };
+
+        _personRepositoryMock
+            .Setup(r => r.GetPersonForUpdateAsync(personId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existingPerson);
+
+        _personRepositoryMock
+            .Setup(r => r.IsNationalNoDuplicatedAsync(dto.NationalNo, personId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        // Act
+        var result = await _sut.UpdatePersonAsync(personId, dto);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        _unitOfWorkMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _personRepositoryMock.Verify(r => r.SetOriginalRowVersion(It.IsAny<Person>(), It.IsAny<byte[]>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdatePersonAsync_NoOpWithStaleRowVersion_ReturnsConflictWithoutSaving()
+    {
+        // Arrange
+        const int personId = 10;
+        var existingPerson = CreatePerson(personId);
+        byte[] staleToken = [9, 9, 9, 9, 9, 9, 9, 9];
+        var dto = new PersonUpdateDto
+        {
+            NationalNo = existingPerson.NationalNo,
+            FirstName = existingPerson.FirstName,
+            SecondName = existingPerson.SecondName,
+            ThirdName = existingPerson.ThirdName,
+            LastName = existingPerson.LastName,
+            DateOfBirth = existingPerson.DateOfBirth,
+            Gender = (int)existingPerson.Gender,
+            Address = existingPerson.Address,
+            Phone = existingPerson.Phone,
+            Email = existingPerson.Email,
+            NationalityCountryID = existingPerson.NationalityCountryID,
+            ImagePath = existingPerson.ImagePath,
+            RowVersion = Convert.ToBase64String(staleToken)
+        };
+
+        _personRepositoryMock
+            .Setup(r => r.GetPersonForUpdateAsync(personId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existingPerson);
+
+        _personRepositoryMock
+            .Setup(r => r.IsNationalNoDuplicatedAsync(dto.NationalNo, personId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        // Act
+        var result = await _sut.UpdatePersonAsync(personId, dto);
+
+        // Assert
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorType.Conflict, result.ErrorType);
+        Assert.Equal("The person record was modified by another user. Please reload and try again.", result.Error);
+        _unitOfWorkMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdatePersonAsync_WithChanges_PassesExpectedRowVersionToRepository()
+    {
+        // Arrange
+        const int personId = 10;
+        var dto = CreateValidUpdateDto();
+        var existingPerson = CreatePerson(personId);
+
+        _personRepositoryMock
+            .Setup(r => r.GetPersonForUpdateAsync(personId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existingPerson);
+
+        _personRepositoryMock
+            .Setup(r => r.IsNationalNoDuplicatedAsync(dto.NationalNo, personId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        _unitOfWorkMock
+            .Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
+        // Act
+        var result = await _sut.UpdatePersonAsync(personId, dto);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        _personRepositoryMock.Verify(
+            r => r.SetOriginalRowVersion(existingPerson, It.Is<byte[]>(b => b.SequenceEqual(DefaultRowVersion))),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdatePersonAsync_InvalidRowVersionBase64_ReturnsValidationFailure()
+    {
+        // Arrange
+        const int personId = 10;
+        var dto = CreateValidUpdateDto();
+        dto.RowVersion = "not-valid-base64!";
+
+        // Act
+        var result = await _sut.UpdatePersonAsync(personId, dto);
+
+        // Assert
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorType.Validation, result.ErrorType);
+        _personRepositoryMock.Verify(r => r.GetPersonForUpdateAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     // =========================================================
     // DeletePersonAsync
     // =========================================================
@@ -1219,6 +1378,38 @@ public class PersonServiceTests
             Times.Once);
     }
 
+    [Fact]
+    public async Task DeletePersonAsync_WhenConcurrencyConflictExceptionOccurs_ReturnsConflict()
+    {
+        // Arrange
+        const int personId = 10;
+        var person = CreatePerson(personId);
+
+        _personRepositoryMock
+            .Setup(repository => repository.GetPersonForUpdateAsync(personId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(person);
+
+        _personRepositoryMock
+            .Setup(repository => repository.HasApplicationsAsync(personId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        _personRepositoryMock
+            .Setup(repository => repository.DeletePersonAsync(personId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        _unitOfWorkMock
+            .Setup(unitOfWork => unitOfWork.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ConcurrencyConflictException("Concurrency conflict during person delete"));
+
+        // Act
+        var result = await _sut.DeletePersonAsync(personId);
+
+        // Assert
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorType.Conflict, result.ErrorType);
+        Assert.Equal("The person record was modified by another user. Please reload and try again.", result.Error);
+    }
+
     // =========================================================
     [Theory]
     [InlineData(256)]
@@ -1257,6 +1448,9 @@ public class PersonServiceTests
     // Test Data Helpers
     // =========================================================
 
+    private static readonly byte[] DefaultRowVersion = [1, 2, 3, 4, 5, 6, 7, 8];
+    private static readonly string DefaultRowVersionBase64 = Convert.ToBase64String(DefaultRowVersion);
+
     private static Person CreatePerson(
         int personId = 10,
         string nationalNo = "1234567890")
@@ -1275,7 +1469,8 @@ public class PersonServiceTests
             Phone = "0791234567",
             Email = "ayhm@example.com",
             NationalityCountryID = 1,
-            ImagePath = null
+            ImagePath = null,
+            RowVersion = (byte[])DefaultRowVersion.Clone()
         };
     }
 
@@ -1313,7 +1508,8 @@ public class PersonServiceTests
             Phone = "0781234567",
             Email = "updated@example.com",
             NationalityCountryID = 1,
-            ImagePath = null
+            ImagePath = null,
+            RowVersion = DefaultRowVersionBase64
         };
     }
 
@@ -1454,6 +1650,52 @@ public class PersonServiceTests
     }
 
     [Fact]
+    public async Task UploadPersonPhotoAsync_WhenConcurrencyExceptionOccurs_CleansUpNewImageAndLeavesOldImageIntact()
+    {
+        // Arrange
+        const int personId = 10;
+        const string oldImagePath = "people/old_photo.webp";
+        const string newStorageKey = "people/new_photo.webp";
+
+        var person = CreatePerson(personId);
+        person.ImagePath = oldImagePath;
+
+        _personRepositoryMock
+            .Setup(r => r.GetPersonForUpdateAsync(personId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(person);
+
+        using var testStream = new MemoryStream([1, 2, 3, 4]);
+        var processed = new ProcessedImageResult(new MemoryStream([1, 2, 3]), "image/webp", ".webp", 100, 100, 3);
+        _imageProcessingServiceMock
+            .Setup(i => i.ProcessPersonPhoto(It.IsAny<Stream>(), It.IsAny<long>(), It.IsAny<string?>()))
+            .Returns(Result<ProcessedImageResult>.Success(processed));
+
+        _fileStorageServiceMock
+            .Setup(f => f.SaveAsync(It.IsAny<Stream>(), ".webp", "people", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(newStorageKey);
+
+        _unitOfWorkMock
+            .Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ConcurrencyConflictException("Concurrency conflict during photo upload"));
+
+        // Act
+        var result = await _sut.UploadPersonPhotoAsync(personId, testStream, 4, "image/jpeg");
+
+        // Assert
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorType.Conflict, result.ErrorType);
+        Assert.Equal("The person record was modified by another user. Please reload and try again.", result.Error);
+
+        _fileStorageServiceMock.Verify(
+            f => f.DeleteAsync(newStorageKey, It.IsAny<CancellationToken>()),
+            Times.Once);
+
+        _fileStorageServiceMock.Verify(
+            f => f.DeleteAsync(oldImagePath, It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task GetPersonPhotoAsync_PersonNotFound_ReturnsNotFound()
     {
         _personRepositoryMock
@@ -1567,6 +1809,37 @@ public class PersonServiceTests
         Assert.True(result.IsSuccess);
         Assert.Null(person.ImagePath);
         _fileStorageServiceMock.Verify(s => s.DeleteAsync("people/old_photo.webp", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DeletePersonPhotoAsync_WhenConcurrencyExceptionOccurs_LeavesOldImageIntact()
+    {
+        // Arrange
+        const int personId = 10;
+        const string oldImagePath = "people/old_photo.webp";
+
+        var person = CreatePerson(personId);
+        person.ImagePath = oldImagePath;
+
+        _personRepositoryMock
+            .Setup(r => r.GetPersonForUpdateAsync(personId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(person);
+
+        _unitOfWorkMock
+            .Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ConcurrencyConflictException("Concurrency conflict during photo delete"));
+
+        // Act
+        var result = await _sut.DeletePersonPhotoAsync(personId);
+
+        // Assert
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorType.Conflict, result.ErrorType);
+        Assert.Equal("The person record was modified by another user. Please reload and try again.", result.Error);
+
+        _fileStorageServiceMock.Verify(
+            f => f.DeleteAsync(oldImagePath, It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]

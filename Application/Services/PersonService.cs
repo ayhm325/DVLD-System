@@ -1,3 +1,4 @@
+using Application.Common.Exceptions;
 using Application.Common.Pagination;
 using Application.Common.Results;
 using Application.DTOs.PersonDTO;
@@ -6,6 +7,7 @@ using Application.Mappings;
 using Application.Validators;
 using Domain.Entities;
 using Microsoft.Extensions.Logging;
+using System.Collections;
 
 namespace Application.Services;
 
@@ -318,6 +320,16 @@ public sealed class PersonService : IPersonService
         if (validation.IsFailure)
             return validation;
 
+        byte[] expectedRowVersion;
+        try
+        {
+            expectedRowVersion = Convert.FromBase64String(personDto!.RowVersion);
+        }
+        catch (FormatException)
+        {
+            return Result.ValidationFailure("Invalid row version token.");
+        }
+
         var existingPerson =
             await _personRepository
                 .GetPersonForUpdateAsync(id, cancellationToken);
@@ -329,7 +341,7 @@ public sealed class PersonService : IPersonService
         }
 
         var normalizedNationalNo =
-            personDto!.NationalNo.Trim();
+            personDto.NationalNo.Trim();
 
         var duplicated =
             await _personRepository
@@ -359,24 +371,43 @@ public sealed class PersonService : IPersonService
 
         if (!hasChanges)
         {
+            if (existingPerson.RowVersion != null &&
+                existingPerson.RowVersion.Length > 0 &&
+                !StructuralComparisons.StructuralEqualityComparer.Equals(expectedRowVersion, existingPerson.RowVersion))
+            {
+                return Result.Conflict(
+                    "The person record was modified by another user. Please reload and try again.");
+            }
+
             return Result.Success();
         }
+
+        _personRepository.SetOriginalRowVersion(existingPerson, expectedRowVersion);
 
         PersonMapper.ApplyUpdate(
             personDto,
             existingPerson);
 
-        var saved =
-            await _unitOfWork
-                .SaveChangesAsync(cancellationToken);
-
-        if (saved <= 0)
+        try
         {
-            return Result.Failure(
-                "No changes were saved.");
-        }
+            var saved =
+                await _unitOfWork
+                    .SaveChangesAsync(cancellationToken);
 
-        return Result.Success();
+            if (saved <= 0)
+            {
+                return Result.Failure(
+                    "No changes were saved.");
+            }
+
+            return Result.Success();
+        }
+        catch (ConcurrencyConflictException ex)
+        {
+            _logger.LogWarning(ex, "Concurrency conflict updating person {PersonId}", id);
+            return Result.Conflict(
+                "The person record was modified by another user. Please reload and try again.");
+        }
     }
 
     public async Task<Result>
@@ -419,14 +450,23 @@ public sealed class PersonService : IPersonService
                 "Failed to delete person.");
         }
 
-        var saved =
-            await _unitOfWork
-                .SaveChangesAsync(cancellationToken);
-
-        if (saved <= 0)
+        try
         {
-            return Result.Failure(
-                "Failed to save person deletion.");
+            var saved =
+                await _unitOfWork
+                    .SaveChangesAsync(cancellationToken);
+
+            if (saved <= 0)
+            {
+                return Result.Failure(
+                    "Failed to save person deletion.");
+            }
+        }
+        catch (ConcurrencyConflictException ex)
+        {
+            _logger.LogWarning(ex, "Concurrency conflict during deletion of person {PersonId}", id);
+            return Result.Conflict(
+                "The person record was modified by another user. Please reload and try again.");
         }
 
         if (!string.IsNullOrWhiteSpace(imagePathToDelete))
@@ -495,12 +535,28 @@ public sealed class PersonService : IPersonService
         var oldImagePath = person.ImagePath;
         person.ImagePath = newStorageKey;
 
-        var saved = await _unitOfWork.SaveChangesAsync(cancellationToken);
-        if (saved <= 0)
+        try
         {
-            _logger.LogWarning("Database save failed for person {PersonId} photo update. Performing cleanup of {StorageKey}", personId, newStorageKey);
-            await _fileStorageService.DeleteAsync(newStorageKey, cancellationToken);
-            return Result<string>.FromFailure("Failed to save person photo reference to the database.");
+            var saved = await _unitOfWork.SaveChangesAsync(cancellationToken);
+            if (saved <= 0)
+            {
+                _logger.LogWarning("Database save failed for person {PersonId} photo update. Performing cleanup of {StorageKey}", personId, newStorageKey);
+                await _fileStorageService.DeleteAsync(newStorageKey, cancellationToken);
+                return Result<string>.FromFailure("Failed to save person photo reference to the database.");
+            }
+        }
+        catch (ConcurrencyConflictException ex)
+        {
+            _logger.LogWarning(ex, "Concurrency conflict during photo upload for person {PersonId}. Cleaning up {StorageKey}", personId, newStorageKey);
+            try
+            {
+                await _fileStorageService.DeleteAsync(newStorageKey, cancellationToken);
+            }
+            catch (Exception cleanupEx)
+            {
+                _logger.LogWarning(cleanupEx, "Failed to clean up image {StorageKey} after concurrency conflict", newStorageKey);
+            }
+            return Result<string>.FromConflict("The person record was modified by another user. Please reload and try again.");
         }
 
         if (!string.IsNullOrWhiteSpace(oldImagePath) &&
@@ -577,10 +633,18 @@ public sealed class PersonService : IPersonService
         var oldImagePath = person.ImagePath;
         person.ImagePath = null;
 
-        var saved = await _unitOfWork.SaveChangesAsync(cancellationToken);
-        if (saved <= 0)
+        try
         {
-            return Result.Failure("Failed to remove photo reference from the database.");
+            var saved = await _unitOfWork.SaveChangesAsync(cancellationToken);
+            if (saved <= 0)
+            {
+                return Result.Failure("Failed to remove photo reference from the database.");
+            }
+        }
+        catch (ConcurrencyConflictException ex)
+        {
+            _logger.LogWarning(ex, "Concurrency conflict during photo delete for person {PersonId}", personId);
+            return Result.Conflict("The person record was modified by another user. Please reload and try again.");
         }
 
         try

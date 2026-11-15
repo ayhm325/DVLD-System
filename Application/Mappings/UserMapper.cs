@@ -85,7 +85,10 @@ public static class UserMapper
 
             NationalityCountryID = person?.NationalityCountryID ?? 0,
             CountryName = person?.Country?.CountryName,
-            ImagePath = person?.ImagePath
+            ImagePath = person?.ImagePath,
+            RowVersion = person?.RowVersion != null && person.RowVersion.Length > 0
+                ? Convert.ToBase64String(person.RowVersion)
+                : string.Empty
         };
     }
 }

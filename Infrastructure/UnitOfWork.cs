@@ -260,6 +260,13 @@ public sealed class UnitOfWork : IUnitOfWork
 
     public static void TranslateAndRethrowIfKnownConstraint(DbUpdateException ex)
     {
+        if (ex is DbUpdateConcurrencyException concurrencyEx)
+        {
+            throw new ConcurrencyConflictException(
+                "The record was modified by another user. Please reload and try again.",
+                concurrencyEx);
+        }
+
         if (IsSpecificConstraintViolation(ex, "IX_Users_UserName"))
         {
             throw new DuplicateUsernameException(

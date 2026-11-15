@@ -134,6 +134,13 @@ public sealed class GlobalExceptionHandler(
                 ProblemTypes.Conflict,
                 LogAsError: false),
 
+            ConcurrencyConflictException concurrencyConflict => new(
+                StatusCodes.Status409Conflict,
+                "Conflict",
+                concurrencyConflict.Message,
+                ProblemTypes.Conflict,
+                LogAsError: false),
+
             _ => new ExceptionFailure(
                 StatusCodes.Status500InternalServerError,
                 "An unexpected error occurred.",

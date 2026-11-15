@@ -13,4 +13,5 @@ public sealed class PersonListResponse
     public string? CountryName { get; init; }
     public bool HasPhoto { get; init; }
     public string? ImagePath { get; init; }
+    public string? RowVersion { get; init; }
 }

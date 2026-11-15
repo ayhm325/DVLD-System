@@ -53,6 +53,10 @@ public interface IPersonRepository
         Person person,
         CancellationToken cancellationToken = default);
 
+    void SetOriginalRowVersion(
+        Person person,
+        byte[] rowVersion);
+
     Task<bool> DeletePersonAsync(
         int id,
         CancellationToken cancellationToken = default);

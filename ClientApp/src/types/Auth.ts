@@ -54,6 +54,7 @@ export type UserProfileResponse = {
   nationalityCountryID: number
   countryName: string
   imagePath: string | null
+  rowVersion?: string
 }
 
 export type ChangePasswordRequest = {

@@ -248,6 +248,37 @@ public class UserServiceTests
             Times.Once);
     }
 
+    [Fact]
+    public async Task GetCurrentProfileAsync_WhenUserHasPersonWithRowVersion_ReturnsProfileWithExactBase64RowVersion()
+    {
+        // Arrange
+        const int userId = 10;
+        const int personId = 20;
+        byte[] expectedRowVersion = [1, 2, 3, 4, 5, 6, 7, 8];
+        string expectedBase64 = Convert.ToBase64String(expectedRowVersion);
+
+        var user = CreateUser(userId: userId, personId: personId);
+        user.Person!.RowVersion = (byte[])expectedRowVersion.Clone();
+        user.Person.NationalNo = "N123456";
+        user.Person.Address = "Test Address";
+        user.Person.Phone = "0791234567";
+
+        _userRepositoryMock
+            .Setup(r => r.GetUserProfileAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+
+        // Act
+        var result = await _sut.GetCurrentProfileAsync(userId);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
+        Assert.Equal(userId, result.Value!.UserId);
+        Assert.Equal(personId, result.Value.PersonId);
+        Assert.Equal(expectedBase64, result.Value.RowVersion);
+        Assert.Equal("N123456", result.Value.NationalNo);
+    }
+
     // =========================================================
     // GetUserByUsernameAsync
     // =========================================================

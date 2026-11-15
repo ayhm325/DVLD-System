@@ -10,6 +10,7 @@ export type Person = {
   countryName: string
   hasPhoto?: boolean
   imagePath?: string | null
+  rowVersion?: string | null
 }
 
 export type PersonDetails = {
@@ -28,6 +29,7 @@ export type PersonDetails = {
   nationalityCountryID: number
   countryName: string | null
   imagePath: string | null
+  rowVersion: string
 }
 
 export type CreatePersonRequest = {
@@ -45,7 +47,9 @@ export type CreatePersonRequest = {
   imagePath: string | null
 }
 
-export type UpdatePersonRequest = CreatePersonRequest
+export type UpdatePersonRequest = CreatePersonRequest & {
+  rowVersion: string
+}
 
 export type CreatePersonResponse = {
   personId: number

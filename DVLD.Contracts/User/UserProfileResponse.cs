@@ -18,4 +18,5 @@ public sealed record UserProfileResponse(
     string? Email,
     int NationalityCountryID,
     string? CountryName,
-    string? ImagePath);
+    string? ImagePath,
+    string RowVersion = "");

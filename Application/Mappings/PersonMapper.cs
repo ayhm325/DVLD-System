@@ -46,7 +46,12 @@ public static class PersonMapper
                 person.Country?.CountryName,
 
             ImagePath =
-                person.ImagePath
+                person.ImagePath,
+
+            RowVersion =
+                person.RowVersion != null && person.RowVersion.Length > 0
+                    ? Convert.ToBase64String(person.RowVersion)
+                    : string.Empty
         };
     }
 

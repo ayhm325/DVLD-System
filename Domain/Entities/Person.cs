@@ -42,6 +42,8 @@ namespace Domain.Entities
 
         public string? ImagePath { get; set; }
 
+        public byte[] RowVersion { get; set; } = Array.Empty<byte>();
+
 
 
         // Navigation Properties

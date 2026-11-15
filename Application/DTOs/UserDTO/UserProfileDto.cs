@@ -24,4 +24,5 @@ public sealed class UserProfileDto
     public int NationalityCountryID { get; init; }
     public string? CountryName { get; init; }
     public string? ImagePath { get; init; }
+    public string RowVersion { get; init; } = string.Empty;
 }

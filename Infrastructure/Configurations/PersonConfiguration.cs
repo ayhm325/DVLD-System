@@ -91,6 +91,13 @@ namespace Infrastructure.Configurations
                 .HasMaxLength(500);
 
             // =========================================================
+            // ROW VERSION (OPTIMISTIC CONCURRENCY)
+            // =========================================================
+
+            builder.Property(p => p.RowVersion)
+                .IsRowVersion();
+
+            // =========================================================
             // COUNTRY RELATIONSHIP
             // =========================================================
 

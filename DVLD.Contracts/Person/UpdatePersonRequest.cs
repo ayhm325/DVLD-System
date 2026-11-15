@@ -25,4 +25,6 @@ public sealed class UpdatePersonRequest
     public int NationalityCountryID { get; init; }
 
     public string? ImagePath { get; init; }
+
+    public string RowVersion { get; init; } = string.Empty;
 }

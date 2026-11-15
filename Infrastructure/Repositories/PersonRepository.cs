@@ -278,6 +278,16 @@ public sealed class PersonRepository : IPersonRepository
         await _context.People.AddAsync(person, cancellationToken);
     }
 
+    public void SetOriginalRowVersion(
+        Person person,
+        byte[] rowVersion)
+    {
+        ArgumentNullException.ThrowIfNull(person);
+        ArgumentNullException.ThrowIfNull(rowVersion);
+
+        _context.Entry(person).Property(p => p.RowVersion).OriginalValue = rowVersion;
+    }
+
     public async Task<bool> DeletePersonAsync(
         int id,
         CancellationToken cancellationToken = default)

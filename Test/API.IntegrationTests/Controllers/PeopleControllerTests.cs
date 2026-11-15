@@ -360,8 +360,10 @@ public sealed class PeopleControllerTests
     {
         await using var factory = new ApiWebApplicationFactory();
 
+        PersonUpdateDto? actualDto = null;
         factory.PersonServiceMock
             .Setup(x => x.UpdatePersonAsync(55, It.IsAny<PersonUpdateDto>(), It.IsAny<CancellationToken>()))
+            .Callback<int, PersonUpdateDto, CancellationToken>((id, dto, ct) => actualDto = dto)
             .ReturnsAsync(Result.Success());
 
         using var client = CreateAuthenticatedClient(factory, 10);
@@ -369,6 +371,8 @@ public sealed class PeopleControllerTests
         var response = await client.PutAsJsonAsync("/api/People/55", CreateUpdateRequest());
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.NotNull(actualDto);
+        Assert.Equal("AQIDBAUGBwg=", actualDto.RowVersion);
 
         factory.PersonServiceMock.Verify(
             x => x.UpdatePersonAsync(55, It.Is<PersonUpdateDto>(dto =>
@@ -383,7 +387,8 @@ public sealed class PeopleControllerTests
                 dto.Phone == "0781234567" &&
                 dto.Email == "updated@example.com" &&
                 dto.NationalityCountryID == 2 &&
-                dto.ImagePath == "updated.jpg"),
+                dto.ImagePath == "updated.jpg" &&
+                dto.RowVersion == "AQIDBAUGBwg="),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -392,6 +397,8 @@ public sealed class PeopleControllerTests
     [InlineData(404, "Resource not found", "Person not found.")]
     [InlineData(409, "Conflict",
         "The national number is already registered to another person.")]
+    [InlineData(409, "Conflict",
+        "The person record was modified by another user. Please reload and try again.")]
     public async Task Update_WhenResultFails_ReturnsProblemDetails(
         int statusCode,
         string title,
@@ -808,7 +815,8 @@ public sealed class PeopleControllerTests
         Phone = "0781234567",
         Email = "updated@example.com",
         NationalityCountryID = 2,
-        ImagePath = "updated.jpg"
+        ImagePath = "updated.jpg",
+        RowVersion = "AQIDBAUGBwg="
     };
 
     private static PersonDto CreatePersonDto(

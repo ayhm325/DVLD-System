@@ -57,20 +57,36 @@ public static class PersonValidator
                 "Person data is required.");
         }
 
-        return BuildResult(
-            ValidateCommon(
-                person.NationalNo,
-                person.FirstName,
-                person.SecondName,
-                person.ThirdName,
-                person.LastName,
-                person.DateOfBirth,
-                person.Gender,
-                person.Address,
-                person.Phone,
-                person.Email,
-                person.NationalityCountryID,
-                jordanToday));
+        var errors = ValidateCommon(
+            person.NationalNo,
+            person.FirstName,
+            person.SecondName,
+            person.ThirdName,
+            person.LastName,
+            person.DateOfBirth,
+            person.Gender,
+            person.Address,
+            person.Phone,
+            person.Email,
+            person.NationalityCountryID,
+            jordanToday);
+
+        if (string.IsNullOrWhiteSpace(person.RowVersion))
+        {
+            errors.Add(
+                "Row version is required.");
+        }
+        else
+        {
+            Span<byte> buffer = stackalloc byte[16];
+            if (!Convert.TryFromBase64String(person.RowVersion, buffer, out int bytesWritten) || bytesWritten != 8)
+            {
+                errors.Add(
+                    "Invalid row version token.");
+            }
+        }
+
+        return BuildResult(errors);
     }
 
     private static List<string> ValidateCommon(

@@ -38,6 +38,7 @@ import { useAuth } from '../../context/useAuth'
 import { useAsyncData } from '../../hooks'
 import { getUserProfile } from '../../services/authService'
 import { updatePerson } from '../../services/peopleService'
+import { ApiError } from '../../services/apiClient'
 import type { UpdatePersonRequest } from '../../types/Person'
 import { formatDate } from '../../utils/formatters'
 import { cn } from '@/lib/utils'
@@ -174,6 +175,7 @@ export default function MyProfilePage({ accessToken, onNavigate }: MyProfilePage
         email: formValues.email.trim() || null,
         nationalityCountryID: profile.nationalityCountryID,
         imagePath: profile.imagePath,
+        rowVersion: profile.rowVersion ?? '',
       }
 
       await updatePerson(accessToken, profile.personId, updateData)
@@ -188,7 +190,13 @@ export default function MyProfilePage({ accessToken, onNavigate }: MyProfilePage
         fullName: profile.fullName,
       })
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Failed to update profile information.')
+      if (err instanceof ApiError && err.status === 409) {
+        setActionError(
+          err.detail || 'Your profile details were modified by another session or administrator. Please refresh your profile and try again.',
+        )
+      } else {
+        setActionError(err instanceof Error ? err.message : 'Failed to update profile information.')
+      }
     } finally {
       setSubmitting(false)
     }

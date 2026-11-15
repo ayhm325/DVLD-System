@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { AlertCircle, ArrowLeft } from 'lucide-react'
+import { ApiError } from '../../services/apiClient'
 import { getCountries } from '../../services/countryService'
 import type { Country } from '../../types/Country'
 import {
@@ -125,6 +126,7 @@ export default function EditPersonPage({
         email: values.email,
         nationalityCountryID: values.nationalityCountryID,
         imagePath: null,
+        rowVersion: person?.rowVersion ?? '',
       })
 
       if (values.photoFile) {
@@ -155,11 +157,17 @@ export default function EditPersonPage({
 
       onPersonUpdated()
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : `Failed to update person record #${personId}. Please verify inputs and try again.`,
-      )
+      if (err instanceof ApiError && err.status === 409) {
+        setError(
+          err.detail || 'This person record was modified by another user. Please reload the page to review the latest changes before saving.',
+        )
+      } else {
+        setError(
+          err instanceof Error
+            ? err.message
+            : `Failed to update person record #${personId}. Please verify inputs and try again.`,
+        )
+      }
     } finally {
       setSaving(false)
     }

@@ -31,4 +31,6 @@ public sealed class PersonResponse
     public string? CountryName { get; init; }
 
     public string? ImagePath { get; init; }
+
+    public string RowVersion { get; init; } = string.Empty;
 }

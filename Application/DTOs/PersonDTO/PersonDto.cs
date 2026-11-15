@@ -33,4 +33,6 @@ public class PersonDto
     public string? CountryName { get; set; }
 
     public string? ImagePath { get; set; }
+
+    public string RowVersion { get; set; } = string.Empty;
 }

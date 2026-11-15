@@ -122,6 +122,21 @@ public sealed class UnitOfWorkConstraintTranslationTests
     }
 
     [Fact]
+    public void TranslateAndRethrowIfKnownConstraint_WhenExceptionIsDbUpdateConcurrencyException_ThrowsConcurrencyConflictException()
+    {
+        // Arrange
+        var concurrencyEx = new DbUpdateConcurrencyException(
+            "Database operation expected to affect 1 row(s) but actually affected 0 row(s).");
+
+        // Act & Assert
+        var ex = Assert.Throws<ConcurrencyConflictException>(
+            () => UnitOfWork.TranslateAndRethrowIfKnownConstraint(concurrencyEx));
+
+        Assert.Equal("The record was modified by another user. Please reload and try again.", ex.Message);
+        Assert.Same(concurrencyEx, ex.InnerException);
+    }
+
+    [Fact]
     public void TranslateAndRethrowIfKnownConstraint_WhenNonSqlExceptionInnerExceptionContainsIndexName_DoesNotThrow()
     {
         // Arrange - inner exception is generic Exception, NOT SqlException, even if message contains IX_Users_UserName
