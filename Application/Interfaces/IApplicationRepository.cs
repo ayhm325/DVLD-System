@@ -40,6 +40,10 @@ public interface IApplicationRepository
         int id,
         CancellationToken cancellationToken = default);
 
+    Task<ApplicationD?> GetApplicationForCancellationAsync(
+        int id,
+        CancellationToken cancellationToken = default);
+
     // =========================================================
     // CHECKS
     // =========================================================

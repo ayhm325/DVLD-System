@@ -201,6 +201,58 @@ public sealed class ApplicationRepository : IApplicationRepository
     }
 
     // =========================================================
+    // GET FOR CANCELLATION
+    // =========================================================
+
+    public async Task<ApplicationD?> GetApplicationForCancellationAsync(
+        int id,
+        CancellationToken cancellationToken = default)
+    {
+        if (id <= 0)
+            return null;
+
+        if (_context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException(
+                $"GetApplicationForCancellationAsync for Application {id} requires an active transaction to guarantee lock retention.");
+        }
+
+        var entity = await _context.Applications
+            .FromSqlInterpolated(
+                $"""
+                SELECT *
+                FROM [Applications] WITH (UPDLOCK, ROWLOCK)
+                WHERE [ApplicationID] = {id}
+                """)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (entity is not null)
+        {
+            _context.ChangeTracker.DetectChanges();
+            var entry = _context.Entry(entity);
+
+            switch (entry.State)
+            {
+                case EntityState.Modified:
+                case EntityState.Deleted:
+                case EntityState.Added:
+                    throw new InvalidOperationException(
+                        $"Cannot acquire cancellation lock for Application {id} because the tracked entity has pending local changes (EntityState.{entry.State}).");
+
+                case EntityState.Unchanged:
+                    await entry.ReloadAsync(cancellationToken);
+                    break;
+
+                case EntityState.Detached:
+                    // Detached entities are not tracked; no reload is necessary.
+                    break;
+            }
+        }
+
+        return entity;
+    }
+
+    // =========================================================
     // EXISTS BY ID
     // =========================================================
 

@@ -1273,6 +1273,165 @@ public sealed class ApplicationRepositoryTests
                 repository.DeleteApplication(
                     null!));
     }
+
+    [Fact]
+    public async Task GetApplicationForCancellationAsync_WhenEntityAlreadyTracked_ReflectsCommittedDatabaseStatusUnderLock()
+    {
+        // 1. Create two independent DbContext instances connected to the same isolated test database
+        await using var contextA = _fixture.Database.CreateContext();
+        await using var contextB = _fixture.Database.CreateContext();
+
+        var repoA = new ApplicationRepository(contextA);
+
+        // 2. Context A loads and tracks an Application entity (status is New)
+        var trackedInA = await contextA.Applications.FindAsync(_fixture.NewApplicationId);
+        Assert.NotNull(trackedInA);
+        Assert.Equal(AppStatus.New, trackedInA.ApplicationStatus);
+
+        // 3. Context B updates its ApplicationStatus to Completed and commits
+        var entityInB = await contextB.Applications.FindAsync(_fixture.NewApplicationId);
+        Assert.NotNull(entityInB);
+        entityInB.ApplicationStatus = AppStatus.Completed;
+        await contextB.SaveChangesAsync();
+
+        // 4. Context A starts a transaction and calls GetApplicationForCancellationAsync for the same ID
+        await using var tx = await contextA.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted);
+        var result = await repoA.GetApplicationForCancellationAsync(_fixture.NewApplicationId);
+
+        // 5. Verify the returned entity reflects the committed database status, not the stale tracked value
+        Assert.NotNull(result);
+        Assert.Same(trackedInA, result);
+        Assert.Equal(AppStatus.Completed, result.ApplicationStatus);
+    }
+
+    [Fact]
+    public async Task GetApplicationForCancellationAsync_WhenEntityHasPendingModifications_ThrowsInvalidOperationException()
+    {
+        await using var context = _fixture.Database.CreateContext();
+        var repository = new ApplicationRepository(context);
+
+        var tracked = await context.Applications.FindAsync(_fixture.NewApplicationId);
+        Assert.NotNull(tracked);
+
+        // Introduce a pending modification in memory without saving
+        tracked.PaidFees = 999m;
+        Assert.Equal(EntityState.Modified, context.Entry(tracked).State);
+
+        await using var tx = await context.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => repository.GetApplicationForCancellationAsync(_fixture.NewApplicationId));
+
+        Assert.Contains("pending local changes", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("EntityState.Modified", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task GetApplicationForCancellationAsync_WhenEntityIsPendingDeletion_ThrowsInvalidOperationException()
+    {
+        await using var context = _fixture.Database.CreateContext();
+        var repository = new ApplicationRepository(context);
+
+        var tracked = await context.Applications.FindAsync(_fixture.NewApplicationId);
+        Assert.NotNull(tracked);
+
+        // Mark for deletion locally without saving
+        context.Applications.Remove(tracked);
+        Assert.Equal(EntityState.Deleted, context.Entry(tracked).State);
+
+        await using var tx = await context.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => repository.GetApplicationForCancellationAsync(_fixture.NewApplicationId));
+
+        Assert.Contains("pending local changes", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("EntityState.Deleted", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task GetApplicationForCancellationAsync_WhenEntityIsPendingAddition_ThrowsInvalidOperationException()
+    {
+        await using var context = _fixture.Database.CreateContext();
+        var repository = new ApplicationRepository(context);
+
+        var tracked = await context.Applications.FindAsync(_fixture.NewApplicationId);
+        Assert.NotNull(tracked);
+
+        // Mark as Added locally without saving
+        context.Entry(tracked).State = EntityState.Added;
+        Assert.Equal(EntityState.Added, context.Entry(tracked).State);
+
+        await using var tx = await context.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => repository.GetApplicationForCancellationAsync(_fixture.NewApplicationId));
+
+        Assert.Contains("pending local changes", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("EntityState.Added", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task GetApplicationForCancellationAsync_WhenCalledOutsideTransaction_ThrowsInvalidOperationException()
+    {
+        await using var context = _fixture.Database.CreateContext();
+        var repository = new ApplicationRepository(context);
+
+        // Verify there is no active transaction
+        Assert.Null(context.Database.CurrentTransaction);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => repository.GetApplicationForCancellationAsync(_fixture.NewApplicationId));
+
+        Assert.Contains("requires an active transaction", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task GetApplicationForCancellationAsync_WhenEntityHasUndetectedLocalChanges_DoesNotLoseLocalChanges()
+    {
+        await using var context = _fixture.Database.CreateContext();
+        var repository = new ApplicationRepository(context);
+
+        // 1 & 2. Load that Application into a DbContext so it is tracked
+        var tracked = await context.Applications.FindAsync(_fixture.NewApplicationId);
+        Assert.NotNull(tracked);
+
+        var originalFees = tracked.PaidFees;
+        var modifiedFees = originalFees + 50.00m;
+
+        // 3. Start a database transaction
+        await using var tx = await context.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted);
+
+        // 4. Disable automatic change detection
+        context.ChangeTracker.AutoDetectChangesEnabled = false;
+
+        try
+        {
+            // 5. Modify a normal scalar CLR property without calling DetectChanges, context.Entry, etc.
+            tracked.PaidFees = modifiedFees;
+
+            // 6. Call GetApplicationForCancellationAsync and expect InvalidOperationException
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => repository.GetApplicationForCancellationAsync(
+                    _fixture.NewApplicationId));
+
+            Assert.Contains(
+                "pending local changes",
+                exception.Message,
+                StringComparison.OrdinalIgnoreCase);
+
+            Assert.Contains(
+                "EntityState.Modified",
+                exception.Message,
+                StringComparison.OrdinalIgnoreCase);
+
+            // 7. Verify that the local value remains unchanged and was not overwritten
+            Assert.Equal(modifiedFees, tracked.PaidFees);
+        }
+        finally
+        {
+            context.ChangeTracker.AutoDetectChangesEnabled = true;
+        }
+    }
 }
 
 public sealed class ApplicationRepositoryDatabaseFixture

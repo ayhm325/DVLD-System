@@ -5,6 +5,7 @@ using Application.Services;
 using Domain.Entities;
 using Domain.Enums;
 using Moq;
+using System.Data;
 
 namespace Application.UnitTests.Services;
 
@@ -13,8 +14,22 @@ public sealed class ApplicationServiceTests
     private readonly Mock<IApplicationRepository> _repository = new();
     private readonly Mock<IApplicationTypeRepository> _applicationTypeRepository = new();
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
+    private readonly Mock<IUnitOfWorkTransaction> _transaction = new();
     private readonly Mock<ICurrentUserService> _currentUserService = new();
     private readonly Common.FakeJordanClock _clock = new();
+
+    public ApplicationServiceTests()
+    {
+        _unitOfWork
+            .Setup(u => u.ExecuteInTransactionAsync(
+                It.IsAny<Func<IUnitOfWorkTransaction, Task<Result>>>(),
+                It.IsAny<IsolationLevel>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(async (Func<IUnitOfWorkTransaction, Task<Result>> operation, IsolationLevel _, CancellationToken _) =>
+            {
+                return await operation(_transaction.Object);
+            });
+    }
 
     private ApplicationService CreateService() =>
         new(
@@ -996,6 +1011,10 @@ public sealed class ApplicationServiceTests
             x => x.DeleteApplication(entity),
             Times.Once);
 
+        _repository.Verify(
+            x => x.GetApplicationForCancellationAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+
         _unitOfWork.Verify(
             x => x.SaveChangesAsync(CancellationToken.None),
             Times.Once);
@@ -1049,8 +1068,20 @@ public sealed class ApplicationServiceTests
             result.Error);
 
         _repository.Verify(
+            x => x.GetApplicationForCancellationAsync(
+                It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+
+        _repository.Verify(
             x => x.GetApplicationForUpdateAsync(
                 It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+
+        _unitOfWork.Verify(
+            x => x.ExecuteInTransactionAsync(
+                It.IsAny<Func<IUnitOfWorkTransaction, Task<Result>>>(),
+                It.IsAny<IsolationLevel>(),
+                It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -1061,7 +1092,7 @@ public sealed class ApplicationServiceTests
 
         _repository
             .Setup(x =>
-                x.GetApplicationForUpdateAsync(1, It.IsAny<CancellationToken>()))
+                x.GetApplicationForCancellationAsync(1, It.IsAny<CancellationToken>()))
             .ReturnsAsync((ApplicationD?)null);
 
         var result =
@@ -1072,6 +1103,10 @@ public sealed class ApplicationServiceTests
         Assert.Equal(
             "Application not found.",
             result.Error);
+
+        _transaction.Verify(
+            x => x.CommitAsync(It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]
@@ -1081,7 +1116,7 @@ public sealed class ApplicationServiceTests
 
         _repository
             .Setup(x =>
-                x.GetApplicationForUpdateAsync(1, It.IsAny<CancellationToken>()))
+                x.GetApplicationForCancellationAsync(1, It.IsAny<CancellationToken>()))
             .ReturnsAsync(
                 CreateApplication(
                     status: AppStatus.Completed));
@@ -1095,8 +1130,8 @@ public sealed class ApplicationServiceTests
             "Cannot cancel completed application.",
             result.Error);
 
-        _unitOfWork.Verify(
-            x => x.SaveChangesAsync(CancellationToken.None),
+        _transaction.Verify(
+            x => x.CommitAsync(It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -1107,7 +1142,7 @@ public sealed class ApplicationServiceTests
 
         _repository
             .Setup(x =>
-                x.GetApplicationForUpdateAsync(1, It.IsAny<CancellationToken>()))
+                x.GetApplicationForCancellationAsync(1, It.IsAny<CancellationToken>()))
             .ReturnsAsync(
                 CreateApplication(
                     status: AppStatus.Cancelled));
@@ -1120,10 +1155,14 @@ public sealed class ApplicationServiceTests
         Assert.Equal(
             "Application already cancelled.",
             result.Error);
+
+        _transaction.Verify(
+            x => x.CommitAsync(It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]
-    public async Task CancelApplicationAsync_WhenValid_ChangesStatusAndSaves()
+    public async Task CancelApplicationAsync_WhenValid_ChangesStatusAndCommits()
     {
         var service = CreateService();
 
@@ -1136,12 +1175,8 @@ public sealed class ApplicationServiceTests
 
         _repository
             .Setup(x =>
-                x.GetApplicationForUpdateAsync(1, It.IsAny<CancellationToken>()))
+                x.GetApplicationForCancellationAsync(1, It.IsAny<CancellationToken>()))
             .ReturnsAsync(entity);
-
-        _unitOfWork
-            .Setup(x => x.SaveChangesAsync(CancellationToken.None))
-            .ReturnsAsync(1);
 
         var result =
             await service.CancelApplicationAsync(1);
@@ -1154,12 +1189,27 @@ public sealed class ApplicationServiceTests
             entity.LastStatusDate >= oldStatusDate);
 
         _unitOfWork.Verify(
-            x => x.SaveChangesAsync(CancellationToken.None),
+            x => x.ExecuteInTransactionAsync(
+                It.IsAny<Func<IUnitOfWorkTransaction, Task<Result>>>(),
+                IsolationLevel.ReadCommitted,
+                It.IsAny<CancellationToken>()),
             Times.Once);
+
+        _transaction.Verify(
+            x => x.CommitAsync(It.IsAny<CancellationToken>()),
+            Times.Once);
+
+        _repository.Verify(
+            x => x.GetApplicationForCancellationAsync(1, It.IsAny<CancellationToken>()),
+            Times.Once);
+
+        _repository.Verify(
+            x => x.GetApplicationForUpdateAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]
-    public async Task CancelApplicationAsync_WhenSaveFails_ReturnsFailure()
+    public async Task CancelApplicationAsync_WhenCommitThrows_PropagatesException()
     {
         var service = CreateService();
 
@@ -1167,21 +1217,15 @@ public sealed class ApplicationServiceTests
 
         _repository
             .Setup(x =>
-                x.GetApplicationForUpdateAsync(1, It.IsAny<CancellationToken>()))
+                x.GetApplicationForCancellationAsync(1, It.IsAny<CancellationToken>()))
             .ReturnsAsync(entity);
 
-        _unitOfWork
-            .Setup(x => x.SaveChangesAsync(CancellationToken.None))
-            .ReturnsAsync(0);
+        _transaction
+            .Setup(x => x.CommitAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("Commit failed in database."));
 
-        var result =
-            await service.CancelApplicationAsync(1);
-
-        Assert.True(result.IsFailure);
-        Assert.Equal(ErrorType.Failure, result.ErrorType);
-        Assert.Equal(
-            "Cancel application failed.",
-            result.Error);
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.CancelApplicationAsync(1));
     }
 
     // =========================================================

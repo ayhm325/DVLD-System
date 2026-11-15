@@ -5,6 +5,7 @@ using Application.Mappers;
 using Application.Validators;
 using Domain.Entities;
 using Domain.Enums;
+using System.Data;
 
 namespace Application.Services;
 
@@ -161,19 +162,30 @@ public sealed class ApplicationService(
         int applicationId,
         CancellationToken cancellationToken = default)
     {
-        var entityResult = await GetTrackedApplicationAsync(applicationId, cancellationToken);
-        if (entityResult.IsFailure)
-            return Result.FromFailure(entityResult);
+        var validation = ApplicationValidator.ValidateId(applicationId);
+        if (validation.IsFailure)
+            return Result.ValidationFailure(validation.Error);
 
-        var entity = entityResult.Value!;
-        if (entity.ApplicationStatus == AppStatus.Completed)
-            return Result.Conflict("Cannot cancel completed application.");
-        if (entity.ApplicationStatus == AppStatus.Cancelled)
-            return Result.Conflict("Application already cancelled.");
+        return await _unitOfWork.ExecuteInTransactionAsync(
+            async transaction =>
+            {
+                var entity = await _repository.GetApplicationForCancellationAsync(applicationId, cancellationToken);
+                if (entity is null)
+                    return Result.NotFound("Application not found.");
 
-        entity.ApplicationStatus = AppStatus.Cancelled;
-        entity.LastStatusDate = _clock.Now;
-        return await SaveAsync("Cancel application failed.", cancellationToken);
+                if (entity.ApplicationStatus == AppStatus.Completed)
+                    return Result.Conflict("Cannot cancel completed application.");
+                if (entity.ApplicationStatus == AppStatus.Cancelled)
+                    return Result.Conflict("Application already cancelled.");
+
+                entity.ApplicationStatus = AppStatus.Cancelled;
+                entity.LastStatusDate = _clock.Now;
+
+                await transaction.CommitAsync(cancellationToken);
+                return Result.Success();
+            },
+            IsolationLevel.ReadCommitted,
+            cancellationToken);
     }
 
     /// <summary>
