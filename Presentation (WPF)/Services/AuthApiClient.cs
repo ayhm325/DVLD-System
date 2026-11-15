@@ -11,8 +11,12 @@ namespace Presentation.Services;
 
 public sealed class AuthApiClient : IAuthApiClient
 {
+    private const string CsrfHeaderName = "X-CSRF-Protection";
+    private const string CsrfHeaderValue = "1";
+
     private readonly HttpClient _httpClient;
     private readonly ICurrentUserSession _currentUser;
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public AuthApiClient(HttpClient httpClient, ICurrentUserSession currentUser)
     {
@@ -34,16 +38,16 @@ public sealed class AuthApiClient : IAuthApiClient
             if (response.IsSuccessStatusCode)
             {
                 var result = await response.Content
-                    .ReadFromJsonAsync<LoginResponse>(cancellationToken);
+                    .ReadFromJsonAsync<LoginResponse>(JsonOptions, cancellationToken);
 
                 return result is null
                     ? ApiResult<LoginResponse>.Failure(
-                        "The API returned an empty response.")
-                    : ApiResult<LoginResponse>.Success(result);
+                        "The API returned an empty response.", response.StatusCode)
+                    : ApiResult<LoginResponse>.Success(result, response.StatusCode);
             }
 
             return ApiResult<LoginResponse>.Failure(
-                await ExtractErrorMessageAsync(response));
+                await ExtractErrorMessageAsync(response), response.StatusCode);
         }
         catch (HttpRequestException)
         {
@@ -58,29 +62,64 @@ public sealed class AuthApiClient : IAuthApiClient
         }
     }
 
-    public async Task<ApiResult> ChangePasswordAsync(
-        ChangePasswordRequest request,
+    public async Task<ApiResult<LoginResponse>> RefreshAsync(
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(request);
-
         try
         {
             using var httpRequest = new HttpRequestMessage(
-                HttpMethod.Post, "api/auth/change-password")
-            {
-                Content = JsonContent.Create(request)
-            };
+                HttpMethod.Post, "api/auth/refresh");
 
+            httpRequest.Headers.Add(CsrfHeaderName, CsrfHeaderValue);
+
+            using var response = await _httpClient.SendAsync(
+                httpRequest, cancellationToken);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content
+                    .ReadFromJsonAsync<LoginResponse>(JsonOptions, cancellationToken);
+
+                return result is null
+                    ? ApiResult<LoginResponse>.Failure(
+                        "The API returned an empty response.", response.StatusCode)
+                    : ApiResult<LoginResponse>.Success(result, response.StatusCode);
+            }
+
+            return ApiResult<LoginResponse>.Failure(
+                await ExtractErrorMessageAsync(response), response.StatusCode);
+        }
+        catch (HttpRequestException)
+        {
+            return ApiResult<LoginResponse>.Failure(
+                "Unable to connect to the DVLD API.");
+        }
+        catch (TaskCanceledException)
+            when (!cancellationToken.IsCancellationRequested)
+        {
+            return ApiResult<LoginResponse>.Failure(
+                "The request to the DVLD API timed out.");
+        }
+    }
+
+    public async Task<ApiResult> LogoutAsync(
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var httpRequest = new HttpRequestMessage(
+                HttpMethod.Post, "api/auth/logout");
+
+            httpRequest.Headers.Add(CsrfHeaderName, CsrfHeaderValue);
             AddAuthorizationHeader(httpRequest);
 
             using var response = await _httpClient.SendAsync(
                 httpRequest, cancellationToken);
 
             return response.IsSuccessStatusCode
-                ? ApiResult.Success()
+                ? ApiResult.Success(response.StatusCode)
                 : ApiResult.Failure(
-                    await ExtractErrorMessageAsync(response));
+                    await ExtractErrorMessageAsync(response), response.StatusCode);
         }
         catch (HttpRequestException)
         {
@@ -91,6 +130,85 @@ public sealed class AuthApiClient : IAuthApiClient
             when (!cancellationToken.IsCancellationRequested)
         {
             return ApiResult.Failure(
+                "The request to the DVLD API timed out.");
+        }
+    }
+
+    public async Task<ApiResult> LogoutAllAsync(
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var httpRequest = new HttpRequestMessage(
+                HttpMethod.Post, "api/auth/logout-all");
+
+            httpRequest.Headers.Add(CsrfHeaderName, CsrfHeaderValue);
+            AddAuthorizationHeader(httpRequest);
+
+            using var response = await _httpClient.SendAsync(
+                httpRequest, cancellationToken);
+
+            return response.IsSuccessStatusCode
+                ? ApiResult.Success(response.StatusCode)
+                : ApiResult.Failure(
+                    await ExtractErrorMessageAsync(response), response.StatusCode);
+        }
+        catch (HttpRequestException)
+        {
+            return ApiResult.Failure(
+                "Unable to connect to the DVLD API.");
+        }
+        catch (TaskCanceledException)
+            when (!cancellationToken.IsCancellationRequested)
+        {
+            return ApiResult.Failure(
+                "The request to the DVLD API timed out.");
+        }
+    }
+
+    public async Task<ApiResult<LoginResponse>> ChangePasswordAsync(
+        ChangePasswordRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        try
+        {
+            using var httpRequest = new HttpRequestMessage(
+                HttpMethod.Post, "api/auth/change-password")
+            {
+                Content = JsonContent.Create(request, options: JsonOptions)
+            };
+
+            httpRequest.Headers.Add(CsrfHeaderName, CsrfHeaderValue);
+            AddAuthorizationHeader(httpRequest);
+
+            using var response = await _httpClient.SendAsync(
+                httpRequest, cancellationToken);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content
+                    .ReadFromJsonAsync<LoginResponse>(JsonOptions, cancellationToken);
+
+                return result is null
+                    ? ApiResult<LoginResponse>.Failure(
+                        "The API returned an empty response.", response.StatusCode)
+                    : ApiResult<LoginResponse>.Success(result, response.StatusCode);
+            }
+
+            return ApiResult<LoginResponse>.Failure(
+                await ExtractErrorMessageAsync(response), response.StatusCode);
+        }
+        catch (HttpRequestException)
+        {
+            return ApiResult<LoginResponse>.Failure(
+                "Unable to connect to the DVLD API.");
+        }
+        catch (TaskCanceledException)
+            when (!cancellationToken.IsCancellationRequested)
+        {
+            return ApiResult<LoginResponse>.Failure(
                 "The request to the DVLD API timed out.");
         }
     }
@@ -112,16 +230,16 @@ public sealed class AuthApiClient : IAuthApiClient
             {
                 var result = await response.Content
                     .ReadFromJsonAsync<UserProfileResponse>(
-                        cancellationToken);
+                        JsonOptions, cancellationToken);
 
                 return result is null
                     ? ApiResult<UserProfileResponse>.Failure(
-                        "The API returned an empty profile response.")
-                    : ApiResult<UserProfileResponse>.Success(result);
+                        "The API returned an empty profile response.", response.StatusCode)
+                    : ApiResult<UserProfileResponse>.Success(result, response.StatusCode);
             }
 
             return ApiResult<UserProfileResponse>.Failure(
-                await ExtractErrorMessageAsync(response));
+                await ExtractErrorMessageAsync(response), response.StatusCode);
         }
         catch (HttpRequestException)
         {
@@ -156,7 +274,7 @@ public sealed class AuthApiClient : IAuthApiClient
             return response.StatusCode switch
             {
                 HttpStatusCode.Unauthorized =>
-                    "Authentication failed.",
+                    "Authentication failed or session expired.",
                 HttpStatusCode.Forbidden =>
                     "You are not authorized to perform this operation.",
                 HttpStatusCode.NotFound =>
@@ -174,8 +292,11 @@ public sealed class AuthApiClient : IAuthApiClient
 
             foreach (var property in new[] { "error", "message", "detail" })
             {
-                if (root.TryGetProperty(property, out var value))
+                if (root.TryGetProperty(property, out var value) &&
+                    value.ValueKind == JsonValueKind.String)
+                {
                     return value.GetString() ?? "The API request failed.";
+                }
             }
         }
         catch (JsonException)

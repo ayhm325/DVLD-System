@@ -14,6 +14,8 @@ public interface ICurrentUserSession
 
     string AccessToken { get; }
 
+    DateTime? ExpiresAtUtc { get; }
+
     bool IsLoggedIn { get; }
 
     void SetSession(
@@ -22,7 +24,10 @@ public interface ICurrentUserSession
         string username,
         string fullName,
         string role,
-        string accessToken);
+        string accessToken,
+        DateTime? expiresAtUtc = null);
+
+    void UpdateToken(string accessToken, DateTime? expiresAtUtc = null);
 
     void Clear();
 }

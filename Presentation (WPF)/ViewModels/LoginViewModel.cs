@@ -4,7 +4,6 @@ using DVLD.Contracts.Auth;
 using DVLD_WPF;
 using Microsoft.Extensions.DependencyInjection;
 using Presentation.Services;
-using Presentation.Services.Api;
 using Presentation.Services.UI;
 using System.Windows;
 
@@ -12,8 +11,7 @@ namespace Presentation.ViewModels;
 
 public partial class LoginViewModel : ObservableObject
 {
-    private readonly IAuthApiClient _authApiClient;
-    private readonly ICurrentUserSession _currentUser;
+    private readonly IAuthSessionManager _authSessionManager;
     private readonly IServiceProvider _serviceProvider;
     private readonly IApiNotificationService _notifications;
     private readonly IUserNotificationService _userNotifications;
@@ -37,14 +35,12 @@ public partial class LoginViewModel : ObservableObject
         IsPasswordVisible = !IsPasswordVisible;
 
     public LoginViewModel(
-        IAuthApiClient authApiClient,
-        ICurrentUserSession currentUser,
+        IAuthSessionManager authSessionManager,
         IServiceProvider serviceProvider,
         IApiNotificationService notifications,
         IUserNotificationService userNotifications)
     {
-        _authApiClient = authApiClient ?? throw new ArgumentNullException(nameof(authApiClient));
-        _currentUser = currentUser ?? throw new ArgumentNullException(nameof(currentUser));
+        _authSessionManager = authSessionManager ?? throw new ArgumentNullException(nameof(authSessionManager));
         _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
         _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
         _userNotifications = userNotifications ?? throw new ArgumentNullException(nameof(userNotifications));
@@ -64,11 +60,10 @@ public partial class LoginViewModel : ObservableObject
         try
         {
             IsSigningIn = true;
-            var result = await _authApiClient.LoginAsync(new LoginRequest
-            {
-                UserName = Username.Trim(),
-                Password = Password
-            });
+            var result = await _authSessionManager.LoginAsync(
+                Username.Trim(),
+                Password,
+                RememberMe);
 
             if (result.IsFailure)
             {
@@ -83,16 +78,6 @@ public partial class LoginViewModel : ObservableObject
                     "Login Failed");
                 return;
             }
-
-            var user = result.Value;
-
-            _currentUser.SetSession(
-                user.UserId,
-                user.PersonId,
-                user.UserName,
-                user.FullName,
-                user.Role,
-                user.AccessToken);
 
             SaveRememberMeSettings();
 

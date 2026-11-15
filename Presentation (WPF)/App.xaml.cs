@@ -14,6 +14,8 @@ using Presentation.Views.Windows.Applications;
 using Presentation.Views.Windows.Tests;
 using Presentation.Views.Windows.ReferenceData;
 using System;
+using System.Net;
+using System.Net.Http;
 using System.Windows;
 
 namespace DVLD_WPF;
@@ -54,10 +56,27 @@ public partial class App : System.Windows.Application
 
             await apiHostService.EnsureApiRunningAsync();
 
-            var loginWindow =
-                ServiceProvider.GetRequiredService<LoginWindow>();
+            var sessionManager =
+                ServiceProvider.GetRequiredService<IAuthSessionManager>();
 
-            loginWindow.Show();
+            var restored = await sessionManager.TryRestoreSessionAsync();
+
+            if (restored)
+            {
+                var mainWindow =
+                    ServiceProvider.GetRequiredService<MainWindow>();
+
+                MainWindow = mainWindow;
+                mainWindow.Show();
+            }
+            else
+            {
+                var loginWindow =
+                    ServiceProvider.GetRequiredService<LoginWindow>();
+
+                MainWindow = loginWindow;
+                loginWindow.Show();
+            }
         }
         catch (Exception ex)
         {
@@ -85,7 +104,11 @@ public partial class App : System.Windows.Application
         // Presentation Services
         // =====================================================
 
+        var cookieContainer = new CookieContainer();
+        services.AddSingleton(cookieContainer);
+        services.AddSingleton<ISecureCredentialStorage, DpapiSecureCredentialStorage>();
         services.AddSingleton<ICurrentUserSession, CurrentUserService>();
+        services.AddSingleton<IAuthSessionManager, AuthSessionManager>();
         services.AddSingleton<PersonPhotoCache>();
         services.AddSingleton<IApiHostService, ApiHostService>();
         services.AddSingleton<IWindowService, WindowService>();
@@ -104,6 +127,10 @@ public partial class App : System.Windows.Application
 
                 client.Timeout =
                     TimeSpan.FromSeconds(30);
+            }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                CookieContainer = cookieContainer,
+                UseCookies = true
             });
 
         services.AddHttpClient<IAuthApiClient, AuthApiClient>(
@@ -114,6 +141,10 @@ public partial class App : System.Windows.Application
 
                 client.Timeout =
                     TimeSpan.FromSeconds(30);
+            }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                CookieContainer = cookieContainer,
+                UseCookies = true
             });
 
         services.AddScoped<IApplicationsApiClient, ApplicationsApiClient>();

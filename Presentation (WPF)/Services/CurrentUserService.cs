@@ -14,6 +14,8 @@ public sealed class CurrentUserService : ICurrentUserSession
 
     public string AccessToken { get; private set; } = string.Empty;
 
+    public DateTime? ExpiresAtUtc { get; private set; }
+
     public bool IsLoggedIn =>
         UserId > 0 &&
         !string.IsNullOrWhiteSpace(AccessToken);
@@ -24,7 +26,8 @@ public sealed class CurrentUserService : ICurrentUserSession
         string username,
         string fullName,
         string role,
-        string accessToken)
+        string accessToken,
+        DateTime? expiresAtUtc = null)
     {
         if (userId <= 0)
             throw new ArgumentOutOfRangeException(nameof(userId));
@@ -43,6 +46,16 @@ public sealed class CurrentUserService : ICurrentUserSession
         FullName = fullName?.Trim() ?? string.Empty;
         Role = role?.Trim() ?? string.Empty;
         AccessToken = accessToken;
+        ExpiresAtUtc = expiresAtUtc;
+    }
+
+    public void UpdateToken(string accessToken, DateTime? expiresAtUtc = null)
+    {
+        if (string.IsNullOrWhiteSpace(accessToken))
+            throw new ArgumentException("Access token is required.", nameof(accessToken));
+
+        AccessToken = accessToken;
+        ExpiresAtUtc = expiresAtUtc;
     }
 
     public void Clear()
@@ -53,5 +66,6 @@ public sealed class CurrentUserService : ICurrentUserSession
         FullName = string.Empty;
         Role = string.Empty;
         AccessToken = string.Empty;
+        ExpiresAtUtc = null;
     }
 }

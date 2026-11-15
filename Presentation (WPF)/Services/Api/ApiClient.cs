@@ -1,17 +1,21 @@
 ﻿using Presentation.Services.Results;
+using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.IO;
 using System.Text.Json;
 
 namespace Presentation.Services.Api;
 
-public sealed class ApiClient(HttpClient httpClient, ICurrentUserSession currentUser) : IApiClient
+public sealed class ApiClient(
+    HttpClient httpClient,
+    ICurrentUserSession currentUser,
+    IAuthSessionManager authSessionManager) : IApiClient
 {
     private readonly HttpClient _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
     private readonly ICurrentUserSession _currentUser = currentUser ?? throw new ArgumentNullException(nameof(currentUser));
+    private readonly IAuthSessionManager _authSessionManager = authSessionManager ?? throw new ArgumentNullException(nameof(authSessionManager));
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public Task<ApiResult<T>> GetAsync<T>(string requestUri, CancellationToken cancellationToken = default) =>
@@ -56,27 +60,31 @@ public sealed class ApiClient(HttpClient httpClient, ICurrentUserSession current
 
         try
         {
-            using var request = CreateRequest(HttpMethod.Post, requestUri);
-            using var form = new MultipartFormDataContent();
-            await using var stream = File.OpenRead(filePath);
-            using var fileContent = new StreamContent(stream);
-            fileContent.Headers.ContentType = new MediaTypeHeaderValue(
-                Path.GetExtension(filePath).ToLowerInvariant() switch
+            var response = await SendFileRequestAsync(requestUri, filePath, cancellationToken);
+
+            if (response.StatusCode == HttpStatusCode.Unauthorized && _currentUser.IsLoggedIn)
+            {
+                response.Dispose();
+                var refreshed = await _authSessionManager.RefreshSessionAsync(cancellationToken);
+                if (refreshed)
                 {
-                    ".png" => "image/png",
-                    ".webp" => "image/webp",
-                    _ => "image/jpeg"
-                });
-            form.Add(fileContent, "file", Path.GetFileName(filePath));
-            request.Content = form;
+                    response = await SendFileRequestAsync(requestUri, filePath, cancellationToken);
+                }
+                else
+                {
+                    return ApiResult.Failure("Authentication is required.", HttpStatusCode.Unauthorized);
+                }
+            }
 
-            using var response = await _httpClient.SendAsync(request, cancellationToken);
-            if (response.IsSuccessStatusCode)
-                return ApiResult.Success(response.StatusCode);
+            using (response)
+            {
+                if (response.IsSuccessStatusCode)
+                    return ApiResult.Success(response.StatusCode);
 
-            return ApiResult.Failure(
-                await ExtractErrorAsync(response, cancellationToken),
-                response.StatusCode);
+                return ApiResult.Failure(
+                    await ExtractErrorAsync(response, cancellationToken),
+                    response.StatusCode);
+            }
         }
         catch (HttpRequestException)
         {
@@ -99,18 +107,37 @@ public sealed class ApiClient(HttpClient httpClient, ICurrentUserSession current
         try
         {
             using var request = CreateRequest(HttpMethod.Get, requestUri);
-            using var response = await _httpClient.SendAsync(request, cancellationToken);
-            if (!response.IsSuccessStatusCode)
+            var response = await _httpClient.SendAsync(request, cancellationToken);
+
+            if (response.StatusCode == HttpStatusCode.Unauthorized && _currentUser.IsLoggedIn)
             {
-                return ApiResult<byte[]>.Failure(
-                    await ExtractErrorAsync(response, cancellationToken),
-                    response.StatusCode);
+                response.Dispose();
+                var refreshed = await _authSessionManager.RefreshSessionAsync(cancellationToken);
+                if (refreshed)
+                {
+                    using var retryRequest = CreateRequest(HttpMethod.Get, requestUri);
+                    response = await _httpClient.SendAsync(retryRequest, cancellationToken);
+                }
+                else
+                {
+                    return ApiResult<byte[]>.Failure("Authentication is required.", HttpStatusCode.Unauthorized);
+                }
             }
 
-            var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
-            return bytes.Length == 0
-                ? ApiResult<byte[]>.Failure("The API returned an empty image.", response.StatusCode)
-                : ApiResult<byte[]>.Success(bytes, response.StatusCode);
+            using (response)
+            {
+                if (!response.IsSuccessStatusCode)
+                {
+                    return ApiResult<byte[]>.Failure(
+                        await ExtractErrorAsync(response, cancellationToken),
+                        response.StatusCode);
+                }
+
+                var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+                return bytes.Length == 0
+                    ? ApiResult<byte[]>.Failure("The API returned an empty image.", response.StatusCode)
+                    : ApiResult<byte[]>.Success(bytes, response.StatusCode);
+            }
         }
         catch (HttpRequestException)
         {
@@ -122,6 +149,28 @@ public sealed class ApiClient(HttpClient httpClient, ICurrentUserSession current
         }
     }
 
+    private async Task<HttpResponseMessage> SendFileRequestAsync(
+        string requestUri,
+        string filePath,
+        CancellationToken cancellationToken)
+    {
+        var request = CreateRequest(HttpMethod.Post, requestUri);
+        var form = new MultipartFormDataContent();
+        var stream = File.OpenRead(filePath);
+        var fileContent = new StreamContent(stream);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue(
+            Path.GetExtension(filePath).ToLowerInvariant() switch
+            {
+                ".png" => "image/png",
+                ".webp" => "image/webp",
+                _ => "image/jpeg"
+            });
+        form.Add(fileContent, "file", Path.GetFileName(filePath));
+        request.Content = form;
+
+        return await _httpClient.SendAsync(request, cancellationToken);
+    }
+
     private async Task<ApiResult<T>> SendAsync<T>(
         Func<HttpRequestMessage> requestFactory,
         CancellationToken cancellationToken)
@@ -129,23 +178,41 @@ public sealed class ApiClient(HttpClient httpClient, ICurrentUserSession current
         try
         {
             using var request = requestFactory();
-            using var response = await _httpClient.SendAsync(request, cancellationToken);
+            var response = await _httpClient.SendAsync(request, cancellationToken);
 
-            if (response.IsSuccessStatusCode)
+            if (response.StatusCode == HttpStatusCode.Unauthorized && _currentUser.IsLoggedIn)
             {
-                if (response.StatusCode == HttpStatusCode.NoContent)
-                    return ApiResult<T>.Success(default!, response.StatusCode);
-
-                var value = await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken);
-
-                return value is null
-                    ? ApiResult<T>.Failure("The API returned an empty response.", response.StatusCode)
-                    : ApiResult<T>.Success(value, response.StatusCode);
+                response.Dispose();
+                var refreshed = await _authSessionManager.RefreshSessionAsync(cancellationToken);
+                if (refreshed)
+                {
+                    using var retryRequest = requestFactory();
+                    response = await _httpClient.SendAsync(retryRequest, cancellationToken);
+                }
+                else
+                {
+                    return ApiResult<T>.Failure("Authentication is required.", HttpStatusCode.Unauthorized);
+                }
             }
 
-            return ApiResult<T>.Failure(
-                await ExtractErrorAsync(response, cancellationToken),
-                response.StatusCode);
+            using (response)
+            {
+                if (response.IsSuccessStatusCode)
+                {
+                    if (response.StatusCode == HttpStatusCode.NoContent)
+                        return ApiResult<T>.Success(default!, response.StatusCode);
+
+                    var value = await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken);
+
+                    return value is null
+                        ? ApiResult<T>.Failure("The API returned an empty response.", response.StatusCode)
+                        : ApiResult<T>.Success(value, response.StatusCode);
+                }
+
+                return ApiResult<T>.Failure(
+                    await ExtractErrorAsync(response, cancellationToken),
+                    response.StatusCode);
+            }
         }
         catch (HttpRequestException)
         {

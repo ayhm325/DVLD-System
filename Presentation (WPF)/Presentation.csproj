@@ -9,6 +9,13 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<Compile Remove="Tests\**" />
+		<EmbeddedResource Remove="Tests\**" />
+		<None Remove="Tests\**" />
+		<Page Remove="Tests\**" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<None Remove="Resources\DefaultAvatar.png" />
 		<None Remove="Resources\Default_Female.png" />
 		<None Remove="Resources\Default_Male.png" />

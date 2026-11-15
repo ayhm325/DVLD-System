@@ -24,6 +24,7 @@ public partial class MainWindow : Window
     public static INavigationService Navigation { get; private set; } = null!;
 
     private readonly ICurrentUserSession _currentUserSession;
+    private readonly IAuthSessionManager _authSessionManager;
     private readonly IServiceProvider _serviceProvider;
     private readonly DashboardViewModel _dashboardViewModel;
     private readonly IUserNotificationService _userNotifications;
@@ -47,6 +48,7 @@ public partial class MainWindow : Window
 
     public MainWindow(
         ICurrentUserSession currentUserSession,
+        IAuthSessionManager authSessionManager,
         IServiceProvider serviceProvider,
         DashboardViewModel dashboardViewModel,
         IUserNotificationService userNotifications)
@@ -54,6 +56,7 @@ public partial class MainWindow : Window
         InitializeComponent();
 
         _currentUserSession = currentUserSession ?? throw new ArgumentNullException(nameof(currentUserSession));
+        _authSessionManager = authSessionManager ?? throw new ArgumentNullException(nameof(authSessionManager));
         _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
         _dashboardViewModel = dashboardViewModel ?? throw new ArgumentNullException(nameof(dashboardViewModel));
         _userNotifications = userNotifications ?? throw new ArgumentNullException(nameof(userNotifications));
@@ -73,7 +76,26 @@ public partial class MainWindow : Window
 
         _activeNavItem = NavDashboard;
         ApplyRoleVisibility();
+
+        _authSessionManager.SessionExpired += OnSessionExpired;
+        Closed += (s, e) => _authSessionManager.SessionExpired -= OnSessionExpired;
+
         Loaded += MainWindow_Loaded;
+    }
+
+    private void OnSessionExpired(object? sender, EventArgs e)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            _userNotifications.ShowWarning(
+                "Your session has expired or was revoked. Please log in again.",
+                "Session Expired");
+
+            var loginWindow = _serviceProvider.GetRequiredService<LoginWindow>();
+            Application.Current.MainWindow = loginWindow;
+            loginWindow.Show();
+            Close();
+        });
     }
 
     private bool IsAdmin() =>
@@ -355,15 +377,18 @@ public partial class MainWindow : Window
         OpenWindow(new ChangePasswordWindow(vm));
     }
 
-    private void NavSignOut_Click(object sender, RoutedEventArgs e)
+    private async void NavSignOut_Click(object sender, RoutedEventArgs e)
     {
         var result = _userNotifications.ShowConfirmation("Are you sure you want to sign out?", "Sign Out");
 
         if (result != MessageBoxResult.Yes)
             return;
 
-        _currentUserSession.Clear();
-        _serviceProvider.GetRequiredService<LoginWindow>().Show();
+        await _authSessionManager.LogoutAsync();
+
+        var loginWindow = _serviceProvider.GetRequiredService<LoginWindow>();
+        Application.Current.MainWindow = loginWindow;
+        loginWindow.Show();
         Close();
     }
 
@@ -424,9 +449,3 @@ public partial class MainWindow : Window
             StopTypewriterEffect();
     }
 }
-
-
-
-
-
-

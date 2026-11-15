@@ -10,6 +10,7 @@ namespace Presentation.ViewModels;
 public partial class ChangePasswordViewModel : ObservableObject
 {
     private readonly IAuthApiClient _authApiClient;
+    private readonly IAuthSessionManager _authSessionManager;
     private readonly IApiNotificationService _notifications;
     private readonly IUserNotificationService _userNotifications;
 
@@ -35,10 +36,12 @@ public partial class ChangePasswordViewModel : ObservableObject
 
     public ChangePasswordViewModel(
         IAuthApiClient authApiClient,
+        IAuthSessionManager authSessionManager,
         IApiNotificationService notifications,
         IUserNotificationService userNotifications)
     {
         _authApiClient = authApiClient ?? throw new ArgumentNullException(nameof(authApiClient));
+        _authSessionManager = authSessionManager ?? throw new ArgumentNullException(nameof(authSessionManager));
         _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
         _userNotifications = userNotifications ?? throw new ArgumentNullException(nameof(userNotifications));
     }
@@ -103,6 +106,11 @@ public partial class ChangePasswordViewModel : ObservableObject
                     result,
                     "Change Password");
                 return;
+            }
+
+            if (result.Value is not null)
+            {
+                _authSessionManager.ApplySession(result.Value);
             }
 
             _userNotifications.ShowInfo(
