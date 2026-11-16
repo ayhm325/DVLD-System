@@ -1,4 +1,5 @@
 using Application.Common.Results;
+using Application.Interfaces;
 using Domain.Entities;
 using Domain.Enums;
 using Infrastructure.IntegrationTests.Fixtures;
@@ -811,9 +812,603 @@ public sealed class UnitOfWorkTests
         Assert.Equal(updatedDescription, updatedEntity.ClassDescription);
     }
 
+    [Fact]
+    public async Task ExecuteInTransactionAsync_Case1_WhenFailureReturnedWithoutExplicitCommit_ShouldRollbackAndClearChangeTracker()
+    {
+        var className = $"Case1_RollbackOnFailure_{Guid.NewGuid():N}";
+
+        await using var context = _database.CreateContext();
+        var unitOfWork = new UnitOfWork(context);
+
+        var result = await unitOfWork.ExecuteInTransactionAsync(
+            async transaction =>
+            {
+                var licenseClass = new LicenseClass
+                {
+                    ClassName = className,
+                    ClassDescription = "Case 1 test class",
+                    MinimumAllowedAge = 18,
+                    DefaultValidityLength = 10,
+                    ClassFees = 100
+                };
+
+                context.LicenseClasses.Add(licenseClass);
+                await unitOfWork.SaveChangesAsync();
+
+                Assert.False(transaction.IsCommitRequested);
+                Assert.False(transaction.IsPhysicallyCommitted);
+                Assert.False(transaction.IsRolledBack);
+                Assert.False(transaction.IsCompleted);
+
+                return Result<int>.FromFailure("Validation failed before commit.");
+            },
+            IsolationLevel.ReadCommitted);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("Validation failed before commit.", result.Error);
+        Assert.Empty(context.ChangeTracker.Entries());
+
+        await using var verifyContext = _database.CreateContext();
+        var persisted = await verifyContext.LicenseClasses
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.ClassName == className);
+
+        Assert.Null(persisted);
+    }
+
+    [Fact]
+    public async Task ExecuteInTransactionAsync_Case2_WhenExplicitCommitCalledThenUnauthorizedReturned_ShouldPhysicallyCommitAndReturnFailure()
+    {
+        var className = $"Case2_CommitThenUnauthorized_{Guid.NewGuid():N}";
+
+        await using var context = _database.CreateContext();
+        var unitOfWork = new UnitOfWork(context);
+
+        var result = await unitOfWork.ExecuteInTransactionAsync(
+            async transaction =>
+            {
+                var licenseClass = new LicenseClass
+                {
+                    ClassName = className,
+                    ClassDescription = "Case 2 test class",
+                    MinimumAllowedAge = 18,
+                    DefaultValidityLength = 10,
+                    ClassFees = 100
+                };
+
+                context.LicenseClasses.Add(licenseClass);
+                await unitOfWork.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+
+                Assert.True(transaction.IsCommitRequested);
+                Assert.False(transaction.IsPhysicallyCommitted);
+                Assert.False(transaction.IsRolledBack);
+                Assert.False(transaction.IsCompleted);
+
+                return Result<int>.FromUnauthorized("Session revoked due to reuse.");
+            },
+            IsolationLevel.ReadCommitted);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.Unauthorized, result.ErrorType);
+        Assert.Equal("Session revoked due to reuse.", result.Error);
+
+        await using var verifyContext = _database.CreateContext();
+        var persisted = await verifyContext.LicenseClasses
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.ClassName == className);
+
+        Assert.NotNull(persisted);
+        Assert.Equal(className, persisted.ClassName);
+    }
+
+    [Fact]
+    public async Task ExecuteInTransactionAsync_Case3_WhenExplicitCommitCalledThenConflictReturned_ShouldPhysicallyCommitAndReturnConflict()
+    {
+        var className = $"Case3_CommitThenConflict_{Guid.NewGuid():N}";
+
+        await using var context = _database.CreateContext();
+        var unitOfWork = new UnitOfWork(context);
+
+        var result = await unitOfWork.ExecuteInTransactionAsync(
+            async transaction =>
+            {
+                var licenseClass = new LicenseClass
+                {
+                    ClassName = className,
+                    ClassDescription = "Case 3 test class",
+                    MinimumAllowedAge = 18,
+                    DefaultValidityLength = 10,
+                    ClassFees = 100
+                };
+
+                context.LicenseClasses.Add(licenseClass);
+                await unitOfWork.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+
+                Assert.True(transaction.IsCommitRequested);
+                Assert.False(transaction.IsPhysicallyCommitted);
+                Assert.False(transaction.IsRolledBack);
+                Assert.False(transaction.IsCompleted);
+
+                return Result<int>.FromConflict("Audit log saved, state conflict reported.");
+            },
+            IsolationLevel.ReadCommitted);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.Conflict, result.ErrorType);
+        Assert.Equal("Audit log saved, state conflict reported.", result.Error);
+
+        await using var verifyContext = _database.CreateContext();
+        var persisted = await verifyContext.LicenseClasses
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.ClassName == className);
+
+        Assert.NotNull(persisted);
+        Assert.Equal(className, persisted.ClassName);
+    }
+
+    [Fact]
+    public async Task ExecuteInTransactionAsync_Case4_WhenExceptionThrown_ShouldRollbackAndClearChangeTracker()
+    {
+        var className = $"Case4_ExceptionRollback_{Guid.NewGuid():N}";
+
+        await using var context = _database.CreateContext();
+        var unitOfWork = new UnitOfWork(context);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            unitOfWork.ExecuteInTransactionAsync<int>(
+                async transaction =>
+                {
+                    var licenseClass = new LicenseClass
+                    {
+                        ClassName = className,
+                        ClassDescription = "Case 4 test class",
+                        MinimumAllowedAge = 18,
+                        DefaultValidityLength = 10,
+                        ClassFees = 100
+                    };
+
+                    context.LicenseClasses.Add(licenseClass);
+                    await unitOfWork.SaveChangesAsync();
+
+                    throw new InvalidOperationException("Simulated unexpected exception.");
+                },
+                IsolationLevel.ReadCommitted));
+
+        Assert.Equal("Simulated unexpected exception.", exception.Message);
+        Assert.Empty(context.ChangeTracker.Entries());
+
+        await using var verifyContext = _database.CreateContext();
+        var persisted = await verifyContext.LicenseClasses
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.ClassName == className);
+
+        Assert.Null(persisted);
+    }
+
+    [Fact]
+    public async Task ExecuteInTransactionAsync_Case5_WhenSuccessReturnedWithoutExplicitCommit_ShouldAutoCommitAndPersist()
+    {
+        var className = $"Case5_AutoCommitSuccess_{Guid.NewGuid():N}";
+
+        await using var context = _database.CreateContext();
+        var unitOfWork = new UnitOfWork(context);
+
+        var result = await unitOfWork.ExecuteInTransactionAsync(
+            async transaction =>
+            {
+                var licenseClass = new LicenseClass
+                {
+                    ClassName = className,
+                    ClassDescription = "Case 5 test class",
+                    MinimumAllowedAge = 18,
+                    DefaultValidityLength = 10,
+                    ClassFees = 100
+                };
+
+                context.LicenseClasses.Add(licenseClass);
+                await unitOfWork.SaveChangesAsync();
+
+                Assert.False(transaction.IsCommitRequested);
+                Assert.False(transaction.IsPhysicallyCommitted);
+                Assert.False(transaction.IsRolledBack);
+                Assert.False(transaction.IsCompleted);
+
+                return Result<int>.Success(licenseClass.LicenseClassID);
+            },
+            IsolationLevel.ReadCommitted);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Value > 0);
+
+        await using var verifyContext = _database.CreateContext();
+        var persisted = await verifyContext.LicenseClasses
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.ClassName == className);
+
+        Assert.NotNull(persisted);
+        Assert.Equal(result.Value, persisted.LicenseClassID);
+    }
+
+    [Fact]
+    public async Task ExecuteInTransactionAsync_WhenExplicitRollbackCalled_ShouldRollbackEvenIfOperationReturnsSuccess()
+    {
+        var className = $"RollbackWithSuccess_{Guid.NewGuid():N}";
+
+        await using var context = _database.CreateContext();
+        var unitOfWork = new UnitOfWork(context);
+
+        var result = await unitOfWork.ExecuteInTransactionAsync(
+            async transaction =>
+            {
+                var licenseClass = new LicenseClass
+                {
+                    ClassName = className,
+                    ClassDescription = "Rollback explicit test class",
+                    MinimumAllowedAge = 18,
+                    DefaultValidityLength = 10,
+                    ClassFees = 100
+                };
+
+                context.LicenseClasses.Add(licenseClass);
+                await unitOfWork.SaveChangesAsync();
+
+                await transaction.RollbackAsync();
+
+                Assert.False(transaction.IsCommitRequested);
+                Assert.False(transaction.IsPhysicallyCommitted);
+                Assert.True(transaction.IsRolledBack);
+                Assert.True(transaction.IsCompleted);
+
+                return Result<int>.Success(999);
+            },
+            IsolationLevel.ReadCommitted);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(999, result.Value);
+        Assert.Empty(context.ChangeTracker.Entries());
+
+        await using var verifyContext = _database.CreateContext();
+        var persisted = await verifyContext.LicenseClasses
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.ClassName == className);
+
+        Assert.Null(persisted);
+    }
+
+    [Fact]
+    public async Task ExecuteInTransactionAsync_WhenEntityMutatedAfterCommitAsync_ShouldPersistSubsequentMutations()
+    {
+        var className = $"PostCommitMutation_{Guid.NewGuid():N}";
+        const string initialDescription = "Initial description before CommitAsync";
+        const string updatedDescription = "Updated description after CommitAsync";
+
+        await using var context = _database.CreateContext();
+        var unitOfWork = new UnitOfWork(context);
+
+        var result = await unitOfWork.ExecuteInTransactionAsync(
+            async transaction =>
+            {
+                var licenseClass = new LicenseClass
+                {
+                    ClassName = className,
+                    ClassDescription = initialDescription,
+                    MinimumAllowedAge = 18,
+                    DefaultValidityLength = 10,
+                    ClassFees = 100
+                };
+
+                context.LicenseClasses.Add(licenseClass);
+                await transaction.CommitAsync();
+
+                Assert.True(transaction.IsCommitRequested);
+                Assert.False(transaction.IsPhysicallyCommitted);
+
+                // Mutate the entity after CommitAsync was requested
+                licenseClass.ClassDescription = updatedDescription;
+
+                return Result<int>.Success(licenseClass.LicenseClassID);
+            },
+            IsolationLevel.ReadCommitted);
+
+        Assert.True(result.IsSuccess);
+
+        await using var verifyContext = _database.CreateContext();
+        var persisted = await verifyContext.LicenseClasses
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.ClassName == className);
+
+        Assert.NotNull(persisted);
+        Assert.Equal(updatedDescription, persisted.ClassDescription);
+    }
+
+    [Fact]
+    public async Task ExecuteInTransactionAsync_WhenCommitAsyncCalledRepeatedly_ShouldBeIdempotent()
+    {
+        var className = $"RepeatedCommit_{Guid.NewGuid():N}";
+
+        await using var context = _database.CreateContext();
+        var unitOfWork = new UnitOfWork(context);
+
+        var result = await unitOfWork.ExecuteInTransactionAsync(
+            async transaction =>
+            {
+                var licenseClass = new LicenseClass
+                {
+                    ClassName = className,
+                    ClassDescription = "Repeated commit test class",
+                    MinimumAllowedAge = 18,
+                    DefaultValidityLength = 10,
+                    ClassFees = 100
+                };
+
+                context.LicenseClasses.Add(licenseClass);
+
+                await transaction.CommitAsync();
+                Assert.True(transaction.IsCommitRequested);
+
+                // Second commit call should be a no-op and not throw
+                await transaction.CommitAsync();
+                Assert.True(transaction.IsCommitRequested);
+
+                return Result<int>.Success(licenseClass.LicenseClassID);
+            },
+            IsolationLevel.ReadCommitted);
+
+        Assert.True(result.IsSuccess);
+
+        await using var verifyContext = _database.CreateContext();
+        var persisted = await verifyContext.LicenseClasses
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.ClassName == className);
+
+        Assert.NotNull(persisted);
+    }
+
+    [Fact]
+    public async Task ExecuteInTransactionAsync_WhenCommitAsyncCalledAfterRollback_ShouldThrowInvalidOperationException()
+    {
+        var className = $"CommitAfterRollback_{Guid.NewGuid():N}";
+
+        await using var context = _database.CreateContext();
+        var unitOfWork = new UnitOfWork(context);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await unitOfWork.ExecuteInTransactionAsync(
+                async transaction =>
+                {
+                    var licenseClass = new LicenseClass
+                    {
+                        ClassName = className,
+                        ClassDescription = "Commit after rollback test class",
+                        MinimumAllowedAge = 18,
+                        DefaultValidityLength = 10,
+                        ClassFees = 100
+                    };
+
+                    context.LicenseClasses.Add(licenseClass);
+                    await unitOfWork.SaveChangesAsync();
+
+                    await transaction.RollbackAsync();
+
+                    // Attempting CommitAsync after RollbackAsync must throw
+                    await transaction.CommitAsync();
+
+                    return Result.Success();
+                },
+                IsolationLevel.ReadCommitted);
+        });
+
+        await using var verifyContext = _database.CreateContext();
+        var persisted = await verifyContext.LicenseClasses
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.ClassName == className);
+
+        Assert.Null(persisted);
+    }
+
+    [Fact]
+    public async Task ExecuteInTransactionAsync_WhenRollbackAsyncCalledAfterPhysicalCommit_ShouldBeNoOp()
+    {
+        var className = $"RollbackAfterPhysicalCommit_{Guid.NewGuid():N}";
+
+        await using var context = _database.CreateContext();
+        var unitOfWork = new UnitOfWork(context);
+
+        IUnitOfWorkTransaction? capturedTransaction = null;
+
+        var result = await unitOfWork.ExecuteInTransactionAsync(
+            async transaction =>
+            {
+                capturedTransaction = transaction;
+
+                var licenseClass = new LicenseClass
+                {
+                    ClassName = className,
+                    ClassDescription = "Rollback after physical commit test class",
+                    MinimumAllowedAge = 18,
+                    DefaultValidityLength = 10,
+                    ClassFees = 100
+                };
+
+                context.LicenseClasses.Add(licenseClass);
+                await unitOfWork.SaveChangesAsync();
+                return Result<int>.Success(licenseClass.LicenseClassID);
+            },
+            IsolationLevel.ReadCommitted);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(capturedTransaction);
+        Assert.True(capturedTransaction.IsPhysicallyCommitted);
+        Assert.True(capturedTransaction.IsCompleted);
+
+        // Calling RollbackAsync after transaction is physically committed must be a safe no-op
+        await capturedTransaction.RollbackAsync();
+        Assert.False(capturedTransaction.IsRolledBack);
+
+        await using var verifyContext = _database.CreateContext();
+        var persisted = await verifyContext.LicenseClasses
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.ClassName == className);
+
+        Assert.NotNull(persisted);
+    }
+
+    [Fact]
+    public async Task ExecuteInTransactionAsync_WhenRollbackFails_ShouldNotClaimIsRolledBackAndShouldPropagateException()
+    {
+        var className = $"RollbackFail_{Guid.NewGuid():N}";
+        var interceptor = new FaultInjectingTransactionInterceptor(failOnRollback: true);
+
+        var options = new DbContextOptionsBuilder<DVLDDbContext>()
+            .UseSqlServer(_database.ConnectionString)
+            .AddInterceptors(interceptor)
+            .Options;
+
+        await using var context = new DVLDDbContext(options);
+        var unitOfWork = new UnitOfWork(context);
+
+        IUnitOfWorkTransaction? capturedTx = null;
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await unitOfWork.ExecuteInTransactionAsync(
+                async transaction =>
+                {
+                    capturedTx = transaction;
+
+                    var licenseClass = new LicenseClass
+                    {
+                        ClassName = className,
+                        ClassDescription = "Rollback failure test class",
+                        MinimumAllowedAge = 18,
+                        DefaultValidityLength = 10,
+                        ClassFees = 100
+                    };
+
+                    context.LicenseClasses.Add(licenseClass);
+                    await unitOfWork.SaveChangesAsync();
+
+                    // Explicitly call RollbackAsync, which triggers the interceptor failure
+                    await transaction.RollbackAsync();
+
+                    return Result.Success();
+                },
+                IsolationLevel.ReadCommitted);
+        });
+
+        Assert.Contains("Simulated physical rollback failure", ex.Message);
+        Assert.NotNull(capturedTx);
+        // INVARIANT: When physical rollback fails, IsRolledBack must NOT be true!
+        Assert.False(capturedTx.IsRolledBack, "IsRolledBack must not claim true when the physical rollback failed.");
+        Assert.False(capturedTx.IsPhysicallyCommitted);
+        Assert.False(capturedTx.IsCompleted);
+    }
+
+    [Fact]
+    public async Task ExecuteInTransactionAsync_WhenOperationThrowsAndRollbackFails_ShouldPreserveOriginalException()
+    {
+        var className = $"OpThrowRollbackFail_{Guid.NewGuid():N}";
+        var interceptor = new FaultInjectingTransactionInterceptor(failOnRollback: true);
+
+        var options = new DbContextOptionsBuilder<DVLDDbContext>()
+            .UseSqlServer(_database.ConnectionString)
+            .AddInterceptors(interceptor)
+            .Options;
+
+        await using var context = new DVLDDbContext(options);
+        var unitOfWork = new UnitOfWork(context);
+
+        IUnitOfWorkTransaction? capturedTx = null;
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await unitOfWork.ExecuteInTransactionAsync<int>(
+                async transaction =>
+                {
+                    capturedTx = transaction;
+
+                    var licenseClass = new LicenseClass
+                    {
+                        ClassName = className,
+                        ClassDescription = "Op throw and rollback fail test class",
+                        MinimumAllowedAge = 18,
+                        DefaultValidityLength = 10,
+                        ClassFees = 100
+                    };
+
+                    context.LicenseClasses.Add(licenseClass);
+                    await unitOfWork.SaveChangesAsync();
+
+                    throw new InvalidOperationException("Primary business operation failure.");
+                },
+                IsolationLevel.ReadCommitted);
+        });
+
+        // The primary exception is preserved and thrown
+        Assert.Equal("Primary business operation failure.", ex.Message);
+        Assert.True(ex.Data.Contains("RollbackException"));
+        Assert.Contains("Simulated physical rollback failure", ex.Data["RollbackException"]!.ToString());
+
+        Assert.NotNull(capturedTx);
+        Assert.False(capturedTx.IsRolledBack, "IsRolledBack must not claim success when rollback failed.");
+        Assert.False(capturedTx.IsPhysicallyCommitted);
+    }
+
+    [Fact]
+    public async Task ExecuteInTransactionAsync_WhenResultFailureReturnedAndRollbackFails_ShouldThrowAndNotReportSuccess()
+    {
+        var className = $"ResultFailRollbackFail_{Guid.NewGuid():N}";
+        var interceptor = new FaultInjectingTransactionInterceptor(failOnRollback: true);
+
+        var options = new DbContextOptionsBuilder<DVLDDbContext>()
+            .UseSqlServer(_database.ConnectionString)
+            .AddInterceptors(interceptor)
+            .Options;
+
+        await using var context = new DVLDDbContext(options);
+        var unitOfWork = new UnitOfWork(context);
+
+        IUnitOfWorkTransaction? capturedTx = null;
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await unitOfWork.ExecuteInTransactionAsync(
+                async transaction =>
+                {
+                    capturedTx = transaction;
+
+                    var licenseClass = new LicenseClass
+                    {
+                        ClassName = className,
+                        ClassDescription = "Result failure test class",
+                        MinimumAllowedAge = 18,
+                        DefaultValidityLength = 10,
+                        ClassFees = 100
+                    };
+
+                    context.LicenseClasses.Add(licenseClass);
+                    await unitOfWork.SaveChangesAsync();
+
+                    return Result.Failure("Domain validation failure.");
+                },
+                IsolationLevel.ReadCommitted);
+        });
+
+        Assert.Contains("Simulated physical rollback failure", ex.Message);
+        Assert.NotNull(capturedTx);
+        Assert.False(capturedTx.IsRolledBack);
+        Assert.False(capturedTx.IsPhysicallyCommitted);
+    }
+
     private sealed class FaultInjectingTransactionInterceptor(
         int? failAfterServerCommitOnAttempt = null,
-        int? rollbackAndFailBeforeServerCommitOnAttempt = null)
+        int? rollbackAndFailBeforeServerCommitOnAttempt = null,
+        bool failOnRollback = false)
         : DbTransactionInterceptor
     {
         private int _committingCount;
@@ -851,6 +1446,21 @@ public sealed class UnitOfWorkTests
             }
 
             return Task.CompletedTask;
+        }
+
+        public override ValueTask<InterceptionResult> TransactionRollingBackAsync(
+            DbTransaction transaction,
+            TransactionEventData eventData,
+            InterceptionResult result,
+            CancellationToken cancellationToken = default)
+        {
+            if (failOnRollback)
+            {
+                throw new InvalidOperationException(
+                    "Simulated physical rollback failure from interceptor.");
+            }
+
+            return base.TransactionRollingBackAsync(transaction, eventData, result, cancellationToken);
         }
     }
 }

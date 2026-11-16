@@ -49,4 +49,22 @@ public interface IUserSessionRepository
         DateTime nowUtc,
         string reason,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Acquires an exclusive, transaction-owned SQL Server application lock for the token family
+    /// resource (DVLD_TokenFamily_{tokenFamilyId}). Returns true if granted (return code >= 0).
+    /// </summary>
+    Task<bool> AcquireFamilyLockAsync(
+        Guid tokenFamilyId,
+        int timeoutMs = 5000,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Acquires an exclusive, transaction-owned SQL Server application lock for the user's sessions
+    /// resource (DVLD_UserSessions_{userId}). Returns true if granted (return code >= 0).
+    /// </summary>
+    Task<bool> AcquireUserSessionsLockAsync(
+        int userId,
+        int timeoutMs = 5000,
+        CancellationToken cancellationToken = default);
 }

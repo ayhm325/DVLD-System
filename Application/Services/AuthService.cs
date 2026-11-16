@@ -88,44 +88,12 @@ public sealed class AuthService(
         var now = _clock.UtcNow;
         var tokenHash = _refreshTokenService.HashToken(refreshToken);
 
+        // Pre-transaction lookup strictly to identify candidate session and target lock keys.
         var session = await _sessionRepository.GetByTokenHashAsync(
             tokenHash, cancellationToken);
 
         if (session is null)
         {
-            return Unauthorized();
-        }
-
-        var user = await _userRepository.GetUserByUserIdAsync(
-            session.UserId, cancellationToken);
-
-        if (user is null || !user.IsActive)
-        {
-            await _sessionRepository.RevokeAllForUserAsync(
-                session.UserId,
-                now,
-                SessionRevocationReasons.AccountDisabled,
-                cancellationToken);
-
-            return Unauthorized();
-        }
-
-        if (session.RevokedAtUtc is not null)
-        {
-            return await HandleConsumedTokenAsync(
-                session, now, cancellationToken);
-        }
-
-        if (session.ExpiresAtUtc <= now ||
-            now - session.LastUsedAtUtc >
-            TimeSpan.FromDays(Math.Max(1, _options.IdleTimeoutDays)))
-        {
-            await _sessionRepository.RevokeFamilyAsync(
-                session.TokenFamilyId,
-                now,
-                SessionRevocationReasons.Expired,
-                cancellationToken);
-
             return Unauthorized();
         }
 
@@ -148,11 +116,94 @@ public sealed class AuthService(
             return await _unitOfWork.ExecuteInTransactionAsync(
                 async transaction =>
                 {
-                    // Single conditional UPDATE: exactly one concurrent caller can
-                    // consume this generation. The database row lock is the arbiter,
-                    // so the guarantee holds across application instances.
+                    // 1. Acquire exclusive SQL Server application lock for the user's sessions first.
+                    // Lock acquisition order is strictly: UserSessions -> TokenFamily.
+                    var userLockAcquired = await _sessionRepository.AcquireUserSessionsLockAsync(
+                        session.UserId,
+                        5000,
+                        cancellationToken);
+
+                    if (!userLockAcquired)
+                    {
+                        _logger.LogWarning(
+                            "Failed to acquire user sessions application lock for user {UserId} during refresh.",
+                            session.UserId);
+
+                        return Result<LoginResponseDto>.FromConflict(
+                            "Authentication session synchronization timed out. Retry the request.");
+                    }
+
+                    // 2. Acquire exclusive SQL Server application lock for this token family.
+                    var lockAcquired = await _sessionRepository.AcquireFamilyLockAsync(
+                        session.TokenFamilyId,
+                        5000,
+                        cancellationToken);
+
+                    if (!lockAcquired)
+                    {
+                        _logger.LogWarning(
+                            "Failed to acquire token family application lock for family {TokenFamilyId} during refresh for user {UserId}.",
+                            session.TokenFamilyId,
+                            session.UserId);
+
+                        return Result<LoginResponseDto>.FromConflict(
+                            "Authentication session synchronization timed out. Retry the request.");
+                    }
+
+                    // 3. Revalidate session state under the acquired locks.
+                    var currentSession = await _sessionRepository.GetByTokenHashAsync(
+                        tokenHash, cancellationToken);
+
+                    if (currentSession is null)
+                    {
+                        return Unauthorized();
+                    }
+
+                    // Revalidate user state under the locks.
+                    var currentUser = await _userRepository.GetUserByUserIdAsync(
+                        currentSession.UserId, cancellationToken);
+
+                    if (currentUser is null || !currentUser.IsActive)
+                    {
+                        await _sessionRepository.RevokeAllForUserAsync(
+                            currentSession.UserId,
+                            now,
+                            SessionRevocationReasons.AccountDisabled,
+                            cancellationToken);
+
+                        await _unitOfWork.SaveChangesAsync(cancellationToken);
+                        await transaction.CommitAsync(cancellationToken);
+
+                        return Unauthorized();
+                    }
+
+                    // 4. Handle consumed / revoked token under the locks.
+                    if (currentSession.RevokedAtUtc is not null)
+                    {
+                        return await HandleConsumedTokenAsync(
+                            currentSession, now, transaction, cancellationToken);
+                    }
+
+                    // 5. Handle expired / idle-timed-out session under the locks.
+                    if (currentSession.ExpiresAtUtc <= now ||
+                        now - currentSession.LastUsedAtUtc >
+                        TimeSpan.FromDays(Math.Max(1, _options.IdleTimeoutDays)))
+                    {
+                        await _sessionRepository.RevokeFamilyAsync(
+                            currentSession.TokenFamilyId,
+                            now,
+                            SessionRevocationReasons.Expired,
+                            cancellationToken);
+
+                        await _unitOfWork.SaveChangesAsync(cancellationToken);
+                        await transaction.CommitAsync(cancellationToken);
+
+                        return Unauthorized();
+                    }
+
+                    // 6. Single conditional UPDATE: consume the current generation.
                     var consumed = await _sessionRepository.TryConsumeAsync(
-                        session.Id,
+                        currentSession.Id,
                         now,
                         newSession.Id,
                         cancellationToken);
@@ -174,7 +225,7 @@ public sealed class AuthService(
                     await transaction.CommitAsync(cancellationToken);
 
                     return Result<LoginResponseDto>.Success(
-                        BuildResponse(user, newRawToken, newSession.ExpiresAtUtc, newSession.TokenFamilyId));
+                        BuildResponse(currentUser, newRawToken, newSession.ExpiresAtUtc, newSession.TokenFamilyId));
                 },
                 IsolationLevel.ReadCommitted,
                 cancellationToken);
@@ -200,23 +251,106 @@ public sealed class AuthService(
         string? refreshToken, Guid? sessionId, CancellationToken cancellationToken = default)
     {
         var now = _clock.UtcNow;
+        Guid? revokedFamilyId = null;
 
         if (_refreshTokenService.LooksLikeValidToken(refreshToken))
         {
-            await _sessionRepository.RevokeByTokenHashAsync(
-                _refreshTokenService.HashToken(refreshToken!),
-                now,
-                SessionRevocationReasons.Logout,
-                cancellationToken);
+            var tokenHash = _refreshTokenService.HashToken(refreshToken!);
+            var session = await _sessionRepository.GetByTokenHashAsync(tokenHash, cancellationToken);
+
+            if (session is not null)
+            {
+                var familyId = session.TokenFamilyId;
+                revokedFamilyId = familyId;
+
+                var result = await _unitOfWork.ExecuteInTransactionAsync(
+                    async transaction =>
+                    {
+                        var lockAcquired = await _sessionRepository.AcquireFamilyLockAsync(
+                            familyId,
+                            5000,
+                            cancellationToken);
+
+                        if (!lockAcquired)
+                        {
+                            _logger.LogWarning(
+                                "Failed to acquire token family application lock for family {TokenFamilyId} during logout.",
+                                familyId);
+
+                            return Result.Conflict(
+                                "Failed to acquire session lock during logout. Retry the request.");
+                        }
+
+                        // When a refresh token is presented at logout, revoke its entire family.
+                        // This ensures that if a concurrent rotation just consumed this generation
+                        // and issued a replacement generation, the replacement is also revoked.
+                        await _sessionRepository.RevokeFamilyAsync(
+                            familyId,
+                            now,
+                            SessionRevocationReasons.Logout,
+                            cancellationToken);
+
+                        await _unitOfWork.SaveChangesAsync(cancellationToken);
+                        await transaction.CommitAsync(cancellationToken);
+                        return Result.Success();
+                    },
+                    IsolationLevel.ReadCommitted,
+                    cancellationToken);
+
+                if (!result.IsSuccess)
+                {
+                    return result;
+                }
+            }
+            else
+            {
+                await _sessionRepository.RevokeByTokenHashAsync(
+                    tokenHash,
+                    now,
+                    SessionRevocationReasons.Logout,
+                    cancellationToken);
+            }
         }
 
-        if (sessionId.HasValue && sessionId.Value != Guid.Empty)
+        if (sessionId.HasValue && sessionId.Value != Guid.Empty && sessionId.Value != revokedFamilyId)
         {
-            await _sessionRepository.RevokeFamilyAsync(
-                sessionId.Value,
-                now,
-                SessionRevocationReasons.Logout,
+            var familyId = sessionId.Value;
+
+            var result = await _unitOfWork.ExecuteInTransactionAsync(
+                async transaction =>
+                {
+                    var lockAcquired = await _sessionRepository.AcquireFamilyLockAsync(
+                        familyId,
+                        5000,
+                        cancellationToken);
+
+                    if (!lockAcquired)
+                    {
+                        _logger.LogWarning(
+                            "Failed to acquire token family application lock for family {TokenFamilyId} during sessionId logout.",
+                            familyId);
+
+                        return Result.Conflict(
+                            "Failed to acquire session lock during logout. Retry the request.");
+                    }
+
+                    await _sessionRepository.RevokeFamilyAsync(
+                        familyId,
+                        now,
+                        SessionRevocationReasons.Logout,
+                        cancellationToken);
+
+                    await _unitOfWork.SaveChangesAsync(cancellationToken);
+                    await transaction.CommitAsync(cancellationToken);
+                    return Result.Success();
+                },
+                IsolationLevel.ReadCommitted,
                 cancellationToken);
+
+            if (!result.IsSuccess)
+            {
+                return result;
+            }
         }
 
         return Result.Success();
@@ -240,6 +374,21 @@ public sealed class AuthService(
         return await _unitOfWork.ExecuteInTransactionAsync(
             async transaction =>
             {
+                var lockAcquired = await _sessionRepository.AcquireUserSessionsLockAsync(
+                    userId,
+                    5000,
+                    cancellationToken);
+
+                if (!lockAcquired)
+                {
+                    _logger.LogWarning(
+                        "Failed to acquire user sessions lock for user {UserId} during logout-all.",
+                        userId);
+
+                    return Result.Conflict(
+                        "Failed to acquire user session lock during logout-all. Retry the request.");
+                }
+
                 user.SecurityStamp = Guid.NewGuid().ToString("N");
 
                 await _sessionRepository.RevokeAllForUserAsync(
@@ -249,6 +398,7 @@ public sealed class AuthService(
                     cancellationToken);
 
                 await _unitOfWork.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
                 return Result.Success();
             },
             IsolationLevel.ReadCommitted,
@@ -321,6 +471,7 @@ public sealed class AuthService(
     private async Task<Result<LoginResponseDto>> HandleConsumedTokenAsync(
         UserSession session,
         DateTime now,
+        IUnitOfWorkTransaction transaction,
         CancellationToken cancellationToken)
     {
         var revokedAt = session.RevokedAtUtc!.Value;
@@ -350,6 +501,9 @@ public sealed class AuthService(
             now,
             SessionRevocationReasons.ReuseDetected,
             cancellationToken);
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         _logger.LogWarning(
             "Refresh-token reuse detected for user {UserId}. Token family {TokenFamilyId} was revoked.",

@@ -148,13 +148,13 @@ public sealed class AuthController(
             sessionId = parsedSid;
         }
 
-        if (sessionId.HasValue && sessionId.Value != Guid.Empty)
+        var result = (sessionId.HasValue && sessionId.Value != Guid.Empty)
+            ? await authService.LogoutAsync(ReadRefreshCookie(), sessionId, cancellationToken)
+            : await authService.LogoutAsync(ReadRefreshCookie(), cancellationToken);
+
+        if (result.IsFailure)
         {
-            await authService.LogoutAsync(ReadRefreshCookie(), sessionId, cancellationToken);
-        }
-        else
-        {
-            await authService.LogoutAsync(ReadRefreshCookie(), cancellationToken);
+            return result.ToActionResult(this);
         }
 
         ClearRefreshCookie();

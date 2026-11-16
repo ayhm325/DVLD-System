@@ -20,8 +20,9 @@ export default defineConfig({
     // the API remains bound to localhost on the development machine.
     proxy: {
       "/api": {
-        target: "http://localhost:5260",
+        target: "https://localhost:7125",
         changeOrigin: true,
+        secure: false,
       },
     },
   },

@@ -751,6 +751,46 @@ public sealed class AuthControllerTests
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    [Fact]
+    public async Task Logout_WhenLockAcquisitionFails_ReturnsConflictAndDoesNotClearCookie()
+    {
+        await using var factory = new ApiWebApplicationFactory();
+        factory.AuthServiceMock
+            .Setup(x => x.LogoutAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Conflict("Failed to acquire session lock during logout. Retry the request."));
+
+        var client = factory.CreateClient();
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/Auth/logout");
+        request.Headers.Add("X-CSRF-Protection", "1");
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+
+        if (response.Headers.TryGetValues("Set-Cookie", out var setCookies))
+        {
+            Assert.DoesNotContain(setCookies, c => c.StartsWith("dvld_rt=;"));
+        }
+    }
+
+    [Fact]
+    public async Task Logout_WhenSuccessful_ReturnsNoContentAndClearsCookie()
+    {
+        await using var factory = new ApiWebApplicationFactory();
+        factory.AuthServiceMock
+            .Setup(x => x.LogoutAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success());
+
+        var client = factory.CreateClient();
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/Auth/logout");
+        request.Headers.Add("X-CSRF-Protection", "1");
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        AssertRefreshCookieDeleted(response);
+    }
+
     private static void AssertRefreshCookieDeleted(HttpResponseMessage response)
     {
         Assert.True(

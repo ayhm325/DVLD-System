@@ -8,6 +8,8 @@ import {
 import type { ReactNode } from 'react'
 import type { AuthSession, AuthUser, LoginResponse } from '../types/Auth'
 import {
+  getAuthGeneration,
+  invalidateSession,
   logoutAllSessions,
   logoutSession,
   refreshSession,
@@ -28,7 +30,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authMessage, setAuthMessage] = useState<string | null>(null)
   const channelRef = useRef<BroadcastChannel | null>(null)
 
-  const applySession = useCallback((response: LoginResponse) => {
+  const applySession = useCallback((response: LoginResponse, expectedGeneration?: number) => {
+    if (expectedGeneration !== undefined && expectedGeneration !== getAuthGeneration()) {
+      return
+    }
+
     const user: AuthUser = {
       userId: response.userId,
       userName: response.userName,
@@ -49,6 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const clearLocalState = useCallback((message: string | null) => {
+    invalidateSession()
     setAccessToken(null)
     setSession(null)
     setAuthMessage(message)
@@ -56,6 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     (response: LoginResponse) => {
+      invalidateSession()
       applySession(response)
       channelRef.current?.postMessage({ type: 'login' } satisfies AuthChannelMessage)
     },
@@ -101,9 +109,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (message?.type === 'login') {
+        const generation = getAuthGeneration()
         void refreshSession().then((result) => {
           if (result.success) {
-            applySession(result.session)
+            applySession(result.session, generation)
           }
         })
       }
@@ -134,10 +143,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     purgeLegacyTokenStorage()
 
+    const generation = getAuthGeneration()
     void refreshSession()
       .then((result) => {
         if (active && result.success) {
-          applySession(result.session)
+          applySession(result.session, generation)
         }
       })
       .finally(() => {
@@ -191,12 +201,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const executeRenewal = () => {
+      const generation = getAuthGeneration()
       void refreshSession().then((result) => {
         if (!active) return
 
         if (result.success) {
           retryAttempt = 0
-          applySession(result.session)
+          applySession(result.session, generation)
           channelRef.current?.postMessage({
             type: 'token-refreshed',
             expiresAtUtc: result.session.expiresAtUtc,
@@ -236,11 +247,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (document.visibilityState === 'visible') {
         const expiresAt = new Date(session.expiresAtUtc).getTime()
         if (Number.isFinite(expiresAt) && expiresAt - Date.now() <= 90_000) {
+          const generation = getAuthGeneration()
           void refreshSession().then((result) => {
             if (!active) return
 
             if (result.success) {
-              applySession(result.session)
+              applySession(result.session, generation)
               channelRef.current?.postMessage({
                 type: 'token-refreshed',
                 expiresAtUtc: result.session.expiresAtUtc,

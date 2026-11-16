@@ -130,7 +130,7 @@ public sealed class UnitOfWork : IUnitOfWork
             {
                 var result = await operation(transaction);
 
-                if (result is Result { IsFailure: true } ||
+                if ((result is Result { IsFailure: true } && !transaction.IsCommitRequested) ||
                     transaction.IsRolledBack)
                 {
                     if (!transaction.IsRolledBack)
@@ -143,7 +143,7 @@ public sealed class UnitOfWork : IUnitOfWork
                     return result;
                 }
 
-                if (!transaction.IsCompleted)
+                if (!transaction.IsCommitRequested)
                 {
                     await transaction.CommitAsync(cancellationToken);
                 }
@@ -187,18 +187,19 @@ public sealed class UnitOfWork : IUnitOfWork
                     throw;
                 }
             }
-            catch when (!commitStageReached)
+            catch (Exception ex) when (!commitStageReached)
             {
                 try
                 {
-                    if (!transaction.IsRolledBack && !transaction.IsCommitted)
+                    if (!transaction.IsRolledBack)
                     {
                         await transaction.RollbackPhysicalAsync(CancellationToken.None);
                     }
                 }
-                catch
+                catch (Exception rollbackEx)
                 {
-                    // Preserve the original exception if rollback fails.
+                    // Preserve the original exception while recording the rollback failure.
+                    ex.Data["RollbackException"] = rollbackEx.Message;
                 }
                 finally
                 {
@@ -305,8 +306,8 @@ public sealed class UnitOfWork : IUnitOfWork
         private readonly IDbContextTransaction _transaction;
         private readonly bool _deferPhysicalCommit;
 
-        private bool _isCompleted;
-        private bool _isCommitted;
+        private bool _isCommitRequested;
+        private bool _isPhysicallyCommitted;
         private bool _isRolledBack;
         private bool _isDisposed;
 
@@ -324,11 +325,13 @@ public sealed class UnitOfWork : IUnitOfWork
             _deferPhysicalCommit = deferPhysicalCommit;
         }
 
-        internal bool IsCompleted => _isCompleted;
+        public bool IsCommitRequested => _isCommitRequested;
 
-        internal bool IsCommitted => _isCommitted;
+        public bool IsPhysicallyCommitted => _isPhysicallyCommitted;
 
-        internal bool IsRolledBack => _isRolledBack;
+        public bool IsRolledBack => _isRolledBack;
+
+        public bool IsCompleted => _isPhysicallyCommitted || _isRolledBack;
 
         public async Task CommitAsync(
             CancellationToken cancellationToken = default)
@@ -339,7 +342,7 @@ public sealed class UnitOfWork : IUnitOfWork
                     "Cannot commit a transaction that has already been rolled back.");
             }
 
-            if (_isCompleted)
+            if (_isCommitRequested)
                 return;
 
             try
@@ -355,27 +358,37 @@ public sealed class UnitOfWork : IUnitOfWork
             if (!_deferPhysicalCommit)
             {
                 await _transaction.CommitAsync(cancellationToken);
-                _isCommitted = true;
+                _isPhysicallyCommitted = true;
             }
 
-            _isCompleted = true;
+            _isCommitRequested = true;
         }
 
         internal async Task CommitPhysicalAsync(
             CancellationToken cancellationToken)
         {
-            if (_isCommitted)
+            if (_isRolledBack)
+            {
+                throw new InvalidOperationException(
+                    "Cannot physically commit a transaction that has already been rolled back.");
+            }
+
+            if (_isPhysicallyCommitted)
                 return;
 
-            await _transaction.CommitAsync(cancellationToken);
-            _isCommitted = true;
-            _isCompleted = true;
+            if (_deferPhysicalCommit)
+            {
+                await _transaction.CommitAsync(cancellationToken);
+            }
+
+            _isPhysicallyCommitted = true;
+            _isCommitRequested = true;
         }
 
         public async Task RollbackAsync(
             CancellationToken cancellationToken = default)
         {
-            if (_isCompleted)
+            if (IsCompleted)
                 return;
 
             await RollbackPhysicalAsync(cancellationToken);
@@ -384,18 +397,17 @@ public sealed class UnitOfWork : IUnitOfWork
         internal async Task RollbackPhysicalAsync(
             CancellationToken cancellationToken)
         {
-            if (_isRolledBack || _isCommitted)
+            if (_isRolledBack || _isPhysicallyCommitted)
                 return;
 
             try
             {
                 await _transaction.RollbackAsync(cancellationToken);
+                _isRolledBack = true;
             }
             finally
             {
                 _context.ChangeTracker.Clear();
-                _isCompleted = true;
-                _isRolledBack = true;
             }
         }
 
@@ -408,7 +420,7 @@ public sealed class UnitOfWork : IUnitOfWork
 
             try
             {
-                if (!_isCommitted)
+                if (!_isPhysicallyCommitted)
                 {
                     _context.ChangeTracker.Clear();
                 }

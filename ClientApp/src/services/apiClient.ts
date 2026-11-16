@@ -163,29 +163,49 @@ async function throwApiError(response: Response): Promise<never> {
 
 export type RefreshResult =
   | { success: true; session: LoginResponse }
-  | { success: false; status: number | 'network'; isFatal: boolean }
+  | { success: false; status: number | 'network' | 'canceled'; isFatal: boolean }
 
 // ---------------------------------------------------------------------------
-// Refresh single-flight
+// Refresh single-flight & Generation coordination
 //
-// Every 401 in this browser context shares one refresh request. A successful
-// refresh replaces the in-memory access token; the rotating refresh token is
-// handled entirely by the HttpOnly cookie.
+// Every 401 in this browser context shares one refresh request. A generation
+// counter tracks active session lifecycles: whenever logout or local session
+// invalidation occurs, the generation is incremented. In-flight refresh
+// requests that complete after invalidation are dropped immediately, preventing
+// stale responses from resurrecting authenticated state or overwriting tokens.
 // ---------------------------------------------------------------------------
 
 let inFlightRefresh: Promise<RefreshResult> | null = null
+let authGeneration = 0
+
+export function getAuthGeneration(): number {
+  return authGeneration
+}
+
+export function invalidateSession(): void {
+  authGeneration++
+  inFlightRefresh = null
+  setAccessToken(null)
+}
 
 export function refreshSession(): Promise<RefreshResult> {
   if (!inFlightRefresh) {
-    inFlightRefresh = performRefresh(0).finally(() => {
-      inFlightRefresh = null
+    const expectedGeneration = authGeneration
+    const promise: Promise<RefreshResult> = performRefresh(0, expectedGeneration).finally(() => {
+      if (inFlightRefresh === promise) {
+        inFlightRefresh = null
+      }
     })
+    inFlightRefresh = promise
   }
 
   return inFlightRefresh
 }
 
-async function performRefresh(attempt: number): Promise<RefreshResult> {
+async function performRefresh(
+  attempt: number,
+  expectedGeneration: number,
+): Promise<RefreshResult> {
   try {
     const response = await fetch(`${API_BASE_URL}/Auth/refresh`, {
       method: 'POST',
@@ -196,14 +216,25 @@ async function performRefresh(attempt: number): Promise<RefreshResult> {
       },
     })
 
+    if (expectedGeneration !== authGeneration) {
+      return { success: false, status: 'canceled', isFatal: false }
+    }
+
     if (response.status === 409 && attempt === 0) {
       // A concurrent tab/request won the rotation. Its Set-Cookie may already be
       // applied; retry once with the current cookie before giving up.
       await delay(250)
-      return performRefresh(1)
+      if (expectedGeneration !== authGeneration) {
+        return { success: false, status: 'canceled', isFatal: false }
+      }
+      return performRefresh(1, expectedGeneration)
     }
 
     if (!response.ok) {
+      if (expectedGeneration !== authGeneration) {
+        return { success: false, status: 'canceled', isFatal: false }
+      }
+
       if (response.status === 401) {
         setAccessToken(null)
         return { success: false, status: 401, isFatal: true }
@@ -213,20 +244,37 @@ async function performRefresh(attempt: number): Promise<RefreshResult> {
       return { success: false, status: response.status, isFatal: false }
     }
 
+    if (expectedGeneration !== authGeneration) {
+      return { success: false, status: 'canceled', isFatal: false }
+    }
+
     const session = (await response.json()) as LoginResponse
+
+    if (expectedGeneration !== authGeneration) {
+      return { success: false, status: 'canceled', isFatal: false }
+    }
+
     setAccessToken(session.accessToken)
     return { success: true, session }
   } catch {
+    if (expectedGeneration !== authGeneration) {
+      return { success: false, status: 'canceled', isFatal: false }
+    }
     // Network / fetch error (offline, DNS failure, aborted)
     return { success: false, status: 'network', isFatal: false }
   }
 }
 
 export async function logoutSession(): Promise<void> {
+  const currentToken = getAccessToken()
+  invalidateSession()
   try {
-    const headers = buildHeaders({
-      headers: { [CSRF_HEADER]: '1' },
-    })
+    const headers = buildHeaders(
+      {
+        headers: { [CSRF_HEADER]: '1' },
+      },
+      currentToken ?? undefined,
+    )
     await fetch(`${API_BASE_URL}/Auth/logout`, {
       method: 'POST',
       credentials: 'include',
@@ -241,8 +289,10 @@ export async function logoutSession(): Promise<void> {
 }
 
 export async function logoutAllSessions(): Promise<void> {
+  const currentToken = getAccessToken()
+  invalidateSession()
   try {
-    await apiRequest<void>('/Auth/logout-all', undefined, {
+    await apiRequest<void>('/Auth/logout-all', currentToken ?? undefined, {
       method: 'POST',
       headers: { [CSRF_HEADER]: '1' },
     })

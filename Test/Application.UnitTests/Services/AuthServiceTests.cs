@@ -70,6 +70,20 @@ public sealed class AuthServiceTests
                 AccessToken = "access-token",
                 ExpiresAtUtc = NowUtc.AddMinutes(15)
             });
+
+        _sessionRepository
+            .Setup(repo => repo.AcquireFamilyLockAsync(
+                It.IsAny<Guid>(),
+                It.IsAny<int>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        _sessionRepository
+            .Setup(repo => repo.AcquireUserSessionsLockAsync(
+                It.IsAny<int>(),
+                It.IsAny<int>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
     }
 
     [Fact]
@@ -475,6 +489,313 @@ public sealed class AuthServiceTests
     }
 
     [Fact]
+    public async Task Logout_WhenTokenIsValidAndSessionExists_RevokesFamily()
+    {
+        var token = _refreshTokenService.CreateToken();
+        var hash = _refreshTokenService.HashToken(token);
+        var familyId = Guid.NewGuid();
+        var session = new UserSession
+        {
+            Id = Guid.NewGuid(),
+            UserId = 10,
+            RefreshTokenHash = hash,
+            TokenFamilyId = familyId,
+            CreatedAtUtc = NowUtc.AddMinutes(-5),
+            ExpiresAtUtc = NowUtc.AddDays(14),
+            LastUsedAtUtc = NowUtc.AddMinutes(-5)
+        };
+
+        _sessionRepository
+            .Setup(repo => repo.GetByTokenHashAsync(hash, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var result = await CreateService().LogoutAsync(token);
+
+        Assert.True(result.IsSuccess);
+        _sessionRepository.Verify(
+            repo => repo.RevokeFamilyAsync(
+                familyId,
+                NowUtc,
+                SessionRevocationReasons.Logout,
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task Refresh_WhenUserSessionsLockFails_ReturnsConflictAndDoesNotRotate()
+    {
+        var user = CreateUser();
+        var token = _refreshTokenService.CreateToken();
+        var hash = _refreshTokenService.HashToken(token);
+        var familyId = Guid.NewGuid();
+        var session = new UserSession
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.UserId,
+            RefreshTokenHash = hash,
+            TokenFamilyId = familyId,
+            CreatedAtUtc = NowUtc.AddMinutes(-5),
+            ExpiresAtUtc = NowUtc.AddDays(14),
+            LastUsedAtUtc = NowUtc.AddMinutes(-5)
+        };
+
+        SetupUser(user);
+        _sessionRepository
+            .Setup(repo => repo.GetByTokenHashAsync(hash, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        // Simulate user sessions lock failure / timeout
+        _sessionRepository
+            .Setup(repo => repo.AcquireUserSessionsLockAsync(user.UserId, It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var result = await CreateService().RefreshAsync(token);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorType.Conflict, result.ErrorType);
+        _sessionRepository.Verify(
+            repo => repo.TryConsumeAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _sessionRepository.Verify(
+            repo => repo.AddAsync(It.IsAny<UserSession>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task Refresh_WhenFamilyLockFails_ReturnsConflictAndDoesNotRotate()
+    {
+        var user = CreateUser();
+        var token = _refreshTokenService.CreateToken();
+        var hash = _refreshTokenService.HashToken(token);
+        var familyId = Guid.NewGuid();
+        var session = new UserSession
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.UserId,
+            RefreshTokenHash = hash,
+            TokenFamilyId = familyId,
+            CreatedAtUtc = NowUtc.AddMinutes(-5),
+            ExpiresAtUtc = NowUtc.AddDays(14),
+            LastUsedAtUtc = NowUtc.AddMinutes(-5)
+        };
+
+        SetupUser(user);
+        _sessionRepository
+            .Setup(repo => repo.GetByTokenHashAsync(hash, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        // Simulate lock failure / timeout
+        _sessionRepository
+            .Setup(repo => repo.AcquireFamilyLockAsync(familyId, It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var result = await CreateService().RefreshAsync(token);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorType.Conflict, result.ErrorType);
+        _sessionRepository.Verify(
+            repo => repo.TryConsumeAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _sessionRepository.Verify(
+            repo => repo.AddAsync(It.IsAny<UserSession>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task Logout_WhenFamilyLockFails_ReturnsConflictAndDoesNotRevoke()
+    {
+        var token = _refreshTokenService.CreateToken();
+        var hash = _refreshTokenService.HashToken(token);
+        var familyId = Guid.NewGuid();
+        var session = new UserSession
+        {
+            Id = Guid.NewGuid(),
+            UserId = 10,
+            RefreshTokenHash = hash,
+            TokenFamilyId = familyId,
+            CreatedAtUtc = NowUtc.AddMinutes(-5),
+            ExpiresAtUtc = NowUtc.AddDays(14),
+            LastUsedAtUtc = NowUtc.AddMinutes(-5)
+        };
+
+        _sessionRepository
+            .Setup(repo => repo.GetByTokenHashAsync(hash, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        // Simulate lock failure / timeout
+        _sessionRepository
+            .Setup(repo => repo.AcquireFamilyLockAsync(familyId, It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var result = await CreateService().LogoutAsync(token);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorType.Conflict, result.ErrorType);
+        _sessionRepository.Verify(
+            repo => repo.RevokeFamilyAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task LogoutAll_WhenUserSessionsLockFails_ReturnsConflictAndDoesNotRevoke()
+    {
+        var user = new Domain.Entities.User
+        {
+            UserId = 7,
+            IsActive = true,
+            SecurityStamp = "initial-stamp-7"
+        };
+
+        _userRepository
+            .Setup(repo => repo.GetUserForUpdateAsync(7, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+
+        // Simulate user sessions lock failure
+        _sessionRepository
+            .Setup(repo => repo.AcquireUserSessionsLockAsync(7, It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var result = await CreateService().LogoutAllAsync(7);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorType.Conflict, result.ErrorType);
+        Assert.Equal("initial-stamp-7", user.SecurityStamp);
+        _sessionRepository.Verify(
+            repository => repository.RevokeAllForUserAsync(
+                It.IsAny<int>(),
+                It.IsAny<DateTime>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task Refresh_WhenReplayDetectedConcurrently_IsSerializedAndRevokesFamily()
+    {
+        var user = CreateUser();
+        var token = _refreshTokenService.CreateToken();
+        var hash = _refreshTokenService.HashToken(token);
+        var familyId = Guid.NewGuid();
+        var session = new UserSession
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.UserId,
+            RefreshTokenHash = hash,
+            TokenFamilyId = familyId,
+            CreatedAtUtc = NowUtc.AddMinutes(-5),
+            ExpiresAtUtc = NowUtc.AddDays(14),
+            LastUsedAtUtc = NowUtc.AddMinutes(-5),
+            RevokedAtUtc = NowUtc.AddSeconds(-30),
+            RevocationReason = SessionRevocationReasons.ReuseDetected
+        };
+
+        SetupUser(user);
+        _sessionRepository
+            .Setup(repo => repo.GetByTokenHashAsync(hash, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var result = await CreateService().RefreshAsync(token);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorType.Unauthorized, result.ErrorType);
+        _sessionRepository.Verify(
+            repo => repo.RevokeFamilyAsync(
+                familyId,
+                NowUtc,
+                SessionRevocationReasons.ReuseDetected,
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        _unitOfWork.Verify(
+            unit => unit.SaveChangesAsync(It.IsAny<CancellationToken>()),
+            Times.Once);
+        _transaction.Verify(
+            tx => tx.CommitAsync(It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task Refresh_WhenExpiredConcurrently_IsSerializedAndRevokesFamily()
+    {
+        var user = CreateUser();
+        var token = _refreshTokenService.CreateToken();
+        var hash = _refreshTokenService.HashToken(token);
+        var familyId = Guid.NewGuid();
+        var session = new UserSession
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.UserId,
+            RefreshTokenHash = hash,
+            TokenFamilyId = familyId,
+            CreatedAtUtc = NowUtc.AddDays(-15),
+            ExpiresAtUtc = NowUtc.AddSeconds(-1),
+            LastUsedAtUtc = NowUtc.AddDays(-15)
+        };
+
+        SetupUser(user);
+        _sessionRepository
+            .Setup(repo => repo.GetByTokenHashAsync(hash, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var result = await CreateService().RefreshAsync(token);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorType.Unauthorized, result.ErrorType);
+        _sessionRepository.Verify(
+            repo => repo.RevokeFamilyAsync(
+                familyId,
+                NowUtc,
+                SessionRevocationReasons.Expired,
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        _unitOfWork.Verify(
+            unit => unit.SaveChangesAsync(It.IsAny<CancellationToken>()),
+            Times.Once);
+        _transaction.Verify(
+            tx => tx.CommitAsync(It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task Logout_WhenRefreshTokenWasConcurrentlyRotated_RevokesFamilyEnsuringNoActiveReplacementSession()
+    {
+        // Concurrently rotated: the presented token was consumed moments ago by refresh.
+        // Its session row exists but has RevokedAtUtc set and a replacement session issued.
+        var oldToken = _refreshTokenService.CreateToken();
+        var oldHash = _refreshTokenService.HashToken(oldToken);
+        var familyId = Guid.NewGuid();
+        var rotatedSession = new UserSession
+        {
+            Id = Guid.NewGuid(),
+            UserId = 10,
+            RefreshTokenHash = oldHash,
+            TokenFamilyId = familyId,
+            CreatedAtUtc = NowUtc.AddMinutes(-1),
+            ExpiresAtUtc = NowUtc.AddDays(14),
+            LastUsedAtUtc = NowUtc,
+            RevokedAtUtc = NowUtc,
+            RevocationReason = SessionRevocationReasons.Rotated,
+            ReplacedBySessionId = Guid.NewGuid()
+        };
+
+        _sessionRepository
+            .Setup(repo => repo.GetByTokenHashAsync(oldHash, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(rotatedSession);
+
+        var result = await CreateService().LogoutAsync(oldToken);
+
+        Assert.True(result.IsSuccess);
+        // Invariant: The entire family is revoked, guaranteeing the newly issued replacement
+        // generation sharing this TokenFamilyId is also revoked.
+        _sessionRepository.Verify(
+            repo => repo.RevokeFamilyAsync(
+                familyId,
+                NowUtc,
+                SessionRevocationReasons.Logout,
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task LogoutAll_RevokesEverySessionForTheUser()
     {
         var user = new Domain.Entities.User
@@ -770,6 +1091,18 @@ public sealed class AuthServiceTests
                 session => session.RefreshTokenHash == tokenHash,
                 nowUtc,
                 reason);
+
+        public Task<bool> AcquireFamilyLockAsync(
+            Guid tokenFamilyId,
+            int timeoutMs = 5000,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
+
+        public Task<bool> AcquireUserSessionsLockAsync(
+            int userId,
+            int timeoutMs = 5000,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
 
         private Task<int> RevokeWhere(
             Func<UserSession, bool> predicate,
