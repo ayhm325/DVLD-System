@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../ui/select'
+import { Button } from '../ui/button'
 import {
   getLocalDrivingLicenseApplications,
   getLocalDrivingLicenseApplicationsSummary,
@@ -371,14 +372,15 @@ export default function LocalApplicationsPage({
                     : `${page?.totalCount ?? 0} Applications`}
             </span>
 
-            <button
+            <Button
               type="button"
-              className="primary-button"
+              variant="default"
+              size="default"
               onClick={() => setView({ mode: 'create' })}
             >
               <PlusIcon size={16} />
               <span>New Application</span>
-            </button>
+            </Button>
           </div>
         </header>
 

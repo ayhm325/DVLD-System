@@ -529,14 +529,15 @@ export default function PeopleTable({
                   : `${filteredPeople.length} of ${people.length} People`}
           </span>
 
-          <button
+          <Button
             type="button"
-            className="primary-button"
+            variant="default"
+            size="default"
             onClick={onAddPerson}
           >
             <UserPlus size={15} />
             <span>Add Person</span>
-          </button>
+          </Button>
         </div>
       </div>
 

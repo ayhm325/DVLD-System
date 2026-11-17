@@ -16,6 +16,7 @@ import {
   FileCheck2,
   Building2,
 } from "lucide-react";
+import { Button } from "../ui/button";
 import "./Login.css";
 
 type LoginProps = {
@@ -382,9 +383,11 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 </div>
 
                 {/* Primary Submit Button */}
-                <button
+                <Button
                   type="submit"
-                  className="dvld-submit-btn"
+                  variant="default"
+                  size="lg"
+                  className="w-full h-12 rounded-xl text-[0.95rem] font-bold mt-2"
                   disabled={loading || !userName.trim() || !password}
                 >
                   {loading ? (
@@ -398,7 +401,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                       <ArrowRight size={18} className="dvld-submit-arrow" />
                     </>
                   )}
-                </button>
+                </Button>
               </form>
 
               {/* Security Footer Notice */}

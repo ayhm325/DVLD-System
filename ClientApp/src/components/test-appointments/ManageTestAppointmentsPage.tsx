@@ -406,8 +406,10 @@ export default function ManageTestAppointmentsPage({
         return (
           <div className="flex items-center justify-end gap-1.5">
             {canTake && (
-              <button
+              <Button
                 type="button"
+                variant="success"
+                size="sm"
                 onClick={() => {
                   if (onTakeExamination) {
                     onTakeExamination(r.testAppointmentId, 'Manage Test Appointments')
@@ -415,31 +417,35 @@ export default function ManageTestAppointmentsPage({
                     onNavigate?.('Take Examination')
                   }
                 }}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-emerald-300 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 hover:border-emerald-400 transition-all cursor-pointer shadow-xs"
+                className="h-7 px-2.5 text-xs"
                 title="Conduct and record examination outcome"
               >
                 <Award className="size-3.5" />
                 <span>Take Exam</span>
-              </button>
+              </Button>
             )}
 
             {canCancel && (
-              <button
+              <Button
                 type="button"
+                variant="destructive"
+                size="sm"
                 onClick={() => {
                   setCancelError(null)
                   setAppointmentToCancel(r)
                 }}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-rose-300 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 hover:border-rose-400 transition-all cursor-pointer shadow-xs"
+                className="h-7 px-2.5 text-xs"
                 title="Cancel scheduled appointment slot"
               >
                 <XCircle className="size-3.5" />
                 <span>Cancel</span>
-              </button>
+              </Button>
             )}
 
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => {
                 if (onShowAppointmentDetails) {
                   onShowAppointmentDetails(r.testAppointmentId, 'Manage Test Appointments')
@@ -447,12 +453,12 @@ export default function ManageTestAppointmentsPage({
                   onNavigate?.('Appointment Details')
                 }
               }}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium text-cyan-300 bg-cyan-950/40 hover:bg-cyan-900/60 border border-cyan-500/30 hover:border-cyan-400 transition-all cursor-pointer shadow-xs"
+              className="h-7 px-2.5 text-xs"
               title="View comprehensive audit details"
             >
               <Eye className="size-3.5" />
               <span>Details</span>
-            </button>
+            </Button>
           </div>
         )
       },

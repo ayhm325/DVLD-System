@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../ui/select'
+import { Button } from '../ui/button'
 import type { TestAppointment } from '../../types/TestAppointment'
 import type { LocalDrivingLicenseApplication } from '../../types/LocalDrivingLicenseApplication'
 import type { TabType } from './appointmentStats'
@@ -221,18 +222,22 @@ export default function TestAppointmentsTable({
       render: (r) => (
         <div className="flex items-center justify-end gap-1.5">
           {!r.isLocked && (r.status === 'Scheduled' || r.status === 'Open') && (
-            <button
+            <Button
               type="button"
+              variant="destructive"
+              size="sm"
               onClick={() => onCancelAppointment(r)}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium text-rose-300 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 hover:border-rose-400 transition-all cursor-pointer shadow-sm"
+              className="h-7 px-2.5 text-xs"
               title="Cancel scheduled appointment"
             >
               <XCircle className="size-3.5" />
               <span>Cancel</span>
-            </button>
+            </Button>
           )}
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             onClick={() => {
               if (onShowAppointmentDetails) {
                 onShowAppointmentDetails(r.testAppointmentId)
@@ -240,12 +245,12 @@ export default function TestAppointmentsTable({
                 onNavigate?.('Appointment Details')
               }
             }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-cyan-300 bg-cyan-950/40 hover:bg-cyan-900/60 border border-cyan-500/30 hover:border-cyan-400 transition-all cursor-pointer shadow-sm"
+            className="h-7 px-2.5 text-xs"
             title="View comprehensive examination record and audit details"
           >
             <Eye className="size-3.5" />
             <span>Details</span>
-          </button>
+          </Button>
         </div>
       ),
     },

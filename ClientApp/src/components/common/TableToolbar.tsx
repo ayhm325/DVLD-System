@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
+import { Button } from "../ui/button";
 
 const EMPTY_SENTINEL = "__EMPTY_SENTINEL__";
 
@@ -138,21 +139,25 @@ export default function TableToolbar<TField extends string = string>({
       {filters}
 
       {isFiltered && onReset && (
-        <button
+        <Button
           type="button"
-          className="secondary-button"
+          variant="outline"
+          size="default"
+          className="h-10 rounded-lg text-xs"
           onClick={onReset}
           title="Reset all filters"
         >
           <FilterIcon size={14} />
           <span>{resetLabel}</span>
-        </button>
+        </Button>
       )}
 
       {onRefresh && (
-        <button
+        <Button
           type="button"
-          className="secondary-button"
+          variant="outline"
+          size="default"
+          className="h-10 rounded-lg text-xs"
           disabled={refreshing}
           onClick={onRefresh}
           title="Refresh data"
@@ -162,7 +167,7 @@ export default function TableToolbar<TField extends string = string>({
             className={refreshing ? "animate-spin" : undefined}
           />
           <span>{refreshing ? refreshingLabel : refreshLabel}</span>
-        </button>
+        </Button>
       )}
 
       {actions}

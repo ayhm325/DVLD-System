@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
+import { Button } from "../ui/button";
 import {
   Plus as PlusIcon,
   Globe as GlobeIcon,
@@ -188,14 +189,15 @@ export default function InternationalLicensesPage({
             </span>
 
             {onIssueNew && (
-              <button
+              <Button
                 type="button"
-                className="primary-button"
+                variant="default"
+                size="default"
                 onClick={onIssueNew}
               >
                 <PlusIcon size={16} />
                 <span>Issue International License</span>
-              </button>
+              </Button>
             )}
           </div>
         </div>

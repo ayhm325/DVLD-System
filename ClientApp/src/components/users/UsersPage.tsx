@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { UserPlus, CheckCircle2, X } from "lucide-react";
 import PageHero from "../common/PageHero";
+import { Button } from "../ui/button";
 import ErrorAlert from "../common/ErrorAlert";
 import ConfirmModal from "../common/ConfirmModal";
 import AccessDenied from "../common/AccessDenied";
@@ -369,9 +370,10 @@ export default function UsersPage({ accessToken, onNavigate }: UsersPageProps) {
                   : `${filteredAndSortedUsers.length} of ${users.length} Users`}
             </span>
 
-            <button
+            <Button
               type="button"
-              className="primary-button"
+              variant="default"
+              size="default"
               onClick={() => {
                 setActionError(null);
                 setSuccessBanner(null);
@@ -380,7 +382,7 @@ export default function UsersPage({ accessToken, onNavigate }: UsersPageProps) {
             >
               <UserPlus size={15} />
               <span>Add User</span>
-            </button>
+            </Button>
           </div>
         </div>
 
