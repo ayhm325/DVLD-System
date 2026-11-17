@@ -1,6 +1,7 @@
 import { CheckCircle2, ArrowLeft, RotateCcw } from 'lucide-react'
 import { formatCurrency } from '../../utils/formatters'
 import { Button } from '../ui'
+import SpecularCard from '../ui/SpecularCard'
 
 export interface RenewLicenseReceiptCardProps {
   oldLicenseId: number
@@ -24,7 +25,12 @@ export default function RenewLicenseReceiptCard({
   onRenewAnother,
 }: RenewLicenseReceiptCardProps) {
   return (
-    <div className="p-5 rounded-2xl border border-emerald-500/40 bg-emerald-950/30 text-emerald-200 shadow-xl space-y-4 animate-in fade-in duration-200">
+    <SpecularCard
+      variant="emerald"
+      radius={16}
+      active={true}
+      className="p-5 border border-emerald-500/40 bg-emerald-950/30 text-emerald-200 shadow-xl space-y-4 animate-in fade-in duration-200"
+    >
       <div className="flex items-start gap-3">
         <CheckCircle2 className="size-5 text-emerald-400 shrink-0 mt-0.5" />
         <div className="space-y-1 flex-1">
@@ -102,6 +108,6 @@ export default function RenewLicenseReceiptCard({
           </Button>
         )}
       </div>
-    </div>
+    </SpecularCard>
   )
 }

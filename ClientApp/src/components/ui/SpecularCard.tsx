@@ -126,12 +126,12 @@ export const SpecularCard = forwardRef<HTMLDivElement, SpecularCardProps>(
     const [mousePos, setMousePos] = useState({ x: -1000, y: -1000 })
     const [isHovered, setIsHovered] = useState(false)
     const [reducedMotion, setReducedMotion] = useState(() => {
-      if (typeof window === 'undefined') return false
+      if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
       return window.matchMedia('(prefers-reduced-motion: reduce)').matches
     })
 
     useEffect(() => {
-      if (typeof window === 'undefined') return
+      if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
       const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
       const listener = (e: MediaQueryListEvent) => setReducedMotion(e.matches)
       mq.addEventListener('change', listener)
@@ -155,8 +155,15 @@ export const SpecularCard = forwardRef<HTMLDivElement, SpecularCardProps>(
       (e: React.PointerEvent<HTMLDivElement>) => {
         onPointerEnter?.(e)
         setIsHovered(true)
+        if (!reducedMotion && followPointer) {
+          const rect = e.currentTarget.getBoundingClientRect()
+          setMousePos({
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top,
+          })
+        }
       },
-      [onPointerEnter],
+      [onPointerEnter, reducedMotion, followPointer],
     )
 
     const handlePointerLeave = useCallback(
@@ -198,30 +205,30 @@ export const SpecularCard = forwardRef<HTMLDivElement, SpecularCardProps>(
         }
         {...props}
       >
-        {/* 1. Specular Border Spotlight Layer */}
+        {/* 1. Laser-Sharp Specular Border Spotlight */}
         {!reducedMotion && (
           <div
-            className="pointer-events-none absolute -inset-px rounded-[inherit] transition-opacity duration-300 z-[1]"
+            className="pointer-events-none absolute inset-0 rounded-[inherit] transition-opacity duration-200 z-20"
             style={{
-              opacity: currentOpacity,
-              background: `radial-gradient(${spotlightSize}px circle at ${mousePos.x}px ${mousePos.y}px, ${colors.borderSpot}, transparent 70%)`,
+              border: '2px solid transparent',
+              background: `radial-gradient(${spotlightSize}px circle at ${mousePos.x}px ${mousePos.y}px, #ffffff 0%, ${colors.borderSpot} 35%, transparent 75%) border-box`,
               WebkitMask:
-                'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
-              WebkitMaskComposite: 'xor',
+                'linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0)',
+              WebkitMaskComposite: 'destination-out',
               maskComposite: 'exclude',
-              padding: '1.5px',
+              opacity: currentOpacity,
             }}
             aria-hidden="true"
           />
         )}
 
-        {/* 2. Specular Surface Ambient Glow */}
+        {/* 2. Glass Surface Specular Glare / Light Pool */}
         {!reducedMotion && (
           <div
-            className="pointer-events-none absolute inset-0 rounded-[inherit] transition-opacity duration-500 z-[1]"
+            className="pointer-events-none absolute inset-0 rounded-[inherit] transition-opacity duration-300 z-10"
             style={{
               opacity: currentOpacity * 0.9,
-              background: `radial-gradient(${spotlightSize * 1.5}px circle at ${mousePos.x}px ${mousePos.y}px, ${colors.surfaceSpot}, transparent 70%)`,
+              background: `radial-gradient(${spotlightSize * 1.3}px circle at ${mousePos.x}px ${mousePos.y}px, rgba(255, 255, 255, 0.16) 0%, ${colors.surfaceSpot} 35%, transparent 75%)`,
             }}
             aria-hidden="true"
           />

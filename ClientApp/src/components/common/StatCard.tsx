@@ -283,8 +283,13 @@ export default function StatCard({
     setTilt({ x: rotateX, y: rotateY });
   };
 
-  const handleMouseEnter = () => {
+  const handleMouseEnter = (e: React.MouseEvent<HTMLElement>) => {
     setIsHovered(true);
+    const rect = e.currentTarget.getBoundingClientRect();
+    setMousePos({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    });
   };
 
   const handleMouseLeave = () => {
@@ -341,30 +346,30 @@ export default function StatCard({
         }
       } : undefined}
     >
-      {/* Dynamic Specular Border Spotlight */}
+      {/* 1. Laser-Sharp Specular Border Spotlight */}
       {!reducedMotion && (
         <div
-          className="pointer-events-none absolute -inset-px rounded-[inherit] transition-opacity duration-300"
+          className="pointer-events-none absolute inset-0 rounded-[inherit] transition-opacity duration-200 z-20"
           style={{
-            opacity: isHovered ? 0.95 : active ? 0.75 : 0.25,
-            background: `radial-gradient(280px circle at ${mousePos.x}px ${mousePos.y}px, ${config.waveHighlight}, transparent 70%)`,
+            border: "2px solid transparent",
+            background: `radial-gradient(240px circle at ${mousePos.x}px ${mousePos.y}px, #ffffff 0%, ${config.waveHighlight} 35%, transparent 75%) border-box`,
             WebkitMask:
-              "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-            WebkitMaskComposite: "xor",
+              "linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0)",
+            WebkitMaskComposite: "destination-out",
             maskComposite: "exclude",
-            padding: "1.5px",
+            opacity: isHovered ? 1 : active ? 0.75 : 0,
           }}
           aria-hidden="true"
         />
       )}
 
-      {/* Dynamic Specular Surface Ambient Glow */}
+      {/* 2. Glass Surface Specular Glare / Light Pool */}
       {!reducedMotion && (
         <div
-          className="pointer-events-none absolute inset-0 rounded-[inherit] transition-opacity duration-500"
+          className="pointer-events-none absolute inset-0 rounded-[inherit] transition-opacity duration-300 z-10"
           style={{
-            opacity: isHovered ? 0.16 : active ? 0.12 : 0.04,
-            background: `radial-gradient(350px circle at ${mousePos.x}px ${mousePos.y}px, ${config.waveHighlight}, transparent 70%)`,
+            opacity: isHovered ? 0.85 : active ? 0.45 : 0,
+            background: `radial-gradient(350px circle at ${mousePos.x}px ${mousePos.y}px, rgba(255, 255, 255, 0.18) 0%, ${config.waveGlow} 40%, transparent 75%)`,
           }}
           aria-hidden="true"
         />

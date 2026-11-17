@@ -16,16 +16,35 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(
   (
     {
       className,
-      specular = false,
+      specular = true,
       specularVariant = 'default',
       specularProps,
       ...props
     },
     ref,
   ) => {
-    const cardElement = (
+    if (specular) {
+      return (
+        <SpecularCard
+          ref={ref}
+          variant={specularVariant}
+          radius={16}
+          intensity={0.65}
+          idleIntensity={0.12}
+          spotlightSize={340}
+          className={cn(
+            'w-full max-w-full min-w-0 rounded-2xl border border-blue-500/30 bg-[#0d182e]/90 shadow-[0_0_25px_rgba(0,140,255,0.08)] backdrop-blur-md text-white',
+            className,
+          )}
+          {...specularProps}
+          {...props}
+        />
+      )
+    }
+
+    return (
       <div
-        ref={specular ? undefined : ref}
+        ref={ref}
         className={cn(
           'w-full max-w-full min-w-0 rounded-2xl border border-blue-500/30 bg-[#0d182e]/90 shadow-[0_0_25px_rgba(0,140,255,0.08)] backdrop-blur-md text-white',
           className,
@@ -33,21 +52,6 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(
         {...props}
       />
     )
-
-    if (specular) {
-      return (
-        <SpecularCard
-          ref={ref}
-          variant={specularVariant}
-          radius={16}
-          {...specularProps}
-        >
-          {cardElement}
-        </SpecularCard>
-      )
-    }
-
-    return cardElement
   },
 )
 Card.displayName = 'Card'

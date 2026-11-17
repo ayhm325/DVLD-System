@@ -15,6 +15,13 @@
   transition: width 240ms ease, padding 240ms ease, transform 240ms ease;
 }
 
+.dvld-sidebar-header,
+.sidebar-nav-container,
+.dvld-sidebar-footer {
+  position: relative;
+  z-index: 2;
+}
+
 .dvld-sidebar-header { display: flex; flex: 0 0 auto; align-items: center; gap: 7px; padding: 2px 1px 14px; }
 .dvld-brand { display: flex; align-items: center; gap: 11px; min-width: 0; flex: 1; }
 .dvld-brand-mark { display: grid; place-items: center; width: 42px; height: 42px; flex: 0 0 42px; color: #fff; border-radius: 14px; background: linear-gradient(140deg, var(--dvld-primary), #2563eb); box-shadow: 0 7px 20px rgba(59, 130, 246, .28); }
