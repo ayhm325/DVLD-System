@@ -17,6 +17,7 @@ import StatusBadge from '../common/StatusBadge'
 import { getActiveStatusProps } from '../../utils/status'
 import { formatDate } from '../../utils/formatters'
 import { Button } from '../ui/button'
+import SpecularCard from '../ui/SpecularCard'
 
 export interface InternationalLicenseCardProps {
   license: InternationalLicense
@@ -35,8 +36,11 @@ export default function InternationalLicenseCard({
   const statusProps = getActiveStatusProps(license.isActive)
 
   return (
-    <div
-      className={`group relative flex flex-col rounded-2xl bg-gradient-to-br from-[#0b172d] via-[#101b33] to-[#071120] border transition-all duration-300 shadow-xl overflow-hidden ${
+    <SpecularCard
+      variant={license.isActive ? 'blue' : 'slate'}
+      radius={16}
+      holographic={license.isActive}
+      className={`group relative flex flex-col bg-gradient-to-br from-[#0b172d] via-[#101b33] to-[#071120] border transition-all duration-300 shadow-xl overflow-hidden ${
         license.isActive
           ? 'border-[#203a66] hover:border-blue-500/50 hover:shadow-[0_8px_30px_rgba(59,130,246,0.15)]'
           : 'border-[#233148] hover:border-slate-500/40 opacity-90'
@@ -240,6 +244,6 @@ export default function InternationalLicenseCard({
           {isExpanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
         </Button>
       </div>
-    </div>
+    </SpecularCard>
   )
 }

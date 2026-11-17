@@ -1,17 +1,54 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
+import SpecularCard, {
+  type SpecularCardProps,
+  type SpecularCardVariant,
+} from './SpecularCard'
 
-const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
-    <div
-      ref={ref}
-      className={cn(
-        'w-full max-w-full min-w-0 rounded-2xl border border-blue-500/30 bg-[#0d182e]/90 shadow-[0_0_25px_rgba(0,140,255,0.08)] backdrop-blur-md text-white',
-        className,
-      )}
-      {...props}
-    />
-  ),
+export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
+  /** When true, wraps the card in a specular border reflection container */
+  specular?: boolean
+  specularVariant?: SpecularCardVariant
+  specularProps?: Partial<SpecularCardProps>
+}
+
+const Card = React.forwardRef<HTMLDivElement, CardProps>(
+  (
+    {
+      className,
+      specular = false,
+      specularVariant = 'default',
+      specularProps,
+      ...props
+    },
+    ref,
+  ) => {
+    const cardElement = (
+      <div
+        ref={specular ? undefined : ref}
+        className={cn(
+          'w-full max-w-full min-w-0 rounded-2xl border border-blue-500/30 bg-[#0d182e]/90 shadow-[0_0_25px_rgba(0,140,255,0.08)] backdrop-blur-md text-white',
+          className,
+        )}
+        {...props}
+      />
+    )
+
+    if (specular) {
+      return (
+        <SpecularCard
+          ref={ref}
+          variant={specularVariant}
+          radius={16}
+          {...specularProps}
+        >
+          {cardElement}
+        </SpecularCard>
+      )
+    }
+
+    return cardElement
+  },
 )
 Card.displayName = 'Card'
 
@@ -66,4 +103,12 @@ const CardFooter = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
 )
 CardFooter.displayName = 'CardFooter'
 
-export { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
+export {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+  SpecularCard,
+}

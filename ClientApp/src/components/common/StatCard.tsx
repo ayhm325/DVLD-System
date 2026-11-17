@@ -253,6 +253,7 @@ export default function StatCard({
   active,
 }: StatCardProps) {
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
+  const [mousePos, setMousePos] = useState({ x: 100, y: 50 });
   const [isHovered, setIsHovered] = useState(false);
   const filterUniqueId = useId().replace(/:/g, "");
   const [reducedMotion, setReducedMotion] = useState(() => {
@@ -273,6 +274,7 @@ export default function StatCard({
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
+    setMousePos({ x, y });
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
     // Subtle, elegant 3D perspective tilt (-3.5 to +3.5 degrees)
@@ -339,6 +341,35 @@ export default function StatCard({
         }
       } : undefined}
     >
+      {/* Dynamic Specular Border Spotlight */}
+      {!reducedMotion && (
+        <div
+          className="pointer-events-none absolute -inset-px rounded-[inherit] transition-opacity duration-300"
+          style={{
+            opacity: isHovered ? 0.95 : active ? 0.75 : 0.25,
+            background: `radial-gradient(280px circle at ${mousePos.x}px ${mousePos.y}px, ${config.waveHighlight}, transparent 70%)`,
+            WebkitMask:
+              "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+            WebkitMaskComposite: "xor",
+            maskComposite: "exclude",
+            padding: "1.5px",
+          }}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Dynamic Specular Surface Ambient Glow */}
+      {!reducedMotion && (
+        <div
+          className="pointer-events-none absolute inset-0 rounded-[inherit] transition-opacity duration-500"
+          style={{
+            opacity: isHovered ? 0.16 : active ? 0.12 : 0.04,
+            background: `radial-gradient(350px circle at ${mousePos.x}px ${mousePos.y}px, ${config.waveHighlight}, transparent 70%)`,
+          }}
+          aria-hidden="true"
+        />
+      )}
+
       {/* Distinct Glowing Top Border Highlight */}
       <div
         className={cn(

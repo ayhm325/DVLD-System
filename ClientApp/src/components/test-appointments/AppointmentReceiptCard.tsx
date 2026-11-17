@@ -1,5 +1,6 @@
 import { CheckCircle2 } from 'lucide-react'
 import { Button } from '../ui/button'
+import SpecularCard from '../ui/SpecularCard'
 import { formatAvailableDateLabel } from '../../utils/jordanTime'
 
 export interface BookedAppointmentDetails {
@@ -27,7 +28,12 @@ export default function AppointmentReceiptCard({
   onNavigate,
 }: AppointmentReceiptCardProps) {
   return (
-    <div className="rounded-2xl border border-emerald-500/40 bg-emerald-950/30 p-5 space-y-3 shadow-lg animate-in fade-in">
+    <SpecularCard
+      variant="emerald"
+      radius={16}
+      active={true}
+      className="border border-emerald-500/40 bg-emerald-950/30 p-5 space-y-3 shadow-lg animate-in fade-in"
+    >
       <div className="flex items-center gap-3 text-emerald-300 font-bold text-sm">
         <CheckCircle2 className="size-5 text-emerald-400 shrink-0" />
         <span>
@@ -90,6 +96,6 @@ export default function AppointmentReceiptCard({
           </Button>
         )}
       </div>
-    </div>
+    </SpecularCard>
   )
 }
