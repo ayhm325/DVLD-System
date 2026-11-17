@@ -1036,4 +1036,37 @@ public sealed class LocalDrivingLicenseApplicationServiceTests
 
         _repository.Verify(x => x.GetByIdAsync(5, cts.Token), Times.Once);
     }
+
+    [Fact]
+    public async Task GetSummaryAsync_WhenSuccessful_ReturnsSummaryDto()
+    {
+        using var cts = new CancellationTokenSource();
+        var expected = new LocalDrivingLicenseApplicationSummaryDto
+        {
+            TotalApplications = 12,
+            InProgressCount = 5,
+            ReadyForIssuanceCount = 3
+        };
+
+        _repository.Setup(x => x.GetSummaryAsync(cts.Token)).ReturnsAsync(expected);
+
+        var result = await CreateService().GetSummaryAsync(cts.Token);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
+        Assert.Equal(12, result.Value.TotalApplications);
+        Assert.Equal(5, result.Value.InProgressCount);
+        Assert.Equal(3, result.Value.ReadyForIssuanceCount);
+        _repository.Verify(x => x.GetSummaryAsync(cts.Token), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_WhenRepositoryThrows_PropagatesException()
+    {
+        _repository.Setup(x => x.GetSummaryAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("Database error"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            CreateService().GetSummaryAsync());
+    }
 }

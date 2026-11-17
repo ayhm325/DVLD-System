@@ -1,3 +1,11 @@
+export type WorkflowStage = 'All' | 'InProgress' | 'ReadyForIssuance'
+
+export type LocalDrivingLicenseApplicationSummary = {
+  totalApplications: number
+  inProgressCount: number
+  readyForIssuanceCount: number
+}
+
 export type LocalDrivingLicenseApplication = {
   localDrivingLicenseApplicationId: number
   licenseClassId: number

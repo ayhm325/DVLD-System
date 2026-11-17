@@ -72,6 +72,13 @@ public sealed class LocalDrivingLicenseApplicationService(
         return GetAllInternalAsync(() => _repository.GetAllAsync(request, cancellationToken), cancellationToken);
     }
 
+    public async Task<Result<LocalDrivingLicenseApplicationSummaryDto>> GetSummaryAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var summary = await _repository.GetSummaryAsync(cancellationToken);
+        return Result<LocalDrivingLicenseApplicationSummaryDto>.Success(summary);
+    }
+
     private async Task<Result<PagedResult<LocalDrivingLicenseApplicationListDto>>>
     GetAllInternalAsync(Func<Task<PagedResult<LocalDrivingLicenseApplication>>> fetcher, CancellationToken cancellationToken = default)
     {

@@ -9,6 +9,13 @@ namespace Infrastructure.Repositories;
 
 public sealed class LocalDrivingLicenseApplicationRepository : ILocalDrivingLicenseApplicationRepository
 {
+    private static readonly int[] RequiredTestTypeIds =
+    [
+        (int)TestTypeEnum.Theory,
+        (int)TestTypeEnum.Written,
+        (int)TestTypeEnum.Practical
+    ];
+
     private readonly DVLDDbContext _context;
 
     public LocalDrivingLicenseApplicationRepository(DVLDDbContext context)
@@ -55,6 +62,11 @@ public sealed class LocalDrivingLicenseApplicationRepository : ILocalDrivingLice
         if (request.LicenseClassId.HasValue && request.LicenseClassId > 0)
         {
             query = query.Where(x => x.LicenseClassID == request.LicenseClassId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.WorkflowStage))
+        {
+            query = ApplyWorkflowStageFilter(query, request.WorkflowStage);
         }
 
         if (!string.IsNullOrWhiteSpace(request.SearchQuery))
@@ -129,6 +141,69 @@ public sealed class LocalDrivingLicenseApplicationRepository : ILocalDrivingLice
         };
     }
 
+    public async Task<LocalDrivingLicenseApplicationSummaryDto> GetSummaryAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var baseQuery = _context.LocalDrivingLicenseApplications.AsNoTracking();
+
+        var totalApplications = await baseQuery.CountAsync(cancellationToken);
+        var inProgressCount = await ApplyWorkflowStageFilter(baseQuery, "InProgress")
+            .CountAsync(cancellationToken);
+        var readyForIssuanceCount = await ApplyWorkflowStageFilter(baseQuery, "ReadyForIssuance")
+            .CountAsync(cancellationToken);
+
+        return new LocalDrivingLicenseApplicationSummaryDto
+        {
+            TotalApplications = totalApplications,
+            InProgressCount = inProgressCount,
+            ReadyForIssuanceCount = readyForIssuanceCount
+        };
+    }
+
+    private IQueryable<LocalDrivingLicenseApplication> ApplyWorkflowStageFilter(
+        IQueryable<LocalDrivingLicenseApplication> query,
+        string? workflowStage)
+    {
+        if (string.IsNullOrWhiteSpace(workflowStage))
+            return query;
+
+        var stage = workflowStage.Trim();
+
+        if (string.Equals(stage, "InProgress", StringComparison.OrdinalIgnoreCase))
+        {
+            return query.Where(x =>
+                x.Application.ApplicationStatus == AppStatus.New &&
+                !_context.Licenses.Any(l => l.ApplicationID == x.ApplicationID) &&
+                _context.Tests
+                    .Where(t =>
+                        t.TestAppointment != null &&
+                        t.TestAppointment.LocalDrivingLicenseApplicationID == x.LocalDrivingLicenseApplicationID &&
+                        t.TestResult &&
+                        RequiredTestTypeIds.Contains(t.TestAppointment.TestTypeID))
+                    .Select(t => t.TestAppointment!.TestTypeID)
+                    .Distinct()
+                    .Count() < RequiredTestTypeIds.Length);
+        }
+
+        if (string.Equals(stage, "ReadyForIssuance", StringComparison.OrdinalIgnoreCase))
+        {
+            return query.Where(x =>
+                x.Application.ApplicationStatus == AppStatus.New &&
+                !_context.Licenses.Any(l => l.ApplicationID == x.ApplicationID) &&
+                _context.Tests
+                    .Where(t =>
+                        t.TestAppointment != null &&
+                        t.TestAppointment.LocalDrivingLicenseApplicationID == x.LocalDrivingLicenseApplicationID &&
+                        t.TestResult &&
+                        RequiredTestTypeIds.Contains(t.TestAppointment.TestTypeID))
+                    .Select(t => t.TestAppointment!.TestTypeID)
+                    .Distinct()
+                    .Count() == RequiredTestTypeIds.Length);
+        }
+
+        return query;
+    }
+
     public Task<LocalDrivingLicenseApplication?> GetByIdAsync(int id, CancellationToken cancellationToken = default) =>
         id <= 0
             ? Task.FromResult<LocalDrivingLicenseApplication?>(null)
@@ -196,13 +271,17 @@ public sealed class LocalDrivingLicenseApplicationRepository : ILocalDrivingLice
                 x.TestAppointment != null &&
                 ids.Contains(
                     x.TestAppointment.LocalDrivingLicenseApplicationID) &&
-                x.TestResult == true)
+                x.TestResult &&
+                RequiredTestTypeIds.Contains(x.TestAppointment.TestTypeID))
             .GroupBy(x =>
                 x.TestAppointment!.LocalDrivingLicenseApplicationID)
             .Select(g => new
             {
                 LocalApplicationId = g.Key,
-                Count = g.Count()
+                Count = g
+                    .Select(x => x.TestAppointment!.TestTypeID)
+                    .Distinct()
+                    .Count()
             })
             .ToDictionaryAsync(
                 x => x.LocalApplicationId,

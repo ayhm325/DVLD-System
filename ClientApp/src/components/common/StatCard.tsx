@@ -49,6 +49,8 @@ export interface StatCardProps {
   showWaveform?: boolean;
   /** Optional click handler */
   onClick?: () => void;
+  /** Whether this interactive card is currently selected/active */
+  active?: boolean;
   /** Backward-compatible flag (always uses premium neon design) */
   neon?: boolean;
 }
@@ -248,6 +250,7 @@ export default function StatCard({
   loading = false,
   showWaveform = true,
   onClick,
+  active,
 }: StatCardProps) {
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
   const [isHovered, setIsHovered] = useState(false);
@@ -296,6 +299,7 @@ export default function StatCard({
   const normalized = normalizeVariant(variant);
   const config = variantConfig[normalized];
   const titleText = title ?? label ?? "";
+  const resolvedBadge = badge ?? (active ? "Active" : undefined);
 
   const cardStyle: CSSProperties = {
     background: config.background,
@@ -317,10 +321,12 @@ export default function StatCard({
       className={cn(
         "stat-card group relative flex min-h-34 min-w-0 flex-col justify-between overflow-hidden rounded-2xl border-[1.5px] transition-all duration-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300",
         onClick ? "cursor-pointer" : "cursor-default",
+        active && "ring-2 ring-blue-400/80 shadow-[0_0_24px_rgba(59,130,246,0.3)]",
         className,
       )}
       style={cardStyle}
       role={onClick ? "button" : undefined}
+      aria-pressed={onClick && active !== undefined ? active : undefined}
       tabIndex={onClick ? 0 : undefined}
       onMouseMove={handleMouseMove}
       onMouseEnter={handleMouseEnter}
@@ -425,20 +431,20 @@ export default function StatCard({
         </div>
       </div>
 
-      {/* Bottom Right Badge (if provided) */}
-      {badge && (
+      {/* Bottom Right Badge (if provided or active) */}
+      {resolvedBadge && (
         <div className="relative z-10 self-end mt-2">
-          {typeof badge === "string" ? (
+          {typeof resolvedBadge === "string" ? (
             <span
               className={cn(
                 "inline-flex items-center text-[11px] font-bold px-2.5 py-0.5 rounded-full border",
                 config.badgeClass,
               )}
             >
-              {badge}
+              {resolvedBadge}
             </span>
           ) : (
-            badge
+            resolvedBadge
           )}
         </div>
       )}

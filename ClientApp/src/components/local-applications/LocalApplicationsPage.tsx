@@ -20,20 +20,24 @@ import {
 } from '../ui/select'
 import {
   getLocalDrivingLicenseApplications,
+  getLocalDrivingLicenseApplicationsSummary,
   deleteLocalDrivingLicenseApplication,
   cancelLocalDrivingLicenseApplication,
 } from '../../services/localDrivingLicenseApplicationService'
 import {
   getLicenseDetailsByLocalAppId,
 } from '../../services/licenseService'
-import type { LocalDrivingLicenseApplication } from '../../types/LocalDrivingLicenseApplication'
+import type {
+  LocalDrivingLicenseApplication,
+  WorkflowStage,
+} from '../../types/LocalDrivingLicenseApplication'
 import type { License } from '../../types/License'
 import { formatNumber } from '../../utils/formatters'
 import { useAsyncData, usePagination, useDebounce } from '../../hooks'
 import {
   Plus as PlusIcon,
   FileText as ApplicationsIcon,
-  Check as CheckIcon,
+  Award as AwardIcon,
   Clock as ClockIcon,
 } from 'lucide-react'
 import './local-applications.css'
@@ -105,6 +109,7 @@ export default function LocalApplicationsPage({
   const [search, setSearch] = useState('')
   const [searchBy, setSearchBy] = useState<SearchBy>('all')
   const [status, setStatus] = useState('All')
+  const [workflowStage, setWorkflowStage] = useState<WorkflowStage>('All')
 
   const debouncedSearch = useDebounce(search, 300)
 
@@ -118,7 +123,9 @@ export default function LocalApplicationsPage({
   // Whenever debounced search or filters change, ensure pagination resets to page 1
   useEffect(() => {
     resetPage()
-  }, [debouncedSearch, searchBy, status, resetPage])
+  }, [debouncedSearch, searchBy, status, workflowStage, resetPage])
+
+  const effectiveStatus = workflowStage === 'All' ? status : 'All'
 
   const fetcher = useCallback(() => {
     return getLocalDrivingLicenseApplications(
@@ -127,9 +134,11 @@ export default function LocalApplicationsPage({
       pagination.pageSize,
       debouncedSearch,
       searchBy,
-      status,
+      effectiveStatus,
+      undefined,
+      workflowStage,
     )
-  }, [accessToken, pagination.page, pagination.pageSize, debouncedSearch, searchBy, status])
+  }, [accessToken, pagination.page, pagination.pageSize, debouncedSearch, searchBy, effectiveStatus, workflowStage])
 
   const {
     data: page,
@@ -138,8 +147,23 @@ export default function LocalApplicationsPage({
     refresh,
   } = useAsyncData(fetcher, {
     enabled: Boolean(accessToken),
-    dependencies: [pagination.page, pagination.pageSize, debouncedSearch, searchBy, status],
+    dependencies: [pagination.page, pagination.pageSize, debouncedSearch, searchBy, effectiveStatus, workflowStage],
     defaultErrorMessage: 'Could not load local applications.',
+  })
+
+  const summaryFetcher = useCallback(() => {
+    return getLocalDrivingLicenseApplicationsSummary(accessToken)
+  }, [accessToken])
+
+  const {
+    data: summary,
+    loading: summaryLoading,
+    error: summaryError,
+    refresh: refreshSummary,
+  } = useAsyncData(summaryFetcher, {
+    enabled: Boolean(accessToken),
+    dependencies: [accessToken],
+    defaultErrorMessage: 'Could not load application summary.',
   })
 
   // Auto-redirect to dedicated appointments page if returning from ScheduleAppointmentPage
@@ -154,8 +178,19 @@ export default function LocalApplicationsPage({
   }, [reopenModalTarget, onClearReopenModalTarget, onManageTestAppointments])
 
   const isFiltered = useMemo(() => {
-    return search.trim().length > 0 || searchBy !== 'all' || status !== 'All'
-  }, [search, searchBy, status])
+    return search.trim().length > 0 || searchBy !== 'all' || (workflowStage === 'All' && status !== 'All')
+  }, [search, searchBy, status, workflowStage])
+
+  const handleWorkflowStageChange = useCallback(
+    (nextStage: WorkflowStage) => {
+      setWorkflowStage(nextStage)
+      if (nextStage !== 'All') {
+        setStatus('All')
+      }
+      pagination.resetPage()
+    },
+    [pagination],
+  )
 
   const handleResetFilters = useCallback(() => {
     setSearch('')
@@ -181,6 +216,7 @@ export default function LocalApplicationsPage({
 
   function refreshApplications() {
     void refresh()
+    void refreshSummary()
   }
 
   function returnToList(saved: boolean) {
@@ -188,6 +224,7 @@ export default function LocalApplicationsPage({
     if (saved) {
       pagination.resetPage()
       void refresh()
+      void refreshSummary()
     }
   }
 
@@ -289,28 +326,30 @@ export default function LocalApplicationsPage({
           label="Total Applications"
           variant="amber"
           icon={<ApplicationsIcon size={20} />}
-          value={loading ? '...' : error ? '—' : formatNumber(page?.totalCount ?? 0)}
-          description="Recorded applications in DVLD"
+          value={summaryLoading ? '...' : summaryError || !summary ? '—' : formatNumber(summary.totalApplications)}
+          description="All recorded local applications"
+          active={workflowStage === 'All'}
+          onClick={() => handleWorkflowStageChange('All')}
         />
 
         <StatCard
-          label="Loaded on Page"
-          variant="emerald"
-          icon={<CheckIcon size={20} />}
-          value={loading ? '...' : error ? '—' : formatNumber(page?.items.length ?? 0)}
-          description={
-            error
-              ? '—'
-              : `Applications on page ${page?.pageNumber ?? 1} of ${page?.totalPages ?? 1}`
-          }
-        />
-
-        <StatCard
-          label="Required Tests"
+          label="In Progress"
           variant="slate"
           icon={<ClockIcon size={20} />}
-          value="3"
-          description="Vision, written, and street tests"
+          value={summaryLoading ? '...' : summaryError || !summary ? '—' : formatNumber(summary.inProgressCount)}
+          description="Active applications completing tests"
+          active={workflowStage === 'InProgress'}
+          onClick={() => handleWorkflowStageChange('InProgress')}
+        />
+
+        <StatCard
+          label="Ready for Issuance"
+          variant="emerald"
+          icon={<AwardIcon size={20} />}
+          value={summaryLoading ? '...' : summaryError || !summary ? '—' : formatNumber(summary.readyForIssuanceCount)}
+          description="All 3 tests passed, awaiting license"
+          active={workflowStage === 'ReadyForIssuance'}
+          onClick={() => handleWorkflowStageChange('ReadyForIssuance')}
         />
       </StatsGrid>
 
@@ -359,14 +398,15 @@ export default function LocalApplicationsPage({
           filters={
             <div style={{ minWidth: 140 }} className="shrink-0">
               <Select
-                value={status}
+                value={effectiveStatus}
+                disabled={workflowStage !== 'All'}
                 onValueChange={(val) => {
                   setStatus(val)
                   pagination.resetPage()
                 }}
               >
                 <SelectTrigger
-                  className="h-10 min-h-[40px] w-full bg-[#111e33] border-[#223656] text-xs text-white hover:border-blue-500/50 hover:bg-[#14233c] focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 rounded-lg"
+                  className="h-10 min-h-[40px] w-full bg-[#111e33] border-[#223656] text-xs text-white hover:border-blue-500/50 hover:bg-[#14233c] focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 rounded-lg disabled:opacity-50"
                   aria-label="Filter by application status"
                 >
                   <SelectValue />

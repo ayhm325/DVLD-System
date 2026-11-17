@@ -676,11 +676,11 @@ public sealed class LocalDrivingLicenseApplicationRepositoryTests
     {
         var seed = await SeedLocalApplicationAsync();
 
-        await SeedTestAsync(seed.LocalApplicationId, true);
+        await SeedTestAsync(seed.LocalApplicationId, true, TestTypeEnum.Theory);
 
-        await SeedTestAsync(seed.LocalApplicationId, true);
+        await SeedTestAsync(seed.LocalApplicationId, true, TestTypeEnum.Written);
 
-        await SeedTestAsync(seed.LocalApplicationId, false);
+        await SeedTestAsync(seed.LocalApplicationId, false, TestTypeEnum.Practical);
 
         await using var context = _database.CreateContext();
 
@@ -700,13 +700,13 @@ public sealed class LocalDrivingLicenseApplicationRepositoryTests
 
         var second = await SeedLocalApplicationAsync();
 
-        await SeedTestAsync(first.LocalApplicationId, true);
+        await SeedTestAsync(first.LocalApplicationId, true, TestTypeEnum.Theory);
 
-        await SeedTestAsync(first.LocalApplicationId, true);
+        await SeedTestAsync(first.LocalApplicationId, true, TestTypeEnum.Written);
 
-        await SeedTestAsync(second.LocalApplicationId, true);
+        await SeedTestAsync(second.LocalApplicationId, true, TestTypeEnum.Theory);
 
-        await SeedTestAsync(second.LocalApplicationId, false);
+        await SeedTestAsync(second.LocalApplicationId, false, TestTypeEnum.Written);
 
         await using var context = _database.CreateContext();
 
@@ -1295,7 +1295,7 @@ public sealed class LocalDrivingLicenseApplicationRepositoryTests
 
         return new ApplicationSeed { ApplicationId = application.ApplicationID };
     }
-    private async Task SeedTestAsync(int localApplicationId, bool testResult)
+    private async Task SeedTestAsync(int localApplicationId, bool testResult, TestTypeEnum? requestedTestType = null)
     {
         await using var context = _database.CreateContext();
 
@@ -1308,7 +1308,9 @@ public sealed class LocalDrivingLicenseApplicationRepositoryTests
         }
         // TEST TYPE
 
-        var testType = await context.TestTypes.FirstOrDefaultAsync();
+        var testType = requestedTestType.HasValue
+            ? await EnsureRequiredTestTypeAsync(context, requestedTestType.Value)
+            : await context.TestTypes.FirstOrDefaultAsync();
         if (testType is null)
         {
             testType = new TestType { TestTypeTitle = $"Integration Test {Guid.NewGuid():N}", TestTypeDescription = "Local driving license repository integration test", TestTypeFees = 10m };
@@ -1357,6 +1359,252 @@ public sealed class LocalDrivingLicenseApplicationRepositoryTests
     {
         public int ApplicationId { get; init; }
     }
+    [Fact]
+    public async Task GetPassedTestCountsAsync_ShouldCountDistinctRequiredTestTypesOnly()
+    {
+        var duplicateTheory = await SeedLocalApplicationAsync();
+        await SeedTestAsync(duplicateTheory.LocalApplicationId, true, TestTypeEnum.Theory);
+        await SeedTestAsync(duplicateTheory.LocalApplicationId, true, TestTypeEnum.Theory);
+        await SeedTestAsync(duplicateTheory.LocalApplicationId, true, TestTypeEnum.Theory);
+
+        var twoTheoryOneWritten = await SeedLocalApplicationAsync();
+        await SeedTestAsync(twoTheoryOneWritten.LocalApplicationId, true, TestTypeEnum.Theory);
+        await SeedTestAsync(twoTheoryOneWritten.LocalApplicationId, true, TestTypeEnum.Theory);
+        await SeedTestAsync(twoTheoryOneWritten.LocalApplicationId, true, TestTypeEnum.Written);
+        await SeedTestAsync(twoTheoryOneWritten.LocalApplicationId, false, TestTypeEnum.Practical);
+
+        var allThreePlusDuplicate = await SeedLocalApplicationAsync();
+        await SeedTestAsync(allThreePlusDuplicate.LocalApplicationId, true, TestTypeEnum.Theory);
+        await SeedTestAsync(allThreePlusDuplicate.LocalApplicationId, true, TestTypeEnum.Theory);
+        await SeedTestAsync(allThreePlusDuplicate.LocalApplicationId, true, TestTypeEnum.Written);
+        await SeedTestAsync(allThreePlusDuplicate.LocalApplicationId, true, TestTypeEnum.Practical);
+
+        var nonRequiredTypeApp = await SeedLocalApplicationAsync();
+        await SeedNonRequiredTestAsync(nonRequiredTypeApp.LocalApplicationId, true);
+
+        await using var context = _database.CreateContext();
+        var repository = new LocalDrivingLicenseApplicationRepository(context);
+
+        var result = await repository.GetPassedTestCountsAsync([
+            duplicateTheory.LocalApplicationId,
+            twoTheoryOneWritten.LocalApplicationId,
+            allThreePlusDuplicate.LocalApplicationId,
+            nonRequiredTypeApp.LocalApplicationId
+        ]);
+
+        Assert.Equal(1, result[duplicateTheory.LocalApplicationId]);
+        Assert.Equal(2, result[twoTheoryOneWritten.LocalApplicationId]);
+        Assert.Equal(3, result[allThreePlusDuplicate.LocalApplicationId]);
+        Assert.False(result.ContainsKey(nonRequiredTypeApp.LocalApplicationId));
+    }
+
+    [Fact]
+    public async Task GetAllAsync_WithWorkflowStage_ClassifiesAndFiltersCorrectly()
+    {
+        var app0 = await SeedLocalApplicationAsync();
+
+        var app1 = await SeedLocalApplicationAsync();
+        await SeedTestAsync(app1.LocalApplicationId, true, TestTypeEnum.Theory);
+
+        var app2 = await SeedLocalApplicationAsync();
+        await SeedTestAsync(app2.LocalApplicationId, true, TestTypeEnum.Theory);
+        await SeedTestAsync(app2.LocalApplicationId, true, TestTypeEnum.Written);
+
+        var appDuplicate3 = await SeedLocalApplicationAsync();
+        await SeedTestAsync(appDuplicate3.LocalApplicationId, true, TestTypeEnum.Theory);
+        await SeedTestAsync(appDuplicate3.LocalApplicationId, true, TestTypeEnum.Theory);
+        await SeedTestAsync(appDuplicate3.LocalApplicationId, true, TestTypeEnum.Theory);
+
+        var appReady = await SeedLocalApplicationAsync();
+        await SeedTestAsync(appReady.LocalApplicationId, true, TestTypeEnum.Theory);
+        await SeedTestAsync(appReady.LocalApplicationId, true, TestTypeEnum.Written);
+        await SeedTestAsync(appReady.LocalApplicationId, true, TestTypeEnum.Practical);
+
+        var appCancelled = await SeedLocalApplicationAsync();
+        await SetApplicationStatusAsync(appCancelled.ApplicationId, AppStatus.Cancelled);
+
+        var appCompleted = await SeedLocalApplicationAsync();
+        await SeedTestAsync(appCompleted.LocalApplicationId, true, TestTypeEnum.Theory);
+        await SeedTestAsync(appCompleted.LocalApplicationId, true, TestTypeEnum.Written);
+        await SeedTestAsync(appCompleted.LocalApplicationId, true, TestTypeEnum.Practical);
+        await SetApplicationStatusAsync(appCompleted.ApplicationId, AppStatus.Completed);
+
+        var appIssued = await SeedLocalApplicationAsync();
+        await SeedTestAsync(appIssued.LocalApplicationId, true, TestTypeEnum.Theory);
+        await SeedTestAsync(appIssued.LocalApplicationId, true, TestTypeEnum.Written);
+        await SeedTestAsync(appIssued.LocalApplicationId, true, TestTypeEnum.Practical);
+        await SeedLicenseForApplicationAsync(appIssued.ApplicationId, appIssued.PersonId, appIssued.LicenseClassId, appIssued.CreatedByUserId);
+
+        await using var context = _database.CreateContext();
+        var repository = new LocalDrivingLicenseApplicationRepository(context);
+
+        var inProgress = await repository.GetAllAsync(new LocalDrivingLicenseApplicationQueryRequest
+        {
+            PageNumber = 1,
+            PageSize = 100,
+            WorkflowStage = "InProgress"
+        });
+
+        Assert.Contains(inProgress.Items, x => x.LocalDrivingLicenseApplicationID == app0.LocalApplicationId);
+        Assert.Contains(inProgress.Items, x => x.LocalDrivingLicenseApplicationID == app1.LocalApplicationId);
+        Assert.Contains(inProgress.Items, x => x.LocalDrivingLicenseApplicationID == app2.LocalApplicationId);
+        Assert.Contains(inProgress.Items, x => x.LocalDrivingLicenseApplicationID == appDuplicate3.LocalApplicationId);
+        Assert.DoesNotContain(inProgress.Items, x => x.LocalDrivingLicenseApplicationID == appReady.LocalApplicationId);
+        Assert.DoesNotContain(inProgress.Items, x => x.LocalDrivingLicenseApplicationID == appCancelled.LocalApplicationId);
+        Assert.DoesNotContain(inProgress.Items, x => x.LocalDrivingLicenseApplicationID == appCompleted.LocalApplicationId);
+        Assert.DoesNotContain(inProgress.Items, x => x.LocalDrivingLicenseApplicationID == appIssued.LocalApplicationId);
+
+        var ready = await repository.GetAllAsync(new LocalDrivingLicenseApplicationQueryRequest
+        {
+            PageNumber = 1,
+            PageSize = 100,
+            WorkflowStage = "ReadyForIssuance"
+        });
+
+        Assert.Contains(ready.Items, x => x.LocalDrivingLicenseApplicationID == appReady.LocalApplicationId);
+        Assert.DoesNotContain(ready.Items, x => x.LocalDrivingLicenseApplicationID == app0.LocalApplicationId);
+        Assert.DoesNotContain(ready.Items, x => x.LocalDrivingLicenseApplicationID == appDuplicate3.LocalApplicationId);
+        Assert.DoesNotContain(ready.Items, x => x.LocalDrivingLicenseApplicationID == appCancelled.LocalApplicationId);
+        Assert.DoesNotContain(ready.Items, x => x.LocalDrivingLicenseApplicationID == appCompleted.LocalApplicationId);
+        Assert.DoesNotContain(ready.Items, x => x.LocalDrivingLicenseApplicationID == appIssued.LocalApplicationId);
+
+        var summary = await repository.GetSummaryAsync();
+        Assert.True(summary.TotalApplications >= 8);
+        Assert.True(summary.InProgressCount >= 4);
+        Assert.True(summary.ReadyForIssuanceCount >= 1);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_WithWorkflowStageAndPaginationSearchLicenseClass_FiltersAccurately()
+    {
+        var readyA = await SeedLocalApplicationAsync();
+        await SeedTestAsync(readyA.LocalApplicationId, true, TestTypeEnum.Theory);
+        await SeedTestAsync(readyA.LocalApplicationId, true, TestTypeEnum.Written);
+        await SeedTestAsync(readyA.LocalApplicationId, true, TestTypeEnum.Practical);
+
+        var readyB = await SeedLocalApplicationAsync();
+        await SeedTestAsync(readyB.LocalApplicationId, true, TestTypeEnum.Theory);
+        await SeedTestAsync(readyB.LocalApplicationId, true, TestTypeEnum.Written);
+        await SeedTestAsync(readyB.LocalApplicationId, true, TestTypeEnum.Practical);
+
+        await using var context = _database.CreateContext();
+        var repository = new LocalDrivingLicenseApplicationRepository(context);
+
+        var byClassAndSearch = await repository.GetAllAsync(new LocalDrivingLicenseApplicationQueryRequest
+        {
+            PageNumber = 1,
+            PageSize = 1,
+            WorkflowStage = "ReadyForIssuance",
+            LicenseClassId = readyA.LicenseClassId,
+            SearchQuery = readyA.LocalApplicationId.ToString(),
+            SearchBy = "appid"
+        });
+
+        Assert.Equal(1, byClassAndSearch.TotalCount);
+        var item = Assert.Single(byClassAndSearch.Items);
+        Assert.Equal(readyA.LocalApplicationId, item.LocalDrivingLicenseApplicationID);
+    }
+
+    private async Task SetApplicationStatusAsync(int applicationId, AppStatus status)
+    {
+        await using var context = _database.CreateContext();
+        var app = await context.Applications.FirstAsync(x => x.ApplicationID == applicationId);
+        app.ApplicationStatus = status;
+        await context.SaveChangesAsync();
+    }
+
+    private async Task SeedLicenseForApplicationAsync(
+        int applicationId,
+        int personId,
+        int licenseClassId,
+        int userId)
+    {
+        await using var context = _database.CreateContext();
+        var driver = new Driver
+        {
+            PersonID = personId,
+            CreatedByUserID = userId,
+            CreatedDate = DateTime.UtcNow
+        };
+        context.Drivers.Add(driver);
+        await context.SaveChangesAsync();
+
+        context.Licenses.Add(new License
+        {
+            ApplicationID = applicationId,
+            DriverID = driver.DriverID,
+            LicenseClass = licenseClassId,
+            IssueDate = DateTime.UtcNow,
+            ExpirationDate = DateTime.UtcNow.AddYears(10),
+            PaidFees = 50m,
+            IsActive = true,
+            IssueReason = IssueReason.FirstTime,
+            CreatedByUserID = userId
+        });
+        await context.SaveChangesAsync();
+    }
+
+    private static async Task<TestType> EnsureRequiredTestTypeAsync(DVLDDbContext context, TestTypeEnum targetType)
+    {
+        var existing = await context.TestTypes.FirstOrDefaultAsync(t => t.TestTypeId == (int)targetType);
+        if (existing is not null)
+            return existing;
+
+        foreach (var required in new[] { TestTypeEnum.Theory, TestTypeEnum.Written, TestTypeEnum.Practical })
+        {
+            if (!await context.TestTypes.AnyAsync(t => t.TestTypeId == (int)required))
+            {
+                context.TestTypes.Add(new TestType
+                {
+                    TestTypeTitle = required.ToString(),
+                    TestTypeDescription = $"{required} required test",
+                    TestTypeFees = 10m
+                });
+                await context.SaveChangesAsync();
+            }
+        }
+
+        return await context.TestTypes.FirstAsync(t => t.TestTypeId == (int)targetType);
+    }
+
+    private async Task SeedNonRequiredTestAsync(int localApplicationId, bool testResult)
+    {
+        await using var context = _database.CreateContext();
+        var user = await context.Users.AsNoTracking().FirstAsync();
+
+        await EnsureRequiredTestTypeAsync(context, TestTypeEnum.Practical);
+
+        var extraType = new TestType
+        {
+            TestTypeTitle = $"Legacy Extra {Guid.NewGuid():N}",
+            TestTypeDescription = "Non-required test type",
+            TestTypeFees = 10m
+        };
+        context.TestTypes.Add(extraType);
+        await context.SaveChangesAsync();
+
+        var appointment = new TestAppointment
+        {
+            TestTypeID = extraType.TestTypeId,
+            LocalDrivingLicenseApplicationID = localApplicationId,
+            AppointmentDate = DateTime.UtcNow,
+            PaidFees = 10m,
+            CreatedByUserID = user.UserId,
+            IsLocked = true
+        };
+        context.TestAppointments.Add(appointment);
+        await context.SaveChangesAsync();
+
+        context.Tests.Add(new Test
+        {
+            TestAppointmentID = appointment.TestAppointmentID,
+            TestResult = testResult,
+            Notes = "Non-required type test",
+            CreatedByUserID = user.UserId
+        });
+        await context.SaveChangesAsync();
+    }
+
     private async Task<int> GetLocalApplicationCountAsync()
     {
         await using var context = _database.CreateContext();

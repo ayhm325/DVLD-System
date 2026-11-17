@@ -12,6 +12,9 @@ public interface ILocalDrivingLicenseApplicationRepository
     Task<PagedResult<LocalDrivingLicenseApplication>> GetAllAsync(
         PaginationRequest request, CancellationToken cancellationToken = default);
 
+    Task<LocalDrivingLicenseApplicationSummaryDto> GetSummaryAsync(
+        CancellationToken cancellationToken = default);
+
     Task<LocalDrivingLicenseApplication?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
 
     Task<LocalDrivingLicenseApplication?> GetForUpdateAsync(int id, CancellationToken cancellationToken = default);

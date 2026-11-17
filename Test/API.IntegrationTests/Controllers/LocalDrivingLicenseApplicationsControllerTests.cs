@@ -768,6 +768,86 @@ public sealed class LocalDrivingLicenseApplicationsControllerTests
             Times.Once);
     }
 
+    [Fact]
+    public async Task GetAll_WithWorkflowStageQueryParameter_PassesWorkflowStageToService()
+    {
+        var dto = CreateApplicationDto(15);
+        var paged = new PagedResult<LocalDrivingLicenseApplicationListDto>
+        {
+            Items = [dto],
+            PageNumber = 1,
+            PageSize = 10,
+            TotalCount = 1
+        };
+
+        _factory.LocalDrivingLicenseApplicationServiceMock
+            .Setup(x => x.GetAllLocalDrivingLicenseApplicationsAsync(
+                It.IsAny<LocalDrivingLicenseApplicationQueryRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<PagedResult<LocalDrivingLicenseApplicationListDto>>.Success(paged));
+
+        var response = await GetAuthenticatedAsync(
+            "/api/LocalDrivingLicenseApplications?workflowStage=ReadyForIssuance");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        _factory.LocalDrivingLicenseApplicationServiceMock.Verify(
+            x => x.GetAllLocalDrivingLicenseApplicationsAsync(
+                It.Is<LocalDrivingLicenseApplicationQueryRequest>(p =>
+                    p.WorkflowStage == "ReadyForIssuance"),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task GetSummary_WithoutAuthentication_Returns401()
+    {
+        var response = await _client.GetAsync(
+            "/api/LocalDrivingLicenseApplications/summary");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetSummary_WithAdminRole_Returns403()
+    {
+        using var request = CreateAuthenticatedRequest(
+            HttpMethod.Get,
+            "/api/LocalDrivingLicenseApplications/summary",
+            "Admin");
+
+        var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetSummary_WithStaffRole_ReturnsSummaryResponse()
+    {
+        var summary = new LocalDrivingLicenseApplicationSummaryDto
+        {
+            TotalApplications = 20,
+            InProgressCount = 8,
+            ReadyForIssuanceCount = 4
+        };
+
+        _factory.LocalDrivingLicenseApplicationServiceMock
+            .Setup(x => x.GetSummaryAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<LocalDrivingLicenseApplicationSummaryDto>.Success(summary));
+
+        var response = await GetAuthenticatedAsync(
+            "/api/LocalDrivingLicenseApplications/summary");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = await response.Content
+            .ReadFromJsonAsync<LocalDrivingLicenseApplicationSummaryResponse>();
+
+        Assert.NotNull(body);
+        Assert.Equal(20, body.TotalApplications);
+        Assert.Equal(8, body.InProgressCount);
+        Assert.Equal(4, body.ReadyForIssuanceCount);
+    }
+
     private static async Task AssertProblemDetailsAsync(
         HttpResponseMessage response,
         HttpStatusCode expectedStatus,

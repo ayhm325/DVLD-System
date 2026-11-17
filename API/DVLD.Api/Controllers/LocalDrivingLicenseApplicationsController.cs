@@ -46,6 +46,21 @@ public sealed class LocalDrivingLicenseApplicationsController(
         });
     }
 
+    [HttpGet("summary")]
+    public async Task<IActionResult> GetSummary(CancellationToken cancellationToken = default)
+    {
+        var result = await service.GetSummaryAsync(cancellationToken);
+
+        if (result.IsFailure)
+            return result.ToActionResult(this);
+
+        var summary = result.Value!;
+        return Ok(new LocalDrivingLicenseApplicationSummaryResponse(
+            TotalApplications: summary.TotalApplications,
+            InProgressCount: summary.InProgressCount,
+            ReadyForIssuanceCount: summary.ReadyForIssuanceCount));
+    }
+
     [HttpGet("{id:int}")]
     public async Task<IActionResult> GetById(int id, CancellationToken cancellationToken = default)
     {

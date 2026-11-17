@@ -34,17 +34,31 @@ type Props = {
   onShowPersonLicenseHistory: (personId: number) => void
 }
 
-function getApplicationStatusVariant(status: string): StatusVariant {
-  switch (status.trim().toLowerCase()) {
-    case 'completed':
-      return 'success'
-    case 'cancelled':
-    case 'canceled':
-      return 'danger'
-    case 'new':
-      return 'warning'
-    default:
-      return 'neutral'
+function getApplicationLifecycleBadge(
+  item: LocalDrivingLicenseApplication,
+): { variant: StatusVariant; label: string } {
+  const normalized = (item.statusText || item.applicationStatus || 'New')
+    .trim()
+    .toLowerCase()
+
+  if (item.hasLicense) {
+    return { variant: 'success', label: 'License Issued' }
+  }
+  if (normalized === 'cancelled' || normalized === 'canceled') {
+    return { variant: 'danger', label: 'Cancelled' }
+  }
+  if (normalized === 'new' && item.passedTest === 3) {
+    return { variant: 'info', label: 'Ready for Issuance' }
+  }
+  if (normalized === 'new') {
+    return { variant: 'warning', label: 'In Progress' }
+  }
+  if (normalized === 'completed') {
+    return { variant: 'success', label: 'Completed' }
+  }
+  return {
+    variant: 'neutral',
+    label: item.statusText || item.applicationStatus || 'Unknown',
   }
 }
 
@@ -114,11 +128,11 @@ export default function LocalApplicationsList({
       key: 'status',
       header: 'Status',
       render: (item) => {
-        const status = item.statusText || item.applicationStatus || 'New'
+        const badge = getApplicationLifecycleBadge(item)
         return (
           <StatusBadge
-            variant={getApplicationStatusVariant(status)}
-            label={status}
+            variant={badge.variant}
+            label={badge.label}
           />
         )
       },

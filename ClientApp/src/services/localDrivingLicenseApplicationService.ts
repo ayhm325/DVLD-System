@@ -1,7 +1,9 @@
 import type {
   ApplicationBasicInfo,
   LocalDrivingLicenseApplication,
+  LocalDrivingLicenseApplicationSummary,
   LocalDrivingLicenseApplicationsPage,
+  WorkflowStage,
 } from '../types/LocalDrivingLicenseApplication'
 
 import { apiRequest } from './apiClient'
@@ -14,6 +16,7 @@ export function getLocalDrivingLicenseApplications(
   searchBy?: string,
   statusFilter?: string,
   licenseClassId?: number,
+  workflowStage?: WorkflowStage,
 ): Promise<LocalDrivingLicenseApplicationsPage> {
   const params = new URLSearchParams({
     pageNumber: String(pageNumber),
@@ -32,11 +35,34 @@ export function getLocalDrivingLicenseApplications(
   if (licenseClassId && licenseClassId > 0) {
     params.set('licenseClassId', String(licenseClassId))
   }
+  if (workflowStage && workflowStage !== 'All') {
+    params.set('workflowStage', workflowStage)
+  }
 
   return apiRequest<LocalDrivingLicenseApplicationsPage>(
     `/LocalDrivingLicenseApplications?${params.toString()}`,
     accessToken,
   )
+}
+
+export async function getLocalDrivingLicenseApplicationsSummary(
+  accessToken: string,
+): Promise<LocalDrivingLicenseApplicationSummary> {
+  const data = await apiRequest<LocalDrivingLicenseApplicationSummary>(
+    '/LocalDrivingLicenseApplications/summary',
+    accessToken,
+  )
+
+  if (
+    !data ||
+    typeof data.totalApplications !== 'number' ||
+    typeof data.inProgressCount !== 'number' ||
+    typeof data.readyForIssuanceCount !== 'number'
+  ) {
+    throw new Error('Invalid summary response from server.')
+  }
+
+  return data
 }
 
 export function getLocalApplicationCreateInfo(
