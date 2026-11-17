@@ -34,8 +34,10 @@ export type PageId =
   | 'Appointment Details'
   | 'Schedule Appointment'
   | 'Take Examination'
+  | 'Renew & Replace License'
   | 'Renew License'
   | 'Replace License'
+  | 'License Detention'
   | 'Detain License'
   | 'Detained Licenses'
   | 'Application Types'
@@ -92,8 +94,10 @@ export const PAGE_PERMISSIONS: Record<PageId, readonly UserRole[]> = {
   'Take Examination': ['Staff'],
 
   // License Operations: LicenseRenewalController, LicenseReplacementController, DetainedLicensesController [Authorize(Policy = "StaffOnly")]
+  'Renew & Replace License': ['Staff'],
   'Renew License': ['Staff'],
   'Replace License': ['Staff'],
+  'License Detention': ['Staff'],
   'Detain License': ['Staff'],
   'Detained Licenses': ['Staff'],
 

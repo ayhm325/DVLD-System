@@ -2,12 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import DashboardPage from "../../src/components/dashboard/DashboardPage";
 import * as dashboardService from "../../src/services/dashboardService";
-import {
-  NavigationContext,
-  type NavigationContextValue,
-} from "../../src/context/navigationContextInstance";
+import * as localAppService from "../../src/services/localDrivingLicenseApplicationService";
 
-describe("DashboardPage with MagicBento Command Center", () => {
+describe("DashboardPage — Enterprise Analytical Redesign", () => {
   const mockStatistics = {
     totalPeople: 1250,
     totalDrivers: 840,
@@ -19,103 +16,152 @@ describe("DashboardPage with MagicBento Command Center", () => {
     upcomingTests: 18,
   };
 
-  const createMockNavigationContext = (
-    overrides?: Partial<NavigationContextValue>,
-  ): NavigationContextValue => ({
-    activePage: "Dashboard",
-    params: {},
-    selectedPersonId: null,
-    selectedDriverId: null,
-    selectedDriver: null,
-    personDetailsSource: "",
-    licenseHistorySource: "",
-    selectedAppointmentId: null,
-    appointmentDetailsSource: "",
-    scheduleAppointmentContext: null,
-    manageTestAppointmentsContext: null,
-    takeExaminationContext: null,
-    reopenModalTarget: null,
-    navigate: vi.fn(),
-    goBack: vi.fn(),
-    navigateToPersonDetails: vi.fn(),
-    navigateToEditPerson: vi.fn(),
-    navigateToAddPerson: vi.fn(),
-    navigateToPersonLicenseHistory: vi.fn(),
-    navigateToAppointmentDetails: vi.fn(),
-    navigateToScheduleAppointment: vi.fn(),
-    navigateToManageTestAppointments: vi.fn(),
-    navigateToTakeExamination: vi.fn(),
-    setSelectedPersonId: vi.fn(),
-    setSelectedDriver: vi.fn(),
-    clearReopenModalTarget: vi.fn(),
-    ...overrides,
-  });
+  const mockLocalSummary = {
+    totalApplications: 110,
+    inProgressCount: 28,
+    readyForIssuanceCount: 9,
+  };
 
-  it("renders executive metrics, magic bento command grid, and excludes the people table", async () => {
-    vi.spyOn(dashboardService, "getDashboardStatistics").mockResolvedValue(
-      mockStatistics,
-    );
+  it("renders all real statistics, local workflow summary, analytical sections, and excludes navigation shortcut buttons", async () => {
+    const getStatsSpy = vi
+      .spyOn(dashboardService, "getDashboardStatistics")
+      .mockResolvedValue(mockStatistics);
+    const getSummarySpy = vi
+      .spyOn(localAppService, "getLocalDrivingLicenseApplicationsSummary")
+      .mockResolvedValue(mockLocalSummary);
 
-    const mockNavigate = vi.fn();
-    const mockAddPerson = vi.fn();
-    const navContext = createMockNavigationContext({ navigate: mockNavigate });
+    render(<DashboardPage accessToken="test-token" />);
 
-    render(
-      <NavigationContext.Provider value={navContext}>
-        <DashboardPage
-          accessToken="test-token"
-          onAddPerson={mockAddPerson}
-        />
-      </NavigationContext.Provider>,
-    );
-
-    // 1. Verify Operational Statistics Counters render
+    // 1. Verify primary Operational Statistics KPIs & Local Summary render
     await waitFor(() => {
+      expect(screen.getByText("Total People")).toBeInTheDocument();
+      expect(screen.getByText("Total Drivers")).toBeInTheDocument();
+      expect(screen.getByText("Active Licenses")).toBeInTheDocument();
+      expect(screen.getByText("Pending Applications")).toBeInTheDocument();
       expect(screen.getByText("1,250")).toBeInTheDocument();
-      expect(screen.getByText("840")).toBeInTheDocument();
-      expect(screen.getByText("620")).toBeInTheDocument();
-      expect(screen.getByText("45")).toBeInTheDocument();
+      expect(screen.getByText("In Testing Pipeline")).toBeInTheDocument();
+      expect(screen.getByText("Ready for Issuance")).toBeInTheDocument();
     });
 
-    // 2. Verify Magic Bento Command Grid items are present
+    // 2. Verify redesigned analytical sections and visualizations render
     expect(
-      screen.getByText("Department Intelligence & Command Grid"),
+      screen.getByText("Application & Licensing Activity Overview"),
     ).toBeInTheDocument();
     expect(
       screen.getByText("Licensing Operations & Throughput"),
     ).toBeInTheDocument();
     expect(
+      screen.getByText("Permit Portfolio Distribution"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Department Performance & Intelligence"),
+    ).toBeInTheDocument();
+    expect(
       screen.getByText("Testing & Qualification Pipeline"),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("Operational Command Hub"),
+      screen.getByText("Permit Standing & Detention Monitor"),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("Detained Licenses"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Active Permits (IDP)"),
+      screen.getByText("Active Permits (IDP) & Coverage"),
     ).toBeInTheDocument();
     expect(
       screen.getByText("Centralized Registry Integration"),
     ).toBeInTheDocument();
+
+    // 3. Verify that shortcut/navigation buttons and embedded PeopleTable are absent
     expect(
-      screen.getByText("Segregation of Duties & RBAC"),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: /new application/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /book exam/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /renew license/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /register person/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText(/search people/i),
+    ).not.toBeInTheDocument();
 
-    // 3. Confirm that the embedded PeopleTable is removed from the Dashboard
-    expect(screen.queryByPlaceholderText(/search people/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/find person/i)).not.toBeInTheDocument();
-
-    // 4. Test quick dispatch interactions
-    const bookExamBtn = screen.getByRole("button", { name: /book exam/i });
-    fireEvent.click(bookExamBtn);
-    expect(mockNavigate).toHaveBeenCalledWith("Test Appointments");
-
-    const registerPersonBtn = screen.getByRole("button", {
-      name: /register person/i,
+    // 4. Verify Refresh Counters button refreshes both endpoints
+    const refreshBtn = screen.getByRole("button", {
+      name: /refresh counters/i,
     });
-    fireEvent.click(registerPersonBtn);
-    expect(mockAddPerson).toHaveBeenCalled();
+    fireEvent.click(refreshBtn);
+    expect(getStatsSpy).toHaveBeenCalledTimes(2);
+    expect(getSummarySpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("displays error alert and supports retry when statistics fetch fails", async () => {
+    const getStatsSpy = vi
+      .spyOn(dashboardService, "getDashboardStatistics")
+      .mockRejectedValueOnce(new Error("Database connection timeout"))
+      .mockResolvedValueOnce(mockStatistics);
+    vi.spyOn(
+      localAppService,
+      "getLocalDrivingLicenseApplicationsSummary",
+    ).mockResolvedValue(mockLocalSummary);
+
+    render(<DashboardPage accessToken="test-token" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Statistics Loading Error")).toBeInTheDocument();
+      expect(
+        screen.getByText("Database connection timeout"),
+      ).toBeInTheDocument();
+    });
+
+    const retryBtn = screen.getByRole("button", { name: /retry statistics/i });
+    fireEvent.click(retryBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("1,250")).toBeInTheDocument();
+    });
+    expect(getStatsSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("computes unique Open Pending Applications (2) and Completed Applications (3) accurately when total is 5", async () => {
+    vi.spyOn(dashboardService, "getDashboardStatistics").mockResolvedValue({
+      totalPeople: 5,
+      totalDrivers: 3,
+      activeLicenses: 2,
+      pendingApplications: 4, // includes 2 RetakeTestApplicationID rows in Applications
+      localDrivingLicenseApplications: 5,
+      internationalLicenses: 3,
+      detainedLicenses: 1,
+      upcomingTests: 2,
+    });
+    vi.spyOn(
+      localAppService,
+      "getLocalDrivingLicenseApplicationsSummary",
+    ).mockResolvedValue({
+      totalApplications: 5,
+      inProgressCount: 2,
+      readyForIssuanceCount: 0,
+    });
+
+    render(<DashboardPage accessToken="test-token" />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Open Pending Applications (New Status)"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("Completed Applications (License Issued)"),
+      ).toBeInTheDocument();
+    });
+
+    const openPendingRow = screen
+      .getByText("Open Pending Applications (New Status)")
+      .closest("div");
+    expect(openPendingRow).toHaveTextContent("2");
+
+    const completedRow = screen
+      .getByText("Completed Applications (License Issued)")
+      .closest("div");
+    expect(completedRow).toHaveTextContent("3");
   });
 });

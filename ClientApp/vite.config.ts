@@ -23,6 +23,16 @@ export default defineConfig({
         target: "https://localhost:7125",
         changeOrigin: true,
         secure: false,
+        configure: (proxy) => {
+          proxy.on("proxyRes", (proxyRes) => {
+            const setCookie = proxyRes.headers["set-cookie"];
+            if (Array.isArray(setCookie)) {
+              proxyRes.headers["set-cookie"] = setCookie.map((cookie) =>
+                cookie.replace(/;\s*secure/gi, ""),
+              );
+            }
+          });
+        },
       },
     },
   },

@@ -35,8 +35,9 @@ import {
 
 type Props = {
   accessToken: string
-  onBack: () => void
+  onBack?: () => void
   onReplaced?: (newLicenseId: number) => void
+  embedded?: boolean
 }
 
 type ReplacementOption = 'Damaged License' | 'Lost License'
@@ -46,7 +47,12 @@ const REPLACEMENT_FEES: Record<ReplacementOption, number> = {
   'Lost License': 10.0,
 }
 
-export default function ReplaceLicensePage({ accessToken, onBack, onReplaced }: Props) {
+export default function ReplaceLicensePage({
+  accessToken,
+  onBack,
+  onReplaced,
+  embedded = false,
+}: Props) {
   const [licenseIdInput, setLicenseIdInput] = useState('')
   const [license, setLicense] = useState<LocalLicenseInfo | null>(null)
   const [replacementReason, setReplacementReason] = useState<ReplacementOption>('Damaged License')
@@ -134,27 +140,33 @@ export default function ReplaceLicensePage({ accessToken, onBack, onReplaced }: 
   const canSubmit = Boolean(license && !ineligibilityReason && !newLicenseId && !submitting)
   const applicationFee = REPLACEMENT_FEES[replacementReason]
 
-  return (
-    <section className="page-content space-y-6">
-      <PageHero
-        pageId="Replace License"
-        title="Replace Driving"
-        highlight="License"
-        description="Issue a replacement driving license for lost or damaged credentials with original expiration date retention."
-      />
+  const Wrapper = embedded ? 'div' : 'section'
 
-      <div className="flex items-center">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={onBack}
-          className="h-9 gap-2 text-xs font-semibold text-white bg-[#0e1b33] hover:bg-[#142647] border border-[#263750] hover:border-blue-500/40 rounded-xl shadow-xs transition-all cursor-pointer"
-        >
-          <ArrowLeft className="size-4 text-cyan-400" />
-          <span>Back to Licenses</span>
-        </Button>
-      </div>
+  return (
+    <Wrapper className={embedded ? 'space-y-6' : 'page-content space-y-6'}>
+      {!embedded && (
+        <PageHero
+          pageId="Replace License"
+          title="Replace Driving"
+          highlight="License"
+          description="Issue a replacement driving license for lost or damaged credentials with original expiration date retention."
+        />
+      )}
+
+      {!embedded && onBack && (
+        <div className="flex items-center">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onBack}
+            className="h-9 gap-2 text-xs font-semibold text-white bg-[#0e1b33] hover:bg-[#142647] border border-[#263750] hover:border-blue-500/40 rounded-xl shadow-xs transition-all cursor-pointer"
+          >
+            <ArrowLeft className="size-4 text-cyan-400" />
+            <span>Back to Licenses</span>
+          </Button>
+        </div>
+      )}
 
       {error && <ErrorAlert title="Replacement Notice" message={error} />}
 
@@ -466,11 +478,17 @@ export default function ReplaceLicensePage({ accessToken, onBack, onReplaced }: 
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={onBack}
+                onClick={() => {
+                  if (embedded || !onBack) {
+                    handleLicenseIdChange('')
+                  } else {
+                    onBack()
+                  }
+                }}
                 disabled={submitting}
                 className="h-10 px-5 bg-[#0e1b33] hover:bg-[#142647] border border-[#263750] text-slate-300 hover:text-white rounded-xl transition-all cursor-pointer"
               >
-                Cancel
+                {embedded ? 'Clear Selection' : 'Cancel'}
               </Button>
               <Button
                 type="button"
@@ -494,6 +512,6 @@ export default function ReplaceLicensePage({ accessToken, onBack, onReplaced }: 
           </CardContent>
         </Card>
       )}
-    </section>
+    </Wrapper>
   )
 }

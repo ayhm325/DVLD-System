@@ -36,14 +36,16 @@ import {
 
 type Props = {
   accessToken: string;
-  onBack: () => void;
+  onBack?: () => void;
   onDetained?: (detainId: number) => void;
+  embedded?: boolean;
 };
 
 export default function DetainLicensePage({
   accessToken,
   onBack,
   onDetained,
+  embedded = false,
 }: Props) {
   const [licenseIdInput, setLicenseIdInput] = useState("");
   const [license, setLicense] = useState<LocalLicenseInfo | null>(null);
@@ -184,27 +186,33 @@ export default function DetainLicensePage({
     license && !ineligibilityReason && isFineValid && !detainId && !submitting,
   );
 
-  return (
-    <section className="page-content space-y-6">
-      <PageHero
-        pageId="Detain License"
-        title="Detain Driving"
-        highlight="License"
-        description="Record an official license detention, set fine fees, and immediately transition the license to inactive state."
-      />
+  const Wrapper = embedded ? "div" : "section";
 
-      <div className="flex items-center">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={onBack}
-          className="h-9 gap-2 text-xs font-semibold text-white bg-[#0e1b33] hover:bg-[#142647] border border-[#263750] hover:border-blue-500/40 rounded-xl shadow-xs transition-all cursor-pointer"
-        >
-          <ArrowLeft className="size-4 text-cyan-400" />
-          <span>Back to Detained Licenses</span>
-        </Button>
-      </div>
+  return (
+    <Wrapper className={embedded ? "space-y-6" : "page-content space-y-6"}>
+      {!embedded && (
+        <PageHero
+          pageId="Detain License"
+          title="Detain Driving"
+          highlight="License"
+          description="Record an official license detention, set fine fees, and immediately transition the license to inactive state."
+        />
+      )}
+
+      {!embedded && onBack && (
+        <div className="flex items-center">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onBack}
+            className="h-9 gap-2 text-xs font-semibold text-white bg-[#0e1b33] hover:bg-[#142647] border border-[#263750] hover:border-blue-500/40 rounded-xl shadow-xs transition-all cursor-pointer"
+          >
+            <ArrowLeft className="size-4 text-cyan-400" />
+            <span>Back to Detained Licenses</span>
+          </Button>
+        </div>
+      )}
 
       {error && <ErrorAlert title="Detention Notice" message={error} />}
 
@@ -528,11 +536,17 @@ export default function DetainLicensePage({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={onBack}
+                onClick={() => {
+                  if (embedded || !onBack) {
+                    handleLicenseIdChange("");
+                  } else {
+                    onBack();
+                  }
+                }}
                 disabled={submitting}
                 className="h-10 px-5 bg-[#0e1b33] hover:bg-[#142647] border border-[#263750] text-slate-300 hover:text-white rounded-xl transition-all cursor-pointer"
               >
-                Cancel
+                {embedded ? "Clear Selection" : "Cancel"}
               </Button>
               <Button
                 type="button"
@@ -556,6 +570,6 @@ export default function DetainLicensePage({
           </div>
         </Card>
       )}
-    </section>
+    </Wrapper>
   );
 }

@@ -1,4 +1,11 @@
-import { useState, useMemo, useCallback, useEffect, type FormEvent } from 'react'
+import {
+  useState,
+  useMemo,
+  useCallback,
+  useEffect,
+  type FormEvent,
+  type ReactNode,
+} from 'react'
 import {
   ArrowLeft,
   Search,
@@ -38,8 +45,11 @@ import RenewLicenseReceiptCard from './RenewLicenseReceiptCard'
 
 export interface RenewLicensePageProps {
   accessToken: string
-  onBack: () => void
+  onBack?: () => void
   onRenewed?: (newLicenseId: number) => void
+  embedded?: boolean
+  afterStatsSlot?: ReactNode
+  hideRenewPanel?: boolean
 }
 
 export const RENEWAL_APPLICATION_FEE = 7.0
@@ -48,6 +58,9 @@ export default function RenewLicensePage({
   accessToken,
   onBack,
   onRenewed,
+  embedded = false,
+  afterStatsSlot,
+  hideRenewPanel = false,
 }: RenewLicensePageProps) {
   // Manual Lookup & Selected License State
   const [licenseIdInput, setLicenseIdInput] = useState('')
@@ -251,65 +264,21 @@ export default function RenewLicensePage({
   const canSubmit = Boolean(license && isEligible && !newLicenseId && !submitting)
   const totalFees = license ? RENEWAL_APPLICATION_FEE + license.licenseClassFees : 0
 
+  const Wrapper = embedded ? 'div' : 'section'
+
   return (
-    <section className="page-content space-y-6">
+    <Wrapper className={embedded ? 'space-y-6' : 'page-content space-y-6'}>
       {/* Strict informational PageHero without any action buttons */}
-      <PageHero
-        pageId="Renew License"
-        title="Renew Driving"
-        highlight="License"
-        description="Review expired driving licenses and select an eligible license to begin renewal."
-      />
-
-      {/* Global Actions Bar outside of PageHero */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={onBack}
-          className="h-9 gap-2 text-xs font-semibold text-white bg-[#0e1b33] hover:bg-[#142647] border border-[#263750] hover:border-blue-500/40 rounded-xl shadow-xs transition-all cursor-pointer"
-        >
-          <ArrowLeft className="size-4 text-cyan-400" />
-          <span>Back to Licenses</span>
-        </Button>
-
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setIsManualSearchOpen((prev) => !prev)}
-          className="h-9 gap-2 text-xs font-semibold text-cyan-300 bg-[#0e1b33] hover:bg-[#142647] border border-[#263750] hover:border-cyan-500/40 rounded-xl shadow-xs transition-all cursor-pointer"
-        >
-          <Search className="size-3.5 text-cyan-400" />
-          <span>{isManualSearchOpen ? 'Hide Manual Search' : 'Find by License ID'}</span>
-          {isManualSearchOpen ? (
-            <ChevronUp className="size-3.5 text-slate-400" />
-          ) : (
-            <ChevronDown className="size-3.5 text-slate-400" />
-          )}
-        </Button>
-      </div>
-
-      {error && <ErrorAlert title="Renewal Notice" message={error} />}
-      {licensesError && <ErrorAlert title="Data Load Error" message={licensesError} />}
-      {statsError && <ErrorAlert title="Statistics Load Error" message={statsError} />}
-
-      {/* Success Receipt Card */}
-      {successNotice && newLicenseId && license && (
-        <RenewLicenseReceiptCard
-          oldLicenseId={license.licenseId}
-          newLicenseId={newLicenseId}
-          message={successNotice}
-          driverName={license.fullName}
-          licenseClassName={license.licenseClass}
-          totalFees={totalFees}
-          onBack={onBack}
-          onRenewAnother={handleRenewAnother}
+      {!embedded && (
+        <PageHero
+          pageId="Renew License"
+          title="Renew Driving"
+          highlight="License"
+          description="Review expired driving licenses and select an eligible license to begin renewal."
         />
       )}
 
-      {/* Summary Statistics Cards */}
+      {/* Summary Statistics Cards (nothing placed above the KPI cards) */}
       <StatsGrid columns={3}>
         <StatCard
           label="Total Expired Licenses"
@@ -337,102 +306,178 @@ export default function RenewLicensePage({
         />
       </StatsGrid>
 
-      {/* Manual Search Panel (Preserved B7 workflow, collapsible) */}
-      {isManualSearchOpen && (
-        <Card className="border-[#1b2f52] bg-[#0c192e] text-white shadow-xl rounded-2xl overflow-hidden animate-in fade-in duration-200">
-          <CardHeader className="border-b border-[#1b2f52]/60 pb-3">
-            <CardTitle className="text-sm font-bold flex items-center gap-2">
-              <Search className="size-4 text-cyan-400" />
-              <span>Manual License Lookup</span>
-            </CardTitle>
-            <CardDescription className="text-xs text-slate-400">
-              Enter any License ID directly to inspect its credentials and perform renewal.
-            </CardDescription>
-          </CardHeader>
-          <div className="p-5">
-            <form onSubmit={handleManualSearchSubmit} className="flex flex-col sm:flex-row gap-3 max-w-xl">
-              <div className="flex-1 space-y-1.5">
-                <Label htmlFor="licenseIdInput" className="text-xs text-slate-300">
-                  License ID
-                </Label>
-                <Input
-                  id="licenseIdInput"
-                  type="number"
-                  min="1"
-                  placeholder="e.g. 10"
-                  value={licenseIdInput}
-                  onChange={(e) => handleLicenseIdChange(e.target.value)}
-                  disabled={loadingDetails || submitting}
-                  className="bg-[#081326] border-[#1b2f52] text-white focus:border-cyan-500"
-                />
-              </div>
-              <div className="sm:self-end">
-                <Button
-                  type="submit"
-                  disabled={loadingDetails || !licenseIdInput.trim() || submitting}
-                  className="w-full sm:w-auto h-10 px-5 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold rounded-xl gap-2 cursor-pointer transition-all shadow-md"
-                >
-                  {loadingDetails ? (
-                    <>
-                      <Loader2 className="size-4 animate-spin" />
-                      <span>Loading...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Search className="size-4" />
-                      <span>Find License</span>
-                    </>
-                  )}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </Card>
-      )}
+      {afterStatsSlot}
 
-      {/* Selected License Renewal Card (B8 Workflow) */}
-      {license && (
-        <RenewLicenseForm
-          license={license}
-          isExpired={isExpired}
-          isEligible={isEligible}
-          isDetained={isDetained}
-          ineligibilityReason={ineligibilityReason}
-          canSubmit={canSubmit}
-          applicationFee={RENEWAL_APPLICATION_FEE}
-          totalFees={totalFees}
-          notes={notes}
-          onNotesChange={setNotes}
-          submitting={submitting}
-          onClearSelection={() => setLicense(null)}
-          onCancel={onBack}
-          onSubmit={handleRenew}
+      <div
+        id="panel-renew-license"
+        role={afterStatsSlot ? 'tabpanel' : undefined}
+        aria-labelledby={afterStatsSlot ? 'tab-renew-license' : undefined}
+        hidden={hideRenewPanel}
+        className={hideRenewPanel ? 'hidden' : 'space-y-6'}
+      >
+        {/* Actions Bar below the KPI cards */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {!embedded && onBack ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onBack}
+              className="h-9 gap-2 text-xs font-semibold text-white bg-[#0e1b33] hover:bg-[#142647] border border-[#263750] hover:border-blue-500/40 rounded-xl shadow-xs transition-all cursor-pointer"
+            >
+              <ArrowLeft className="size-4 text-cyan-400" />
+              <span>Back to Licenses</span>
+            </Button>
+          ) : (
+            <div />
+          )}
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setIsManualSearchOpen((prev) => !prev)}
+            className="h-9 gap-2 text-xs font-semibold text-cyan-300 bg-[#0e1b33] hover:bg-[#142647] border border-[#263750] hover:border-cyan-500/40 rounded-xl shadow-xs transition-all cursor-pointer"
+          >
+            <Search className="size-3.5 text-cyan-400" />
+            <span>
+              {isManualSearchOpen ? 'Hide Manual Search' : 'Find by License ID'}
+            </span>
+            {isManualSearchOpen ? (
+              <ChevronUp className="size-3.5 text-slate-400" />
+            ) : (
+              <ChevronDown className="size-3.5 text-slate-400" />
+            )}
+          </Button>
+        </div>
+
+        {error && <ErrorAlert title="Renewal Notice" message={error} />}
+        {licensesError && (
+          <ErrorAlert title="Data Load Error" message={licensesError} />
+        )}
+        {statsError && (
+          <ErrorAlert title="Statistics Load Error" message={statsError} />
+        )}
+
+        {/* Success Receipt Card */}
+        {successNotice && newLicenseId && license && (
+          <RenewLicenseReceiptCard
+            oldLicenseId={license.licenseId}
+            newLicenseId={newLicenseId}
+            message={successNotice}
+            driverName={license.fullName}
+            licenseClassName={license.licenseClass}
+            totalFees={totalFees}
+            onBack={onBack}
+            onRenewAnother={handleRenewAnother}
+          />
+        )}
+
+        {/* Manual Search Panel (Preserved B7 workflow, collapsible) */}
+        {isManualSearchOpen && (
+          <Card className="border-[#1b2f52] bg-[#0c192e] text-white shadow-xl rounded-2xl overflow-hidden animate-in fade-in duration-200">
+            <CardHeader className="border-b border-[#1b2f52]/60 pb-3">
+              <CardTitle className="text-sm font-bold flex items-center gap-2">
+                <Search className="size-4 text-cyan-400" />
+                <span>Manual License Lookup</span>
+              </CardTitle>
+              <CardDescription className="text-xs text-slate-400">
+                Enter any License ID directly to inspect its credentials and perform renewal.
+              </CardDescription>
+            </CardHeader>
+            <div className="p-5">
+              <form
+                onSubmit={handleManualSearchSubmit}
+                className="flex flex-col sm:flex-row gap-3 max-w-xl"
+              >
+                <div className="flex-1 space-y-1.5">
+                  <Label
+                    htmlFor="licenseIdInput"
+                    className="text-xs text-slate-300"
+                  >
+                    License ID
+                  </Label>
+                  <Input
+                    id="licenseIdInput"
+                    type="number"
+                    min="1"
+                    placeholder="e.g. 10"
+                    value={licenseIdInput}
+                    onChange={(e) => handleLicenseIdChange(e.target.value)}
+                    disabled={loadingDetails || submitting}
+                    className="bg-[#081326] border-[#1b2f52] text-white focus:border-cyan-500"
+                  />
+                </div>
+                <div className="sm:self-end">
+                  <Button
+                    type="submit"
+                    disabled={
+                      loadingDetails || !licenseIdInput.trim() || submitting
+                    }
+                    className="w-full sm:w-auto h-10 px-5 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold rounded-xl gap-2 cursor-pointer transition-all shadow-md"
+                  >
+                    {loadingDetails ? (
+                      <>
+                        <Loader2 className="size-4 animate-spin" />
+                        <span>Loading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Search className="size-4" />
+                        <span>Find License</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </Card>
+        )}
+
+        {/* Selected License Renewal Card (B8 Workflow) */}
+        {license && (
+          <RenewLicenseForm
+            license={license}
+            isExpired={isExpired}
+            isEligible={isEligible}
+            isDetained={isDetained}
+            ineligibilityReason={ineligibilityReason}
+            canSubmit={canSubmit}
+            applicationFee={RENEWAL_APPLICATION_FEE}
+            totalFees={totalFees}
+            notes={notes}
+            onNotesChange={setNotes}
+            submitting={submitting}
+            onClearSelection={() => setLicense(null)}
+            onCancel={embedded || !onBack ? () => setLicense(null) : onBack}
+            onSubmit={handleRenew}
+          />
+        )}
+
+        {/* Expired Licenses Section (B5 Discovery) */}
+        <ExpiredLicensesTable
+          expiredLicenses={page?.items ?? []}
+          selectedLicenseId={license?.licenseId ?? null}
+          loading={loadingLicenses}
+          loadingDetails={loadingDetails}
+          onSelectLicense={(id) => void selectLicenseById(id)}
+          onRefresh={handleRefresh}
+          search={search}
+          onSearchChange={setSearch}
+          searchBy={searchBy}
+          onSearchByChange={setSearchBy}
+          onResetFilters={handleResetFilters}
+          totalCount={page?.totalCount ?? 0}
+          pageNumber={page?.pageNumber ?? pagination.page}
+          pageSize={pagination.pageSize}
+          totalPages={page?.totalPages ?? 1}
+          hasPreviousPage={Boolean(page?.hasPreviousPage)}
+          hasNextPage={Boolean(page?.hasNextPage)}
+          onPreviousPage={pagination.previousPage}
+          onNextPage={pagination.nextPage}
+          onPageSizeChange={pagination.setPageSize}
         />
-      )}
-
-      {/* Expired Licenses Section (B5 Discovery) */}
-      <ExpiredLicensesTable
-        expiredLicenses={page?.items ?? []}
-        selectedLicenseId={license?.licenseId ?? null}
-        loading={loadingLicenses}
-        loadingDetails={loadingDetails}
-        onSelectLicense={(id) => void selectLicenseById(id)}
-        onRefresh={handleRefresh}
-        search={search}
-        onSearchChange={setSearch}
-        searchBy={searchBy}
-        onSearchByChange={setSearchBy}
-        onResetFilters={handleResetFilters}
-        totalCount={page?.totalCount ?? 0}
-        pageNumber={page?.pageNumber ?? pagination.page}
-        pageSize={pagination.pageSize}
-        totalPages={page?.totalPages ?? 1}
-        hasPreviousPage={Boolean(page?.hasPreviousPage)}
-        hasNextPage={Boolean(page?.hasNextPage)}
-        onPreviousPage={pagination.previousPage}
-        onNextPage={pagination.nextPage}
-        onPageSizeChange={pagination.setPageSize}
-      />
-    </section>
+      </div>
+    </Wrapper>
   )
 }

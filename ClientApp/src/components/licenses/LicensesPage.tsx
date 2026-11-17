@@ -267,7 +267,7 @@ export default function LicensesPage({
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => onNavigate("Detained Licenses")}
+                  onClick={() => onNavigate("License Detention")}
                   className="h-8 text-xs font-semibold gap-1.5 bg-[#081326] border-[#1b2f52] text-rose-300 hover:text-white cursor-pointer"
                 >
                   <Lock className="size-3.5" />

@@ -25,8 +25,10 @@ export const ROUTE_GROUP_MAP: Record<string, RouteGroup> = {
   // Licenses & Permits
   Licenses: "licenses",
   "International Licenses": "licenses",
+  "Renew & Replace License": "licenses",
   "Renew License": "licenses",
   "Replace License": "licenses",
+  "License Detention": "licenses",
   "Detain License": "licenses",
   "Detained Licenses": "licenses",
 

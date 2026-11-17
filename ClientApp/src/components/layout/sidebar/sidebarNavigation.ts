@@ -3,7 +3,6 @@ import {
   CalendarDays,
   Car,
   ClipboardCheck,
-  Copy,
   CreditCard,
   FileText,
   Flag,
@@ -14,7 +13,6 @@ import {
   LockKeyhole,
   RotateCw,
   Settings,
-  ShieldAlert,
   UserCog,
   UserRound,
   Users,
@@ -104,10 +102,18 @@ export const SIDEBAR_SECTIONS: readonly SidebarSectionDef[] = [
     title: "License Services",
     entries: [
       { kind: "link", page: "Licenses", icon: CreditCard },
-      { kind: "link", page: "Renew License", icon: RotateCw },
-      { kind: "link", page: "Replace License", icon: Copy },
-      { kind: "link", page: "Detain License", icon: ShieldAlert },
-      { kind: "link", page: "Detained Licenses", icon: Lock },
+      {
+        kind: "link",
+        page: "Renew & Replace License",
+        icon: RotateCw,
+        activeFor: ["Renew License", "Replace License"],
+      },
+      {
+        kind: "link",
+        page: "License Detention",
+        icon: Lock,
+        activeFor: ["Detained Licenses", "Detain License"],
+      },
     ],
   },
   {

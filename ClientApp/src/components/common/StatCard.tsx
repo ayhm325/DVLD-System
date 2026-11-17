@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
@@ -43,6 +43,8 @@ export interface StatCardProps {
   variant?: StatCardVariant;
   /** Optional bottom-right badge element or string */
   badge?: ReactNode;
+  /** Optional footer content rendered below the main metric row */
+  footer?: ReactNode;
   /** Whether the metric is currently loading / updating */
   loading?: boolean;
   /** Whether to render the decorative neon waveform SVG (defaults to true) */
@@ -51,7 +53,7 @@ export interface StatCardProps {
   onClick?: () => void;
   /** Whether this interactive card is currently selected/active */
   active?: boolean;
-  /** Backward-compatible flag (always uses premium neon design) */
+  /** When false, renders a calm Dark Enterprise card instead of high-glow neon (defaults to true) */
   neon?: boolean;
 }
 
@@ -247,11 +249,15 @@ export default function StatCard({
   style,
   variant = "blue",
   badge,
+  footer,
   loading = false,
   showWaveform = true,
   onClick,
   active,
+  neon = true,
 }: StatCardProps) {
+  const cardRef = useRef<HTMLElement | null>(null);
+  const orbitalRef = useRef<HTMLDivElement | null>(null);
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
   const [mousePos, setMousePos] = useState({ x: 100, y: 50 });
   const [isHovered, setIsHovered] = useState(false);
@@ -269,6 +275,101 @@ export default function StatCard({
     return () => mq.removeEventListener("change", listener);
   }, []);
 
+  // Dynamic Orbital Dual-Lobe Rim Shimmer + Proximity Cursor Steering
+  useEffect(() => {
+    const card = cardRef.current;
+    if (!card || reducedMotion) return;
+
+    let raf = 0;
+    let last = 0;
+    let visible = true;
+    let angle = 315;
+    let level = 0.42;
+    const pointer = { x: -9999, y: -9999, known: false };
+
+    const tick = (now: number) => {
+      raf = 0;
+      if (!visible) return;
+      const dt = last ? Math.min(0.05, (now - last) / 1000) : 1 / 60;
+      last = now;
+
+      const rect = card.getBoundingClientRect();
+      const halfW = rect.width / 2;
+      const halfH = rect.height / 2;
+      const centerX = rect.left + halfW;
+      const centerY = rect.top + halfH;
+
+      let near = 0;
+      let targetAngle = angle;
+
+      if (pointer.known) {
+        const dx = pointer.x - centerX;
+        const dy = pointer.y - centerY;
+        const distOutX = Math.max(Math.abs(dx) - halfW, 0);
+        const distOutY = Math.max(Math.abs(dy) - halfH, 0);
+        const distance = Math.hypot(distOutX, distOutY);
+        const t = Math.min(1, Math.max(0, 1 - distance / 260));
+        near = t * t * (3 - 2 * t);
+
+        if (near > 0) {
+          const rad = Math.atan2(dy, dx);
+          targetAngle = ((rad * 180) / Math.PI + 90 + 360) % 360;
+        }
+      }
+
+      if (near > 0.02) {
+        const diff = ((targetAngle - angle + 540) % 360) - 180;
+        angle = (angle + diff * (1 - Math.exp(-dt * 9)) + 360) % 360;
+      } else {
+        angle = (angle + dt * 32) % 360;
+      }
+
+      const targetLevel = 0.42 + 0.58 * near;
+      level += (targetLevel - level) * (1 - Math.exp(-dt * 7));
+
+      if (orbitalRef.current) {
+        orbitalRef.current.style.setProperty("--stat-orbital-angle", `${angle.toFixed(1)}deg`);
+        orbitalRef.current.style.opacity = String(Math.min(1, Math.max(0, level)).toFixed(3));
+      }
+
+      raf = requestAnimationFrame(tick);
+    };
+
+    const wake = () => {
+      if (!raf && visible && typeof requestAnimationFrame === "function") {
+        raf = requestAnimationFrame(tick);
+      }
+    };
+
+    const handleWinPointerMove = (e: PointerEvent) => {
+      pointer.x = e.clientX;
+      pointer.y = e.clientY;
+      pointer.known = true;
+      wake();
+    };
+
+    let intersection: IntersectionObserver | null = null;
+    if (typeof IntersectionObserver !== "undefined") {
+      intersection = new IntersectionObserver((entries) => {
+        visible = entries.some((entry) => entry.isIntersecting);
+        if (visible) {
+          last = 0;
+          wake();
+        }
+      });
+      intersection.observe(card);
+    }
+
+    window.addEventListener("pointermove", handleWinPointerMove, { passive: true });
+    wake();
+
+    return () => {
+      if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(raf);
+      intersection?.disconnect();
+      window.removeEventListener("pointermove", handleWinPointerMove);
+    };
+  }, [reducedMotion]);
+
   const handleMouseMove = (e: React.MouseEvent<HTMLElement>) => {
     if (reducedMotion) return;
     const rect = e.currentTarget.getBoundingClientRect();
@@ -285,6 +386,7 @@ export default function StatCard({
 
   const handleMouseEnter = (e: React.MouseEvent<HTMLElement>) => {
     setIsHovered(true);
+    if (reducedMotion) return;
     const rect = e.currentTarget.getBoundingClientRect();
     setMousePos({
       x: e.clientX - rect.left,
@@ -308,25 +410,78 @@ export default function StatCard({
   const titleText = title ?? label ?? "";
   const resolvedBadge = badge ?? (active ? "Active" : undefined);
 
-  const cardStyle: CSSProperties = {
-    background: config.background,
-    borderColor: isHovered ? config.borderHoverColor : config.borderColor,
-    boxShadow: isHovered ? config.shadowHover : config.shadow,
-    transform: dynamicTransform,
-    ...style,
+  const enterpriseIconColors: Record<NormalizedVariant, { bg: string; border: string; text: string }> = {
+    blue: {
+      bg: "rgba(59, 130, 246, 0.14)",
+      border: "1px solid rgba(59, 130, 246, 0.32)",
+      text: "#60a5fa",
+    },
+    emerald: {
+      bg: "rgba(16, 185, 129, 0.14)",
+      border: "1px solid rgba(16, 185, 129, 0.32)",
+      text: "#34d399",
+    },
+    violet: {
+      bg: "rgba(139, 92, 246, 0.14)",
+      border: "1px solid rgba(139, 92, 246, 0.32)",
+      text: "#a78bfa",
+    },
+    amber: {
+      bg: "rgba(245, 158, 11, 0.14)",
+      border: "1px solid rgba(245, 158, 11, 0.32)",
+      text: "#fbbf24",
+    },
+    rose: {
+      bg: "rgba(244, 63, 94, 0.14)",
+      border: "1px solid rgba(244, 63, 94, 0.32)",
+      text: "#fb7185",
+    },
+    slate: {
+      bg: "rgba(148, 163, 184, 0.14)",
+      border: "1px solid rgba(148, 163, 184, 0.28)",
+      text: "#94a3b8",
+    },
   };
 
-  const iconBoxStyle: CSSProperties = {
-    background: config.iconBg,
-    border: config.iconBorder,
-    boxShadow: isHovered ? config.iconShadowHover : config.iconShadow,
-    ...iconStyle,
-  };
+  const cardStyle: CSSProperties = neon
+    ? {
+        background: config.background,
+        borderColor: isHovered ? config.borderHoverColor : config.borderColor,
+        boxShadow: isHovered ? config.shadowHover : config.shadow,
+        transform: dynamicTransform,
+        ...style,
+      }
+    : {
+        background: "linear-gradient(180deg, #101b30 0%, #0b1322 100%)",
+        borderColor: isHovered ? config.borderHoverColor : "rgba(148, 163, 184, 0.24)",
+        boxShadow: isHovered
+          ? "0 14px 36px -10px rgba(2, 6, 23, 0.85), 0 0 22px -4px rgba(59, 130, 246, 0.28)"
+          : "0 10px 28px -12px rgba(2, 6, 23, 0.75)",
+        transform: dynamicTransform,
+        ...style,
+      };
+
+  const iconBoxStyle: CSSProperties = neon
+    ? {
+        background: config.iconBg,
+        border: config.iconBorder,
+        boxShadow: isHovered ? config.iconShadowHover : config.iconShadow,
+        ...iconStyle,
+      }
+    : {
+        background: enterpriseIconColors[normalized].bg,
+        border: enterpriseIconColors[normalized].border,
+        color: enterpriseIconColors[normalized].text,
+        boxShadow: isHovered ? config.iconShadow : "none",
+        ...iconStyle,
+      };
 
   return (
     <article
+      ref={cardRef}
       className={cn(
-        "stat-card group relative flex min-h-34 min-w-0 flex-col justify-between overflow-hidden rounded-2xl border-[1.5px] transition-all duration-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300",
+        "stat-card group relative flex min-h-34 min-w-0 flex-col justify-between overflow-hidden rounded-2xl border transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300",
+        neon ? "border-[1.5px]" : "border p-5",
         onClick ? "cursor-pointer" : "cursor-default",
         active && "ring-2 ring-blue-400/80 shadow-[0_0_24px_rgba(59,130,246,0.3)]",
         className,
@@ -346,6 +501,24 @@ export default function StatCard({
         }
       } : undefined}
     >
+      {/* 0. Dynamic Orbital Dual-Lobe Rim Shimmer (SpecularButton-style perimeter loop) */}
+      {!reducedMotion && (
+        <div
+          ref={orbitalRef}
+          className="pointer-events-none absolute inset-0 rounded-[inherit] z-20"
+          style={{
+            border: "1.5px solid transparent",
+            background: `conic-gradient(from var(--stat-orbital-angle, 315deg) at 50% 50%, transparent 0deg, ${config.waveStroke} 24deg, #ffffff 42deg, ${config.waveHighlight} 60deg, transparent 88deg, transparent 190deg, ${config.waveStroke} 215deg, rgba(255,255,255,0.75) 228deg, ${config.waveHighlight} 240deg, transparent 268deg, transparent 360deg) border-box`,
+            WebkitMask:
+              "linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0)",
+            WebkitMaskComposite: "destination-out",
+            maskComposite: "exclude",
+            opacity: 0.42,
+          }}
+          aria-hidden="true"
+        />
+      )}
+
       {/* 1. Laser-Sharp Specular Border Spotlight */}
       {!reducedMotion && (
         <div
@@ -375,10 +548,11 @@ export default function StatCard({
         />
       )}
 
-      {/* Distinct Glowing Top Border Highlight */}
+      {/* Top Border Accent */}
       <div
         className={cn(
-          "absolute inset-x-0 top-0 h-[2.5px] bg-linear-to-r opacity-95 group-hover:opacity-100 transition-all duration-300 shadow-sm",
+          "absolute inset-x-0 top-0 bg-linear-to-r transition-all duration-300",
+          neon ? "h-[2.5px] opacity-95 group-hover:opacity-100 shadow-sm" : "h-[2px] opacity-75",
           config.accentGradient,
         )}
         aria-hidden="true"
@@ -432,11 +606,16 @@ export default function StatCard({
         </svg>
       )}
 
-      {/* Main Content Layout: Illuminated Icon Box on Left, Metrics in Middle */}
+      {/* Main Content Layout: Icon Box on Left, Metrics in Middle */}
       <div className="stat-card-content relative z-10 flex min-w-0 items-start gap-4">
         {icon && (
           <div
-            className="stat-icon flex shrink-0 items-center justify-center rounded-2xl text-white transition-transform duration-300 group-hover:scale-105 [&>svg]:size-6 [&>svg]:stroke-[2.2] [&>svg]:text-white"
+            className={cn(
+              "stat-icon flex shrink-0 items-center justify-center rounded-2xl transition-transform duration-300 [&>svg]:size-6 [&>svg]:stroke-[2]",
+              neon
+                ? "text-white group-hover:scale-105 [&>svg]:text-white"
+                : "size-12",
+            )}
             style={iconBoxStyle}
             aria-hidden="true"
           >
@@ -445,30 +624,60 @@ export default function StatCard({
         )}
 
         <div className="stat-card-copy min-w-0 flex-1">
-          <span className="stat-card-title block text-[12px] font-bold uppercase tracking-wider text-slate-300 group-hover:text-white transition-colors">
-            {titleText}
-          </span>
+          <div className="flex items-center justify-between gap-2">
+            <span className="stat-card-title block text-[12px] font-bold uppercase tracking-wider text-slate-300 group-hover:text-white transition-colors">
+              {titleText}
+            </span>
+            {!neon && resolvedBadge && (
+              <div className="shrink-0">
+                {typeof resolvedBadge === "string" ? (
+                  <span
+                    className={cn(
+                      "inline-flex items-center text-[11px] font-bold px-2.5 py-0.5 rounded-full border",
+                      config.badgeClass,
+                    )}
+                  >
+                    {resolvedBadge}
+                  </span>
+                ) : (
+                  resolvedBadge
+                )}
+              </div>
+            )}
+          </div>
 
-          <div className="mt-1">
+          <div className="mt-1.5">
             {loading ? (
               <div className="h-9 w-24 rounded-lg bg-slate-800/80 animate-pulse border border-slate-700/60" />
             ) : (
-              <strong className="stat-card-value block font-black text-white tracking-tight leading-tight">
+              <strong
+                className={cn(
+                  "stat-card-value block font-black text-white tracking-tight leading-tight tabular-nums",
+                  !neon && "text-2xl sm:text-3xl",
+                )}
+              >
                 {value}
               </strong>
             )}
           </div>
 
           {description && (
-            <p className="stat-card-description mt-1 text-xs font-medium text-slate-300/90 group-hover:text-slate-200 transition-colors">
+            <p className="stat-card-description mt-1 text-xs font-medium text-slate-400 group-hover:text-slate-300 transition-colors">
               {description}
             </p>
           )}
         </div>
       </div>
 
-      {/* Bottom Right Badge (if provided or active) */}
-      {resolvedBadge && (
+      {/* Optional Footer (Enterprise analytical context / progress bar) */}
+      {footer && (
+        <div className="relative z-10 mt-3.5 border-t border-slate-800/90 pt-3">
+          {footer}
+        </div>
+      )}
+
+      {/* Bottom Right Badge (when neon mode is active) */}
+      {neon && resolvedBadge && (
         <div className="relative z-10 self-end mt-2">
           {typeof resolvedBadge === "string" ? (
             <span

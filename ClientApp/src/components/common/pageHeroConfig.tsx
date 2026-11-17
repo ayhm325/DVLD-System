@@ -560,6 +560,31 @@ export const PAGE_HERO_CONFIG: Record<string, PageHeroConfigItem> = {
       },
     ],
   },
+  'Renew & Replace License': {
+    eyebrow: 'LICENSE RENEWAL & CREDENTIAL REISSUANCE',
+    title: 'Renew & Replace',
+    highlight: 'License',
+    description: 'Review expired driving licenses for renewal or issue replacement credentials for lost and damaged active licenses.',
+    illustrationTag: 'DL-RENEW-REPLACE',
+    illustrationIcon: <RotateCcw className="size-6" />,
+    floatingIcons: [
+      {
+        icon: <RotateCcw className="size-7" />,
+        color: 'cyan',
+        position: 'left',
+      },
+      {
+        icon: <Copy className="size-6" />,
+        color: 'blue',
+        position: 'top-right',
+      },
+      {
+        icon: <ShieldCheck className="size-6" />,
+        color: 'emerald',
+        position: 'bottom-right',
+      },
+    ],
+  },
   'Renew License': {
     eyebrow: 'LICENSE LIFECYCLE',
     title: 'Renew Driving',
@@ -606,6 +631,31 @@ export const PAGE_HERO_CONFIG: Record<string, PageHeroConfigItem> = {
       {
         icon: <ShieldCheck className="size-6" />,
         color: 'blue',
+        position: 'bottom-right',
+      },
+    ],
+  },
+  'License Detention': {
+    eyebrow: 'COMPLIANCE & ENFORCEMENT',
+    title: 'License Detention',
+    highlight: 'Management',
+    description: 'Manage detained driving licenses, monitor outstanding fine fees, and execute official license detention and release workflows.',
+    illustrationTag: 'DL-DETENTION',
+    illustrationIcon: <Lock className="size-6" />,
+    floatingIcons: [
+      {
+        icon: <Lock className="size-7" />,
+        color: 'amber',
+        position: 'left',
+      },
+      {
+        icon: <ShieldAlert className="size-6" />,
+        color: 'rose',
+        position: 'top-right',
+      },
+      {
+        icon: <CheckCircle2 className="size-6" />,
+        color: 'emerald',
         position: 'bottom-right',
       },
     ],

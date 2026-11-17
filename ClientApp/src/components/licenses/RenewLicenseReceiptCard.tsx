@@ -10,7 +10,7 @@ export interface RenewLicenseReceiptCardProps {
   driverName?: string
   licenseClassName?: string
   totalFees?: number
-  onBack: () => void
+  onBack?: () => void
   onRenewAnother?: () => void
 }
 
@@ -85,15 +85,17 @@ export default function RenewLicenseReceiptCard({
       </div>
 
       <div className="flex flex-wrap items-center gap-2.5 pt-1">
-        <Button
-          type="button"
-          size="sm"
-          onClick={onBack}
-          className="h-8.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-xl cursor-pointer transition-all shadow-md gap-1.5"
-        >
-          <ArrowLeft className="size-3.5" />
-          <span>Back to Licenses</span>
-        </Button>
+        {onBack && (
+          <Button
+            type="button"
+            size="sm"
+            onClick={onBack}
+            className="h-8.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-xl cursor-pointer transition-all shadow-md gap-1.5"
+          >
+            <ArrowLeft className="size-3.5" />
+            <span>Back to Licenses</span>
+          </Button>
+        )}
 
         {onRenewAnother && (
           <Button

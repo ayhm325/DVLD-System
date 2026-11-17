@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import {
   Lock,
   Unlock,
@@ -36,6 +36,10 @@ import { Button } from "../ui";
 type Props = {
   accessToken: string;
   onNavigateToDetain: () => void;
+  embedded?: boolean;
+  refreshTrigger?: number;
+  afterStatsSlot?: ReactNode;
+  hideRegistryPanel?: boolean;
 };
 
 type SearchBy = "all" | "detainId" | "licenseId" | "nationalNo" | "fullName";
@@ -55,6 +59,10 @@ const SEARCH_OPTIONS: SearchFieldOption<SearchBy>[] = [
 export default function DetainedLicensesPage({
   accessToken,
   onNavigateToDetain,
+  embedded = false,
+  refreshTrigger = 0,
+  afterStatsSlot,
+  hideRegistryPanel = false,
 }: Props) {
   const [selectedDetentionForRelease, setSelectedDetentionForRelease] =
     useState<DetainedLicense | null>(null);
@@ -72,6 +80,7 @@ export default function DetainedLicensesPage({
   } = useAsyncData(fetcher, {
     enabled: Boolean(accessToken),
     initialData: [],
+    dependencies: [refreshTrigger],
     defaultErrorMessage: "Failed to load detained licenses.",
   });
 
@@ -228,14 +237,18 @@ export default function DetainedLicensesPage({
     [],
   );
 
+  const Wrapper = embedded ? "div" : "section";
+
   return (
-    <section className="page-content space-y-6">
-      <PageHero
-        pageId="Detained Licenses"
-        title="Detained Licenses"
-        highlight="Registry"
-        description="Manage active and released detained driving licenses, monitor outstanding fine fees, and process license releases."
-      />
+    <Wrapper className={embedded ? "space-y-6" : "page-content space-y-6"}>
+      {!embedded && (
+        <PageHero
+          pageId="Detained Licenses"
+          title="Detained Licenses"
+          highlight="Registry"
+          description="Manage active and released detained driving licenses, monitor outstanding fine fees, and process license releases."
+        />
+      )}
 
       {/* KPI Stats Grid */}
       <StatsGrid columns={4}>
@@ -269,80 +282,97 @@ export default function DetainedLicensesPage({
         />
       </StatsGrid>
 
-      {error && (
-        <ErrorAlert title="Registry Error" message={error} onRetry={refresh} />
-      )}
+      {afterStatsSlot}
 
-      {/* Content Panel with TableToolbar & DataTable */}
-      <div className="rounded-2xl border border-[#1b2f52] bg-[#0c192e] p-6 shadow-xl space-y-4">
-        <TableToolbar<SearchBy>
-          searchValue={search}
-          onSearchChange={setSearch}
-          searchField={searchBy}
-          onSearchFieldChange={(field: SearchBy) => setSearchBy(field)}
-          searchFieldOptions={SEARCH_OPTIONS}
-          searchPlaceholder="Search detained licenses..."
-          isFiltered={isFiltered}
-          onReset={handleResetFilters}
-          onRefresh={refresh}
-          refreshing={loading}
-          filters={
-            <Select
-              value={filters.statusFilter}
-              onValueChange={(val) =>
-                setFilter("statusFilter", val as "all" | "active" | "released")
-              }
-            >
-              <SelectTrigger className="w-35 h-9 text-xs bg-[#081326] border-[#1b2f52] text-white">
-                <SelectValue placeholder="All Status" />
-              </SelectTrigger>
-              <SelectContent className="bg-[#0c192e] border-[#1b2f52] text-white">
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="active">Active Only</SelectItem>
-                <SelectItem value="released">Released Only</SelectItem>
-              </SelectContent>
-            </Select>
-          }
-          actions={
-            <Button
-              type="button"
-              onClick={onNavigateToDetain}
-              className="h-9 gap-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-500 rounded-xl shadow-xs transition-all cursor-pointer"
-            >
-              <Plus className="size-4" />
-              <span>Detain New License</span>
-            </Button>
-          }
-        />
+      <div
+        id="panel-detained-registry"
+        role={afterStatsSlot ? "tabpanel" : undefined}
+        aria-labelledby={afterStatsSlot ? "tab-detained-registry" : undefined}
+        hidden={hideRegistryPanel}
+        className={hideRegistryPanel ? "hidden" : "space-y-6"}
+      >
+        {error && (
+          <ErrorAlert
+            title="Registry Error"
+            message={error}
+            onRetry={refresh}
+          />
+        )}
 
-        <DataTable<DetainedLicense>
-          columns={columns}
-          data={filteredDetentions}
-          getRowKey={(item: DetainedLicense) => item.detainId}
-          loading={loading}
-          emptyState={
-            <EmptyState
-              icon={<Lock className="size-10 text-slate-500" />}
-              message="No Detained Licenses Found"
-              description="No detained driving license records match the selected criteria."
-            />
-          }
-        />
+        {/* Content Panel with TableToolbar & DataTable */}
+        <div className="rounded-2xl border border-[#1b2f52] bg-[#0c192e] p-6 shadow-xl space-y-4">
+          <TableToolbar<SearchBy>
+            searchValue={search}
+            onSearchChange={setSearch}
+            searchField={searchBy}
+            onSearchFieldChange={(field: SearchBy) => setSearchBy(field)}
+            searchFieldOptions={SEARCH_OPTIONS}
+            searchPlaceholder="Search detained licenses..."
+            isFiltered={isFiltered}
+            onReset={handleResetFilters}
+            onRefresh={refresh}
+            refreshing={loading}
+            filters={
+              <Select
+                value={filters.statusFilter}
+                onValueChange={(val) =>
+                  setFilter(
+                    "statusFilter",
+                    val as "all" | "active" | "released",
+                  )
+                }
+              >
+                <SelectTrigger className="w-35 h-9 text-xs bg-[#081326] border-[#1b2f52] text-white">
+                  <SelectValue placeholder="All Status" />
+                </SelectTrigger>
+                <SelectContent className="bg-[#0c192e] border-[#1b2f52] text-white">
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="active">Active Only</SelectItem>
+                  <SelectItem value="released">Released Only</SelectItem>
+                </SelectContent>
+              </Select>
+            }
+            actions={
+              <Button
+                type="button"
+                onClick={onNavigateToDetain}
+                className="h-9 gap-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-500 rounded-xl shadow-xs transition-all cursor-pointer"
+              >
+                <Plus className="size-4" />
+                <span>Detain New License</span>
+              </Button>
+            }
+          />
+
+          <DataTable<DetainedLicense>
+            columns={columns}
+            data={filteredDetentions}
+            getRowKey={(item: DetainedLicense) => item.detainId}
+            loading={loading}
+            emptyState={
+              <EmptyState
+                icon={<Lock className="size-10 text-slate-500" />}
+                message="No Detained Licenses Found"
+                description="No detained driving license records match the selected criteria."
+              />
+            }
+          />
+        </div>
+
+        {/* Release Confirmation Modal */}
+        {selectedDetentionForRelease && (
+          <ReleaseDetainedLicenseModal
+            isOpen={Boolean(selectedDetentionForRelease)}
+            detention={selectedDetentionForRelease}
+            accessToken={accessToken}
+            onClose={() => setSelectedDetentionForRelease(null)}
+            onReleased={() => {
+              refresh();
+              setSelectedDetentionForRelease(null);
+            }}
+          />
+        )}
       </div>
-
-      {/* Release Confirmation Modal */}
-      {selectedDetentionForRelease && (
-        <ReleaseDetainedLicenseModal
-          isOpen={Boolean(selectedDetentionForRelease)}
-          detention={selectedDetentionForRelease}
-          accessToken={accessToken}
-          onClose={() => setSelectedDetentionForRelease(null)}
-          onReleased={() => {
-            refresh();
-            setSelectedDetentionForRelease(null);
-          }}
-        />
-      )}
-    </section>
+    </Wrapper>
   );
 }

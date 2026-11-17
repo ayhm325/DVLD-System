@@ -642,8 +642,8 @@ const BARS = [42, 58, 49, 71, 63, 88, 76];
 const DashboardVisual = () => (
   <div className={BARS_CLASS}>
     <div className={FIGURE_CLASS}>
-      <span className={FIGURE_VALUE_CLASS}>94.8%</span>
-      <span className={FIGURE_NOTE_CLASS}>Pass Rate</span>
+      <span className={FIGURE_VALUE_CLASS}>Overview</span>
+      <span className={FIGURE_NOTE_CLASS}>Weekly</span>
     </div>
     <div className={BARS_PLOT_CLASS}>
       {BARS.map((height, index) => (

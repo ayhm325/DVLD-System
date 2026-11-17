@@ -8,13 +8,11 @@ const InternationalLicensesPage = lazy(
 const IssueInternationalLicensePage = lazy(
   () => import("../../international-licenses/IssueInternationalLicensePage"),
 );
-const RenewLicensePage = lazy(() => import("../../licenses/RenewLicensePage"));
-const ReplaceLicensePage = lazy(
-  () => import("../../licenses/ReplaceLicensePage"),
+const LicenseRenewalReplacementPage = lazy(
+  () => import("../../licenses/LicenseRenewalReplacementPage"),
 );
-const DetainLicensePage = lazy(() => import("../../detained/DetainLicensePage"));
-const DetainedLicensesPage = lazy(
-  () => import("../../detained/DetainedLicensesPage"),
+const LicenseDetentionPage = lazy(
+  () => import("../../detained/LicenseDetentionPage"),
 );
 
 export type LicenseRoutesProps = {
@@ -56,41 +54,28 @@ export default function LicenseRoutes({
     );
   }
 
-  if (activePage === "Renew License") {
+  if (
+    activePage === "Renew & Replace License" ||
+    activePage === "Renew License" ||
+    activePage === "Replace License"
+  ) {
     return (
-      <RenewLicensePage
+      <LicenseRenewalReplacementPage
         accessToken={accessToken}
-        onBack={() => navigate("Licenses")}
-        onRenewed={() => navigate("Licenses")}
+        initialTab={activePage === "Replace License" ? "replace" : undefined}
       />
     );
   }
 
-  if (activePage === "Replace License") {
+  if (
+    activePage === "License Detention" ||
+    activePage === "Detained Licenses" ||
+    activePage === "Detain License"
+  ) {
     return (
-      <ReplaceLicensePage
+      <LicenseDetentionPage
         accessToken={accessToken}
-        onBack={() => navigate("Licenses")}
-        onReplaced={() => navigate("Licenses")}
-      />
-    );
-  }
-
-  if (activePage === "Detain License") {
-    return (
-      <DetainLicensePage
-        accessToken={accessToken}
-        onBack={() => navigate("Detained Licenses")}
-        onDetained={() => navigate("Detained Licenses")}
-      />
-    );
-  }
-
-  if (activePage === "Detained Licenses") {
-    return (
-      <DetainedLicensesPage
-        accessToken={accessToken}
-        onNavigateToDetain={() => navigate("Detain License")}
+        initialTab={activePage === "Detain License" ? "detain" : undefined}
       />
     );
   }
