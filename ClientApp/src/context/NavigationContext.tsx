@@ -72,6 +72,41 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
       const merged: NavigationParams = {
         ...baseParams,
         ...urlExtracted,
+        ...(baseParams.manageTestAppointmentsContext ||
+        urlExtracted.manageTestAppointmentsContext
+          ? {
+              manageTestAppointmentsContext: {
+                ...baseParams.manageTestAppointmentsContext,
+                ...urlExtracted.manageTestAppointmentsContext,
+                localAppId:
+                  urlExtracted.manageTestAppointmentsContext?.localAppId ??
+                  baseParams.manageTestAppointmentsContext?.localAppId ??
+                  0,
+              },
+            }
+          : {}),
+        ...(baseParams.takeExaminationContext ||
+        urlExtracted.takeExaminationContext
+          ? {
+              takeExaminationContext: {
+                ...baseParams.takeExaminationContext,
+                ...urlExtracted.takeExaminationContext,
+                appointmentId:
+                  urlExtracted.takeExaminationContext?.appointmentId ??
+                  baseParams.takeExaminationContext?.appointmentId ??
+                  0,
+              },
+            }
+          : {}),
+        ...(baseParams.scheduleAppointmentContext ||
+        urlExtracted.scheduleAppointmentContext
+          ? {
+              scheduleAppointmentContext: {
+                ...baseParams.scheduleAppointmentContext,
+                ...urlExtracted.scheduleAppointmentContext,
+              },
+            }
+          : {}),
       };
 
       const resolvedParams = sanitizeParamsForPage(page, merged, urlExtracted);
@@ -156,9 +191,14 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
       navigate("Appointment Details", {
         selectedAppointmentId: appointmentId,
         appointmentDetailsSource: source,
+        manageTestAppointmentsContext:
+          source === "Manage Test Appointments" ||
+          source === "Written Test Appointments"
+            ? (params.manageTestAppointmentsContext ?? null)
+            : null,
       });
     },
-    [navigate],
+    [navigate, params.manageTestAppointmentsContext],
   );
 
   const navigateToScheduleAppointment = useCallback(
@@ -174,13 +214,21 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
           testTypeId,
           returnPage: source,
         },
+        manageTestAppointmentsContext:
+          source === "Manage Test Appointments" ||
+          source === "Written Test Appointments"
+            ? (params.manageTestAppointmentsContext ??
+              (localAppId && localAppId > 0
+                ? { localAppId, testTypeId, returnPage: "Local Applications" }
+                : null))
+            : null,
         reopenModalTarget:
           reopenModalOnReturn && localAppId
             ? { localAppId, testTypeId }
             : null,
       });
     },
-    [navigate],
+    [navigate, params.manageTestAppointmentsContext],
   );
 
   const navigateToManageTestAppointments = useCallback(
@@ -210,15 +258,34 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
   );
 
   const navigateToTakeExamination = useCallback(
-    (appointmentId: number, source = "Manage Test Appointments") => {
+    (appointmentId: number, source = "Test Appointments") => {
       navigate("Take Examination", {
         takeExaminationContext: {
           appointmentId,
           returnPage: source,
         },
+        manageTestAppointmentsContext:
+          source === "Manage Test Appointments" ||
+          source === "Written Test Appointments" ||
+          source === "Appointment Details"
+            ? (params.manageTestAppointmentsContext ?? null)
+            : null,
+        selectedAppointmentId:
+          source === "Appointment Details"
+            ? (params.selectedAppointmentId ?? appointmentId)
+            : null,
+        appointmentDetailsSource:
+          source === "Appointment Details"
+            ? params.appointmentDetailsSource
+            : undefined,
       });
     },
-    [navigate],
+    [
+      navigate,
+      params.manageTestAppointmentsContext,
+      params.selectedAppointmentId,
+      params.appointmentDetailsSource,
+    ],
   );
 
   const setSelectedPersonId = useCallback((id: number | null) => {

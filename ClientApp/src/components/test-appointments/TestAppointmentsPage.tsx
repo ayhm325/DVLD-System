@@ -2,7 +2,6 @@ import { useCallback, useMemo, useState } from 'react'
 import PageHero from '../common/PageHero'
 import ErrorAlert from '../common/ErrorAlert'
 import ConfirmModal from '../common/ConfirmModal'
-import { Button } from '../ui/button'
 import type { TestAppointment } from '../../types/TestAppointment'
 import { getAllAppointments, cancelTestAppointment } from '../../services/testAppointmentService'
 import { resolveAppointmentLifecycle } from '../../utils/status'
@@ -12,7 +11,6 @@ import {
   CalendarDays,
   Clock,
   CheckCircle2,
-  Plus,
   Calendar,
 } from 'lucide-react'
 import { computeTabStats, type TabType, type TabStats } from './appointmentStats'
@@ -23,11 +21,6 @@ export interface TestAppointmentsPageProps {
   accessToken: string
   onNavigate?: (page: string) => void
   onShowAppointmentDetails?: (appointmentId: number) => void
-  onScheduleAppointment?: (
-    localAppId?: number | null,
-    testTypeId?: 1 | 2 | 3,
-    source?: string,
-  ) => void
   onTakeExamination?: (appointmentId: number, returnPage?: string) => void
 }
 
@@ -35,7 +28,6 @@ export default function TestAppointmentsPage({
   accessToken,
   onNavigate,
   onShowAppointmentDetails,
-  onScheduleAppointment,
   onTakeExamination,
 }: TestAppointmentsPageProps) {
   // View tabs: All, Today, History
@@ -211,31 +203,13 @@ export default function TestAppointmentsPage({
             <p>Monitor examination schedules, inspect lifecycle states, and review test records.</p>
           </div>
 
-          <div className="flex items-center gap-3">
-            <span className="record-count">
-              {loading
-                ? 'Loading...'
-                : filteredAppointments.length === appointments.length
-                  ? `${appointments.length} Appointments`
-                  : `${filteredAppointments.length} of ${appointments.length} Appointments`}
-            </span>
-
-            {/* Book Test Appointment Action navigated to dedicated page */}
-            <Button
-              type="button"
-              onClick={() => {
-                if (onScheduleAppointment) {
-                  onScheduleAppointment(null, 1, 'Test Appointments')
-                } else {
-                  onNavigate?.('Schedule Appointment')
-                }
-              }}
-              className="bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-bold text-xs gap-1.5 shadow-[0_0_15px_rgba(34,211,238,0.35)] cursor-pointer h-9 px-4 rounded-xl"
-            >
-              <Plus className="size-3.5" />
-              <span>Book Test Appointment</span>
-            </Button>
-          </div>
+          <span className="record-count">
+            {loading
+              ? 'Loading...'
+              : filteredAppointments.length === appointments.length
+                ? `${appointments.length} Appointments`
+                : `${filteredAppointments.length} of ${appointments.length} Appointments`}
+          </span>
         </div>
 
         {/* Unified Views Navigation Tabs */}

@@ -71,20 +71,37 @@ export default function AppointmentRoutes({
         onShowAppointmentDetails={(id) =>
           navigateToAppointmentDetails(id, "Test Appointments")
         }
-        onScheduleAppointment={navigateToScheduleAppointment}
         onTakeExamination={navigateToTakeExamination}
       />
     );
   }
 
   if (activePage === "Appointment Details") {
+    const detailsReturnPage =
+      appointmentDetailsSource === "Manage Test Appointments" ||
+      appointmentDetailsSource === "Written Test Appointments"
+        ? manageTestAppointmentsContext?.localAppId &&
+          manageTestAppointmentsContext.localAppId > 0
+          ? appointmentDetailsSource
+          : "Test Appointments"
+        : appointmentDetailsSource || "Test Appointments";
+
     return (
       <AppointmentDetailsPage
         accessToken={accessToken}
         appointmentId={selectedAppointmentId ?? null}
-        onBack={() =>
-          navigate(appointmentDetailsSource || "Test Appointments")
-        }
+        onBack={() => {
+          if (
+            detailsReturnPage === "Manage Test Appointments" ||
+            detailsReturnPage === "Written Test Appointments"
+          ) {
+            navigate(detailsReturnPage, {
+              manageTestAppointmentsContext,
+            });
+            return;
+          }
+          navigate(detailsReturnPage);
+        }}
         onNavigate={navigate}
         onTakeExamination={navigateToTakeExamination}
         userRole={userRole}
@@ -114,36 +131,79 @@ export default function AppointmentRoutes({
   }
 
   if (activePage === "Take Examination") {
+    const requestedReturnPage =
+      takeExaminationContext?.returnPage || "Test Appointments";
+
+    const safeReturnPage =
+      requestedReturnPage === "Manage Test Appointments" ||
+      requestedReturnPage === "Written Test Appointments"
+        ? manageTestAppointmentsContext?.localAppId &&
+          manageTestAppointmentsContext.localAppId > 0
+          ? requestedReturnPage
+          : "Test Appointments"
+        : requestedReturnPage === "Appointment Details"
+          ? selectedAppointmentId && selectedAppointmentId > 0
+            ? "Appointment Details"
+            : "Test Appointments"
+          : requestedReturnPage;
+
     return (
       <TakeExaminationPage
         accessToken={accessToken}
         appointmentId={takeExaminationContext?.appointmentId ?? null}
-        onBack={() =>
-          navigate(
-            takeExaminationContext?.returnPage || "Manage Test Appointments",
-          )
-        }
-        returnPage={
-          takeExaminationContext?.returnPage || "Manage Test Appointments"
-        }
+        onBack={() => {
+          if (
+            safeReturnPage === "Manage Test Appointments" ||
+            safeReturnPage === "Written Test Appointments"
+          ) {
+            navigate(safeReturnPage, {
+              manageTestAppointmentsContext,
+            });
+            return;
+          }
+          if (safeReturnPage === "Appointment Details") {
+            navigate("Appointment Details", {
+              selectedAppointmentId,
+              appointmentDetailsSource,
+              manageTestAppointmentsContext,
+            });
+            return;
+          }
+          navigate(safeReturnPage);
+        }}
+        returnPage={safeReturnPage}
       />
     );
   }
 
   if (activePage === "Schedule Appointment") {
+    const scheduleReturnPage =
+      scheduleAppointmentContext?.returnPage === "Manage Test Appointments" ||
+      scheduleAppointmentContext?.returnPage === "Written Test Appointments"
+        ? manageTestAppointmentsContext?.localAppId &&
+          manageTestAppointmentsContext.localAppId > 0
+          ? scheduleAppointmentContext.returnPage
+          : "Local Applications"
+        : scheduleAppointmentContext?.returnPage || "Local Applications";
+
     return (
       <ScheduleAppointmentPage
         accessToken={accessToken}
         initialLocalAppId={scheduleAppointmentContext?.localAppId ?? null}
         initialTestTypeId={scheduleAppointmentContext?.testTypeId ?? 1}
-        returnPage={
-          scheduleAppointmentContext?.returnPage ?? "Local Applications"
-        }
-        onBack={() =>
-          navigate(
-            scheduleAppointmentContext?.returnPage || "Local Applications",
-          )
-        }
+        returnPage={scheduleReturnPage}
+        onBack={() => {
+          if (
+            scheduleReturnPage === "Manage Test Appointments" ||
+            scheduleReturnPage === "Written Test Appointments"
+          ) {
+            navigate(scheduleReturnPage, {
+              manageTestAppointmentsContext,
+            });
+            return;
+          }
+          navigate(scheduleReturnPage);
+        }}
         onNavigate={navigate}
         onShowAppointmentDetails={navigateToAppointmentDetails}
       />
