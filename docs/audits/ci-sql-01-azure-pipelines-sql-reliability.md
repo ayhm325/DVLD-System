@@ -133,3 +133,7 @@ Conclusion: **informational message from the hosted image tooling**, not a repos
 ## 14. Safety confirmation
 
 `Presentation (WPF)/` — untouched. `DVLDf` — never connected to; the test instance is ephemeral and deleted after verification. All existing SQL validation, ownership and cleanup safeguards remain intact.
+
+## Addendum â€” 2026-11-17: Later Azure runtime record
+
+The original â€œNOT YET VERIFIEDâ€ statement above reflects the report date and evidence available at that time. The later [implementation execution log](../IMPLEMENTATION-EXECUTION-LOG.md) records Azure pipeline run `#20261111.2` as successful, including isolated SQL environment provisioning, SQL integration suites, cleanup and artifact publication. This documentation review did not query Azure DevOps independently; treat the execution log as the repository's later recorded evidence and do not rewrite the original historical result.

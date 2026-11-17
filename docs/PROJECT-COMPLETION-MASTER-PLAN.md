@@ -1,3 +1,6 @@
+> [!WARNING]
+> **HISTORICAL / SUPERSEDED BASELINE â€” NOT THE ACTIVE EXECUTION ROADMAP.** This document preserves a prior consolidation snapshot. Its technology, test counts, authentication status and phase labels may be stale. Current implementation priority is controlled by the root [ENGINEERING-ROADMAP.md](../ENGINEERING-ROADMAP.md); accepted decisions by [ENGINEERING-DECISIONS.md](../ENGINEERING-DECISIONS.md); architecture/security/testing rules by the corresponding root standards. Current point-in-time state is recorded in [the 2026-11-17 snapshot](./continuity/snapshots/CURRENT-PROJECT-STATE-2026-11-17.md). Do not execute tasks from this historical body without reconciling them with those authorities.
+
 # DVLD — Project Completion Master Plan
 ## Comprehensive Implementation Baseline & Execution Strategy
 

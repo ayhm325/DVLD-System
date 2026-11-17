@@ -172,3 +172,5 @@ dotnet test .\Test\API.IntegrationTests\API.IntegrationTests.csproj -c Release -
 - **Execution Time:** `16.855 seconds`
 - **SQL Server Instance:** `Ayhm|MSSQLSERVER`
 - **Authentication:** Windows Authentication
+
+> [!WARNING] **Runtime lifecycle:** this repository currently targets net8.0 and pins SDK 8.0.427, but Microsoft ended .NET 8 support on 2026-11-10. These commands describe the repository's current manifest state, not a supported production runtime. Prioritize a controlled upgrade to a supported LTS release (currently .NET 10 LTS) after validating EF Core provider compatibility, migrations, build, all test suites and CI. Do not change target frameworks/packages as part of a test-environment setup.

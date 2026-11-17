@@ -1,3 +1,6 @@
+> [!NOTE]
+> **Historical frontend audit (2026-11-09).** This report records the UI and test-tooling state at its stated baseline commit. The current repository now contains Vitest configuration, seven frontend unit-test files and one Playwright E2E file. Its palette/design commentary is historical and must not be treated as a current visual specification without rechecking ClientApp source.
+
 # DVLD Frontend Audit Report
 
 **Phase 0 deliverable for the ULTIMATE FRONTEND TRANSFORMATION specification.**

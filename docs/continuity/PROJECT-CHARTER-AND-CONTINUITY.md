@@ -1,12 +1,12 @@
 # DVLD Project Charter & Continuity Governance
 
 > **Project Name:** Driver & Vehicle Licensing Department (DVLD) Management System  
-> **Repository Root:** `D:\DVLD-WPF`  
+> **Repository Root:** `D:\DVLD-System`
 > **Document Role:** Authoritative Continuity Framework & Operating Charter  
 > **Parent Governance Suite:** [`AGENTS.md`](../../AGENTS.md), [`AI-ENGINEERING-INSTRUCTIONS.md`](../../AI-ENGINEERING-INSTRUCTIONS.md), [`ENGINEERING-DECISIONS.md`](../../ENGINEERING-DECISIONS.md), [`ENGINEERING-ROADMAP.md`](../../ENGINEERING-ROADMAP.md)  
 > **Governance Status:** ACTIVE & ENFORCED  
-> **Version:** 1.0.0  
-> **Effective Date:** 2026-11-08  
+> **Version:** 1.1.0
+> **Effective Date:** 2026-11-17
 
 ---
 
@@ -138,7 +138,7 @@ graph LR
 ```
 
 ### 5.8.1 Local Project File Access (Read & Write)
-- Refers to reading, creating, or editing files on the local filesystem (`D:\DVLD-WPF`).
+- Refers to reading, creating, or editing files on the local filesystem (`D:\DVLD-System`).
 - Local file modification authority applies strictly to the specified target paths and never authorizes Git operations.
 
 ### 5.8.2 Git Inspection Authority
@@ -213,49 +213,54 @@ All continuity records must maintain strict consistency with the following accep
   - Technical questions regarding `LicenseId` vs `DriverId` binding and historical relationship preservation remain unresolved.
   - Implementation remains strictly **NOT AUTHORIZED**.
 
-### 8.3 Refresh Token & Multi-Session Architecture (`SEC-05`)
-SEC-05 remains a **design-only workstream**. The following records distinguish selected design direction from proposals; none grants implementation authorization:
+### 8.3 Authentication, Refresh Tokens & Multi-Session Management
 
-| Parameter | Current Design Status | Governance Boundary |
+**Current status: IMPLEMENTED in the repository under AUTH-01.** The old SEC-05 design-only description has been superseded by the implemented session lifecycle. The current implementation contract is documented in [SECURITY-STANDARDS.md Â§12](../../SECURITY-STANDARDS.md) and the execution evidence is recorded in [IMPLEMENTATION-EXECUTION-LOG.md](../IMPLEMENTATION-EXECUTION-LOG.md), [AUTH-01 SQL verification](../audits/auth-01-post-sql-verification.md), and [cross-process verification](../audits/auth-01-cross-process-verification.md).
+
+| Area | Current verified implementation | Remaining qualification |
 |---|---|---|
-| Independent sessions per user | `SELECTED DESIGN DIRECTION` | Multiple independent sessions are intended; implementation remains unauthorized. |
-| Refresh token idle lifetime | `SELECTED DESIGN DIRECTION — 7 DAYS` | Design direction only; implementation remains unauthorized. |
-| Access token lifetime | `PROPOSED — 15 MINUTES` | Not separately approved. |
-| Absolute session lifetime | `PROPOSED — 30 DAYS` | Not approved. |
-| Refresh token transport | `PROPOSED — HttpOnly Cookie` | Cookie details remain subject to final design review. |
-| Cookie attributes | `PROPOSED` | Secure, SameSite, Path and deployment details are not treated as finalized implementation settings. |
-| CSRF protection and Origin validation | `REQUIRED SECURITY CONCERNS — MECHANISM UNSELECTED` | Custom headers, anti-CSRF tokens, Origin/Referer rules and rejection behavior remain candidate mechanisms, not approved implementation details. |
-| Business audit persistence | `ARCHITECTURAL REQUIREMENT` | Sensitive successful business mutations requiring audit must be committed atomically with the business transaction. Specific table names and code paths are not approved here. |
+| Access token | 15-minute JWT with issuer, audience, signature and lifetime validation; security-stamp and session claims | Production secret rotation and configuration still need hosting-environment verification |
+| Refresh token | Cryptographically random opaque token; SHA-256 hash persisted in UserSessions; raw token is not stored in SQL | Lost HTTP response and process-termination fault injection remain outstanding |
+| Session lifetime | 14-day absolute lifetime and 7-day idle lifetime | Re-review if product policy changes |
+| Rotation | Conditional consume with a single winner; token family and replacement relationship tracked | Cross-process rotation/reuse is verified; lost-response recovery is not |
+| Reuse/concurrency | 30-second grace behavior; bounded 409 retry; family revocation after confirmed reuse | Preserve current bounded retry and grace semantics |
+| Cookie transport | HttpOnly, SameSite=Lax, Secure when request is HTTPS, scoped to the auth API path | Production reverse-proxy and HTTPS termination configuration needs deployment verification |
+| CSRF | Required X-CSRF-Protection header on refresh/logout endpoints; explicit credential-enabled CORS origin | Production origins and proxy behavior must be confirmed from deployment configuration |
+| Revocation | Logout, logout-all, password changes, role/activation changes and security-stamp rotation | Keep regression tests for every revocation path |
+| Browser client | Access token held in memory; refresh uses HttpOnly cookie; single-flight refresh and cross-tab coordination | Current client logout helper clears local state even when the server request fails; server revocation failure visibility needs follow-up |
 
-**Explicitly Unresolved SEC-05 Decisions:**
-- *Successor Token Recovery:* Option A (Durable SQL recovery record) vs. Option C (No successor recovery; re-authentication on dropped response) remains **UNSELECTED**.
-- *Reuse Handling Policy:* Policy 1 (Session revocation after recovery boundary) vs. Policy 2 (Ordinary 401 rejection without automatic revocation) remains **UNDECIDED**.
-- *Operational Recovery Duration ($T_{\text{recovery}}$):* Neither 15 seconds nor 30 seconds is approved. Final duration is **UNDECIDED — REQUIRES EXPLICIT USER APPROVAL**.
-- *Physical Retention & Cleanup:* Recovery record ineligibility is distinct from physical record deletion. Cleanup timing, retention duration, scheduling, and pruning strategies remain **UNRESOLVED**.
-- *Detailed Concurrency & Transport Schemes:* Detailed CSRF and Origin validation mechanisms remain proposed.
+**Evidence boundary:** repository test records report SQL persistence/rotation/reuse/revocation verification and two-process refresh verification (one successful rotation and one conflict). Those historical runs are linked above; no test suite or database operation is run by this script.
 
+**Remaining AUTH-01 follow-ups:**
+- Add lost-response and process-termination fault-injection coverage.
+- Review client logout semantics so the UI can distinguish local sign-out from confirmed server-side session revocation.
+- Verify cookie Secure behavior, trusted forwarded headers, CORS origins, and secret management against the actual production hosting topology.
+- Keep session/security audit events separate from diagnostic application logs.
 ### 8.4 Logging Architecture Boundaries
-The system strictly partitions logging into three distinct operational domains:
 
-1. **Transactional Business Audit Logs (`AUD-01`):**
-   - Captures successful sensitive business mutations requiring an audit record.
-   - The audit record must be committed atomically within the same database transaction as the corresponding business operation.
-   - The final table/schema and application implementation path remain to be designed and approved; this charter does not select `AuditLogs` or a specific Unit of Work method.
-2. **Security Event Telemetry (`SEC-04`):**
-   - Emits structured security events (login failures, reuse detections, session terminations).
-   - Operates outside the business SQL transaction to guarantee failed auth attempts are logged even when no business transaction exists.
-3. **Diagnostic & Application Logs (`OBS-03`):**
-   - High-throughput operational logs via Serilog file sinks (`logs/dvld-.json`).
-   - Diagnostic files do not replace committed SQL Server audit records. They are not guaranteed durable upon catastrophic process crashes or disk failures.
+Logging is divided into three distinct concerns. Their implementation status must not be conflated:
 
-### 8.5 Phase Authorization Invariants
-- **Phase 12.2:** `PROPOSED / NOT AUTHORIZED`
-- **Phase 12.3:** `PLANNED / NOT AUTHORIZED`
-- **Phase 12.4:** `PLANNED / NOT AUTHORIZED`
-- *Governance Rule:* Inclusion in the engineering roadmap or backlog does not constitute authorization. Each phase requires separate explicit human authorization.
+1. **Diagnostic & Application Logging (OBS-03):**
+   - The application already uses the standard Microsoft.Extensions.Logging / ILogger<T> abstraction in services and infrastructure.
+   - Centralized structured logging, correlation-ID propagation, and a durable/central sink are not yet implemented as a complete platform capability.
+   - Serilog integration and correlation middleware are recorded as planned work in the canonical [ENGINEERING-ROADMAP.md](../../ENGINEERING-ROADMAP.md); package addition and configuration require the approval specified by that roadmap.
+2. **Security Event Telemetry (SEC-04):**
+   - Security-relevant diagnostic messages exist in selected authentication/user workflows.
+   - A dedicated structured security audit service and isolated audit sink are not yet an implemented end-to-end capability. Login, logout, refresh reuse, password changes and account-state changes require consistent event coverage.
+3. **Transactional Business Audit Logs (AUD-01):**
+   - Durable audit records for high-impact business mutations are a separate design.
+   - Schema/table design, retention, privacy/redaction, failure policy and DBA approval remain prerequisites. No specific audit table or UnitOfWork interception strategy is authorized by this charter.
 
----
+**Never log:** passwords, password hashes, raw JWTs, refresh tokens, cookie values, signing keys, or full connection strings. Security event metadata must be minimized and must not turn diagnostic logs into a second ungoverned citizen-data store.
+### 8.5 Phase & Task Authorization Invariants
 
+The old blanket phase labels in this charter are superseded by the task-level lifecycle in the root [ENGINEERING-ROADMAP.md](../../ENGINEERING-ROADMAP.md) and the accepted/rejected decisions in [ENGINEERING-DECISIONS.md](../../ENGINEERING-DECISIONS.md).
+
+- Completed work remains completed only to the scope and evidence recorded in the execution log.
+- A task marked Planned, Proposed, Deferred, or Not Authorized must not be implemented without its required explicit approval and prerequisites.
+- A completed authentication milestone does not authorize unrelated security changes, audit-schema migrations, regulatory-policy changes, or deployment changes.
+- Roadmap inclusion is not implementation authorization.
+- If this charter and the canonical roadmap disagree on a task status, stop and reconcile the documents before implementation; do not infer approval.
 ## 9. Protected Repository Boundaries
 
 ### 9.1 Local/Production Database Protection (`DVLDf`)

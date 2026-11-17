@@ -137,3 +137,7 @@ Frontend lint/build were not re-run because no frontend file changed in AUTH-01-
 ## 16. Safety confirmation
 
 `Presentation (WPF)/` — untouched. `DVLDf` — never connected to, queried, migrated, or modified; it does not exist on the verified test instance. All test databases were created and removed by the ownership-verified fixture.
+
+## Addendum â€” 2026-11-17: Subsequent cross-process evidence
+
+The original statement in Section 1 that cross-process concurrency was not verified accurately described the scope of this report when it was written. A later, separate verification is recorded in [auth-01-cross-process-verification.md](./auth-01-cross-process-verification.md): two independent API OS processes sharing one isolated SQL database produced exactly one successful refresh response (200) and one conflict (409), with one active replacement generation. Reuse after the grace window revoked the token family. Lost-response recovery and process-termination fault injection remain unverified. Preserve the original result as historical evidence; use the later report for the broader scope.

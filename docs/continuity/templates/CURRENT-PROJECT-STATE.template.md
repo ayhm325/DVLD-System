@@ -4,7 +4,7 @@
 > **Supersedes Snapshot:** `SNAPSHOT-YYYY-MM-DD-MMM` | `None — Initial Baseline Snapshot`  
 > **Last Updated:** `YYYY-MM-DDTHH:MM:SS+OFFSET`  
 > **Project Identity:** Driver & Vehicle Licensing Department (DVLD) Management System  
-> **Repository Root:** `D:\DVLD-WPF`  
+> **Repository Root:** `D:\DVLD-System`
 > **Document Status:** `DRAFT` | `CURRENT SNAPSHOT`  
 > **Repository Persistence Status:** `PREPARED IN CONVERSATION` | `PERSISTED IN REPOSITORY`  
 

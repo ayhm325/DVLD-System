@@ -1,3 +1,6 @@
+> [!WARNING]
+> **Historical palette matrix â€” not current WCAG evidence.** This matrix covers cream/lime token pairs. At the reviewed main commit, ClientApp/src/index.css declares a dark/navy surface system and Royal Sapphire Blue accent (#3b82f6). Recalculate ratios from the actual current foreground/background/focus tokens before using this matrix as a compliance or release sign-off.
+
 # DVLD Contrast Matrix (WCAG 2.2)
 
 > Computed with the WCAG relative-luminance formula (`(L1 + 0.05) / (L2 + 0.05)`).

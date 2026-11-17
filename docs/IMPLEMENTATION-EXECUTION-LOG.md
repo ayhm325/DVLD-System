@@ -933,3 +933,11 @@ flowchart TD
 ---
 
 *This log is maintained continuously throughout implementation. Zero database schema modifications or migrations to `DVLDf` were performed during this task.*
+
+## Session 21: Documentation inventory and status reconciliation (2026-11-17)
+
+- **Scope:** Read-only review of all Markdown files under `docs/` and cross-check against current source and root governance documents at commit `e4435e3006d88d99ed8ccac2f8fec741d5446afa`.
+- **Changes:** Added the docs index, a current project-state snapshot and a file-by-file cleanup decision record. Reconciled active charter/domain statements and appended dated corrections/addenda to preserve historical evidence.
+- **Key reconciliations:** AUTH-01 is implemented; centralized OBS-03/SEC-04/AUD-01 remain distinct planned concerns; frontend tests exist but are not invoked by the checked-in pipeline; detention-vs-replacement remains pending DEC-POL-01; cream/lime contrast ratios do not describe the current blue/dark theme.
+- **Verification:** Static GitHub source/document inspection only. No local Git status, build, test suite, database connection, SQL command, Azure DevOps query or production operation was performed.
+- **Safety:** No source code, application configuration, database schema or data was changed. No documentation files were deleted.

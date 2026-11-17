@@ -257,12 +257,12 @@ export default function StatCard({
   const [isHovered, setIsHovered] = useState(false);
   const filterUniqueId = useId().replace(/:/g, "");
   const [reducedMotion, setReducedMotion] = useState(() => {
-    if (typeof window === "undefined") return false;
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
     return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   });
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
     const listener = (e: MediaQueryListEvent) => setReducedMotion(e.matches);
     mq.addEventListener("change", listener);

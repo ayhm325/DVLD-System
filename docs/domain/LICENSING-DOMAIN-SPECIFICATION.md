@@ -1,12 +1,12 @@
 # DVLD — Licensing Domain Business Invariants Specification
 
 > **System Name:** Driver & Vehicle Licensing Department (DVLD) Management System  
-> **Repository Root:** `D:\DVLD-WPF`  
+> **Repository Root:** `D:\DVLD-System`
 > **Document Role:** Authoritative Domain Business Invariants & Civic Workflow Constraints  
 > **Source Origin:** Extracted from `DEVELOPMENT-PLAN.md` §2 (preserved in [`docs/archive/historical-planning/DEVELOPMENT-PLAN.md`](../archive/historical-planning/DEVELOPMENT-PLAN.md))  
 > **Governance Authority:** [`AGENTS.md`](../../AGENTS.md) | [`ENGINEERING-STANDARDS.md`](../../ENGINEERING-STANDARDS.md)  
 > **Status:** ACTIVE & ENFORCED  
-> **Effective Date:** 2026-11-08  
+> **Last Reviewed:** 2026-11-17
 
 ---
 
@@ -56,14 +56,15 @@ $$\text{Vision Test (Type 1)} \longrightarrow \text{Written Test (Type 2)} \long
 
 ### 2.4 Post-Issuance Workflows
 1. **License Renewal:**
-   - Allowed only if the current license is expired or within the authorized renewal window.
-   - The old license is deactivated (`IsActive = false`), and a new license record is generated linked to the same driver with `IssueReason = 2` (Renew).
+   - Allowed only when the existing license meets the current renewal eligibility rules.
+   - The current renewal service blocks renewal when an active detention record exists; the license must be released first.
+   - The old license is deactivated and a new license record is created with the configured validity period and renewal issue reason.
 2. **License Replacement (Damaged or Lost):**
-   - Requires an active license (`IsActive = true`).
-   - If replaced as Damaged (`IssueReason = 3`), standard damage fee applies.
-   - If replaced as Lost (`IssueReason = 4`), replacement fee applies.
-   - The old license is deactivated immediately upon replacement.
+   - The current LicenseReplacementService validates that the license exists, is not expired, and is active; it then performs replacement inside a Serializable UnitOfWork transaction.
+   - The service currently does not check whether the license has an active detention record.
+   - Whether a detained domestic license may be replaced, and whether Lost and Damaged cases differ, is governed by DEC-POL-01 / ADR-O02 and remains subject to written confirmation from the competent licensing authority.
+   - Until that external policy confirmation is recorded and the decision is formally accepted, a detention-based replacement prohibition must not be stated as an approved legal or implemented business rule.
 3. **License Detention & Release:**
    - An active license may be detained with a recorded fine amount.
-   - A detained license cannot be renewed or replaced while actively detained.
-   - **Release Workflow:** Requires payment of the fine application fee and fine amount; updates `IsReleased = true`, `ReleaseDate = UTC Now`, and `ReleaseApplicationID`.
+   - The renewal workflow's detention check and the replacement workflow's unresolved detention policy are separate rules; do not infer one from the other.
+   - Release processing must follow the approved application/fine-payment policy and current implementation. Exact statutory fees and procedures are not established by this engineering specification.

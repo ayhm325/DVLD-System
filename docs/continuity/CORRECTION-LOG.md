@@ -84,3 +84,21 @@ To prevent conflation between evidence verification and engineering policy appro
 |---|---|---|---|---|---|---|
 | *(No historical corrections logged yet — initial clean register)* | — | — | — | — | — | — |
 
+## [CORR-2026-11-17-001] Reconcile authentication, frontend testing, Azure CI and domain-policy status
+
+- **Recorded At:** 2026-11-17
+- **Correction Status:** EVIDENCE VERIFIED (repository source/document inspection)
+- **Decision Approval:** NOT REQUIRED for factual correction; any policy change remains subject to the root decision register.
+- **Affected records:** `continuity/PROJECT-CHARTER-AND-CONTINUITY.md` Â§8.3-8.5; `domain/LICENSING-DOMAIN-SPECIFICATION.md` Â§2.4; `audits/auth-01-post-sql-verification.md`; `audits/ci-sql-01-azure-pipelines-sql-reliability.md`; `audit-report.md`; `contrast-matrix.md`.
+
+### Verified corrections
+
+1. AUTH-01 refresh/session lifecycle is implemented in current source; old design-only SEC-05 statements are superseded. Cross-process test evidence is recorded in `audits/auth-01-cross-process-verification.md`. Lost-response/process-termination fault injection remains unverified.
+2. Frontend tests are present: seven Vitest unit-test files and one Playwright E2E file. The checked-in Azure pipeline was not found to run `npm run test` or `npm run test:e2e`; the presence of tests must not be confused with CI execution.
+3. The implementation execution log records Azure pipeline run `#20261111.2` as successful for the SQL CI repair. The earlier CI-SQL audit's â€œruntime pendingâ€ statement was accurate at its original date and is superseded by that later execution record.
+4. Current theme tokens in `ClientApp/src/index.css` use a dark/navy palette and Royal Sapphire Blue accent `#3b82f6`; the cream/lime `contrast-matrix.md` is not current accessibility sign-off.
+5. Current `LicenseRenewalService` checks active detention; `LicenseReplacementService` does not. Detention-vs-replacement policy remains governed by DEC-POL-01 / ADR-O02 pending external confirmation.
+
+### Evidence boundary
+
+This correction is based on static inspection and previously recorded execution evidence. No tests, database operations, Azure DevOps queries, or legal-policy confirmations were performed during this documentation review. It does not approve any implementation or regulatory decision.
