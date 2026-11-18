@@ -1,41 +1,27 @@
 # DVLD — React Frontend (`ClientApp`)
 
-`ClientApp` is the browser-based React + TypeScript + Vite single-page application for the Driving & Vehicle Licensing Department (DVLD) system. It communicates with `DVLD.Api` over HTTP + JSON + JWT (`http://localhost:5260/api`).
+`ClientApp` is the browser-based React + TypeScript + Vite single-page application for the Driving & Vehicle Licensing Department (DVLD) system. It communicates with `DVLD.Api` over HTTP + JSON + JWT (`http://localhost:5260/api`) using `credentials: 'include'` for the `HttpOnly` refresh cookie.
 
-> **Operational Status:** `ClientApp` is an active administrative web portal. All core departmental views, authentication flows, management tables, settings modals, and navigation workflows are implemented as baseline foundations. Governance rules and development standards are maintained in [`AGENTS.md`](./AGENTS.md) and [`docs/domain/LICENSING-DOMAIN-SPECIFICATION.md`](../docs/domain/LICENSING-DOMAIN-SPECIFICATION.md).
-
----
-
-## 1. Technology Stack
-
-| Layer | Technology / Version (`package.json`) | Purpose |
-|---|---|---|
-| **UI Library** | React `^19.3.1`, React DOM `^19.3.1` | Core declarative component architecture |
-| **Language** | TypeScript `~6.0.3` | Strict type safety and compilation |
-| **Styling** | Tailwind CSS `^4.3.3` (`@tailwindcss/vite`), Custom Design System (`App.css`, `index.css`) | Institutional theme, design tokens, utility classes |
-| **Icons & Primitives** | `lucide-react` `^1.65.0`, `@radix-ui/react-*` | Accessible UI primitives and iconography |
-| **Bundler & Dev Server** | Vite `^8.3.4` (`@vitejs/plugin-react` `^6.1.2`) | Fast HMR dev server and production asset bundling |
-| **Linter** | ESLint `^10.13.0`, `typescript-eslint` `^8.71.2`, `eslint-plugin-react-hooks` `^7.1.1` | Code quality and React 19 rules enforcement |
-| **HTTP Transport** | Unified API Client (`src/services/apiClient.ts`) on browser `fetch` | Centralized base URL, JWT bearer headers, error normalization, and 401 interception |
+For repository-wide architecture, backend standards, and security policies, follow the authoritative documents under `docs/development/` rather than duplicating them here.
 
 ---
 
-## 2. Prerequisites
+## 1. Prerequisites
 
-1. **Node.js** (v20+ recommended, compatible with Vite 8 / TypeScript 6).
-2. **Running `DVLD.Api` Backend**:
-   - The React app sends requests to `http://localhost:5260/api`.
-   - `DVLD.Api` configures the `"ReactApp"` CORS policy (`API/DVLD.Api/Program.cs`) allowing cross-origin requests from `http://localhost:5173` (Vite's default dev server origin).
-   - Start the backend API from the repository root before using `ClientApp`:
+1. **Node.js & npm:** Node.js 20+ recommended (`22.x` LTS is used in Azure Pipelines).
+2. **Running `DVLD.Api` Backend:**
+   - The React app sends requests to `http://localhost:5260/api` (overrideable via `VITE_API_BASE_URL`, defaulting to `/api` via Vite proxy / configuration).
+   - `DVLD.Api` configures the `"ReactApp"` CORS policy (`API/DVLD.Api/Program.cs`) allowing `http://localhost:5173` with credentials.
+   - Start the backend API from the repository root (`D:\DVLD-System`):
      ```powershell
      dotnet run --project ".\API\DVLD.Api\DVLD.Api.csproj" --launch-profile http
      ```
 
 ---
 
-## 3. Setup and Available Scripts
+## 2. Setup and Available Scripts
 
-Run all frontend commands from the `ClientApp` directory:
+Run all frontend commands from the `ClientApp` directory (`ClientApp/package.json`):
 
 ```powershell
 cd ClientApp
@@ -52,43 +38,38 @@ npm run build
 # Run ESLint across TypeScript and React source files
 npm run lint
 
-# Preview the production build locally (http://localhost:4173)
+# Preview the production build locally
 npm run preview
+
+# Run Vitest unit/component tests (ClientApp/tests/unit/)
+npm run test
+
+# Run Playwright E2E tests (ClientApp/tests/e2e/)
+npm run test:e2e
 ```
 
-> **Windows PowerShell Execution Policy Note:** If Windows PowerShell execution policy restricts running `npm.ps1`, invoke the command line wrapper directly (e.g. `npm.cmd run dev`, `npm.cmd run build`, `npm.cmd run lint`).
+> **Windows PowerShell Note:** If Windows PowerShell execution policy restricts `npm.ps1`, invoke `npm.cmd` (e.g., `npm.cmd --prefix ClientApp run build`).
 
 ---
 
-## 4. Feature Implementation Summary
+## 3. Token & Browser Storage Model (Verified Summary)
 
-> [!NOTE]
-> The feature matrix below reflects verified baseline frontend foundations established at commit `29e43d6` (historical 2026-11-01). Ongoing automated end-to-end and integration verification across all views is tracked under Phase 12 in [`ENGINEERING-ROADMAP.md`](../ENGINEERING-ROADMAP.md).
+- **Access Token (`src/utils/authTokenStore.ts`):** Held strictly in JavaScript memory (`currentAccessToken`). Never persisted to `localStorage` or `sessionStorage`.
+- **Refresh Token (`AuthContext.tsx`, `apiClient.ts`):** Managed via an `HttpOnly`, `SameSite=Lax` cookie scoped to `/api/Auth`, exchanged via `POST /api/Auth/refresh` with `X-CSRF-Protection: 1`.
+- **`localStorage` (`src/components/auth/Login.tsx`):** Stores **only** the optional remembered username (`dvld_remembered_username`) when the user checks "Remember me". Legacy token keys are purged on startup by `purgeLegacyTokenStorage()` (`src/utils/sessionStorage.ts`).
 
-| Feature / View | Status | Implementation Details |
-|---|---|---|
-| **Authentication & Login** | `Implemented` | Login portal (`Login.tsx`, `Login.css`), in-memory access token with HttpOnly refresh-cookie session restoration, optional remembered username in `localStorage`, error alerts, and password visibility toggle. The independent theme preference is also stored in `localStorage`; authentication tokens are never stored there. |
-| **Session Lifecycle & 401 Auto-Logout** | `Implemented` | `AuthContext.tsx` validates token expiration on refresh; `apiClient.ts` intercepts HTTP 401 and triggers automated session termination. |
-| **Dashboard** | `Implemented` | Renders unified statistics cards (`GET /api/Dashboard/statistics`), recent people overview, and quick-action shortcuts. |
-| **People Management** | `Implemented` | Comprehensive 5-column paginated table (`PeopleTable.tsx`), search filtering by name and national number, and details modal. |
-| **Add Person Workflow** | `Implemented` | Full modal form (`AddPersonModal.tsx`) with field validation, country selection, photo preview, and `POST /api/People` integration. |
-| **Drivers Directory** | `Implemented` | Drivers list (`DriversPage.tsx`) displaying national numbers, full names, active license counts, and registration dates. |
-| **Local Licenses** | `Implemented` | Full licenses register (`LicensesPage.tsx`) with class badges, issue/expiration dates, and active status indicators. |
-| **International Licenses** | `Implemented` | Directory (`InternationalLicensesPage.tsx`) and issuance form (`IssueInternationalLicensePage.tsx`) with eligibility verification. |
-| **Local License Applications** | `Implemented` | Paginated applications table (`LocalApplicationsPage.tsx`) with status filters, search, and new application stepper. |
-| **Settings — Countries** | `Implemented` | Complete country directory (`CountriesPage.tsx`) with instant search. |
-| **Settings — Application Types** | `Implemented` | List of application types (`ApplicationTypesPage.tsx`) with modal to edit titles and fees via `PUT /api/ApplicationTypes/{id}`. |
-| **Settings — License Classes** | `Implemented` | Complete license classes directory (`LicenseClassesPage.tsx`) showing minimum ages, validity periods, and fees. |
-| **Settings — Test Types** | `Implemented` | Test types management (`TestTypesPage.tsx`) with modal to edit test fees and descriptions via `PUT /api/TestTypes/{id}`. |
+For full security specifications and client-side RBAC details, see [`SECURITY-STANDARDS.md`](../docs/development/SECURITY-STANDARDS.md).
 
 ---
 
-## 5. Frontend Governance & Target Architecture References
+## 4. Related Documentation
 
-Authoritative documentation for `ClientApp` is organized under the repository governance suite:
-
-- [**Frontend Agent Governance** (`ClientApp/AGENTS.md`)](./AGENTS.md) — Operational instructions, TypeScript standards, and component isolation rules.
-- [**Engineering Standards** (`ENGINEERING-STANDARDS.md`)](../ENGINEERING-STANDARDS.md) — System architecture, Clean Architecture layers, API contracts, persistence, and concurrency rules.
-- [**Licensing Domain Specification** (`docs/domain/LICENSING-DOMAIN-SPECIFICATION.md`)](../docs/domain/LICENSING-DOMAIN-SPECIFICATION.md) — Authoritative domain business invariants and licensing workflow constraints.
-- [**Security Standards** (`SECURITY-STANDARDS.md`)](../SECURITY-STANDARDS.md) — Session storage threat model, per-tab isolation, XSS prevention, and RBAC policies.
-- [**Preserved Target Architecture Archive** (`docs/archive/historical-planning/TARGET-ARCHITECTURE.md`)](../docs/archive/historical-planning/TARGET-ARCHITECTURE.md) — Preserved historical target architecture draft and media pipeline flowchart.
+- **Frontend AI Rules:** [`ClientApp/AGENTS.md`](./AGENTS.md)
+- **Repository AI Governance:** [`AGENTS.md`](../AGENTS.md)
+- **Developer Setup & Workflow:** [`DEVELOPMENT-GUIDE.md`](../docs/development/DEVELOPMENT-GUIDE.md)
+- **Engineering & Layering Standards:** [`ENGINEERING-STANDARDS.md`](../docs/development/ENGINEERING-STANDARDS.md)
+- **Security & Session Standards:** [`SECURITY-STANDARDS.md`](../docs/development/SECURITY-STANDARDS.md)
+- **Testing Standards:** [`TESTING-STANDARDS.md`](../docs/development/TESTING-STANDARDS.md)
+- **Technology Stack & Versions:** [`TECHNOLOGY-STACK.md`](../docs/development/TECHNOLOGY-STACK.md)
+- **Licensing Domain Rules:** [`LICENSING-DOMAIN-SPECIFICATION.md`](../docs/reference/LICENSING-DOMAIN-SPECIFICATION.md)
+- **Task Priorities & Backlog:** [`ENGINEERING-ROADMAP.md`](../ENGINEERING-ROADMAP.md)

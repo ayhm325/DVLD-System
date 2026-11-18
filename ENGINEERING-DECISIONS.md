@@ -2,7 +2,7 @@
 
 > **Authority Level:** Sole Authoritative Architectural, Technical & Security Decision Register  
 > **Parent Document:** [`AGENTS.md`](./AGENTS.md)  
-> **Repository Root:** `D:\DVLD-WPF`  
+> **Repository Root:** `D:\DVLD-System`  
 > **Baseline Commit:** `9b6d22f8728463f7b80c1341582016e1dda1972f`  
 > **Governance Status:** CONSOLIDATED & ENFORCED (Phase 1)  
 
@@ -37,7 +37,7 @@ To maintain strict historical and semantic integrity, the decision accounting is
 - **POLICY UNRESOLVED:** Multiple strategic alternatives submitted for Project Owner selection.
 
 > [!NOTE]
-> For comprehensive implementation stage mappings, open decision prerequisites, and subsystem maturity evaluations tied to these decision records, consult the standalone master plan [`docs/PROJECT-COMPLETION-MASTER-PLAN.md`](./docs/PROJECT-COMPLETION-MASTER-PLAN.md).
+> Active implementation priorities and task authorizations are governed solely by [`ENGINEERING-ROADMAP.md`](./ENGINEERING-ROADMAP.md). The former master plan is preserved only as superseded history in [`docs/archive/superseded/PROJECT-COMPLETION-MASTER-PLAN.md`](./docs/archive/superseded/PROJECT-COMPLETION-MASTER-PLAN.md).
 
 ---
 
@@ -431,9 +431,9 @@ flowchart LR
 6. **Session Modernization Track (`SEC-05`, `FE-01`, `TEST-02`, `SEC-PKG-17`):**
    - All session modernization work items remain deferred and strictly unauthorized.
 7. **Canonical Risk Register Mapping:**
-   - Active decisions reference risks by their unified two-digit identifiers (`RSK-01` through `RSK-20`), where foundational Phase A empirical findings (`RSK-S01`–`RSK-S13`) are remapped (`RSK-S08` maps to `RSK-03` Timing Side-Channel, `RSK-08` is exclusively Multi-Factor Authentication under `DEC-AUTH-03`, `RSK-05` governs Account Lockout / DoS under `DEC-CRED-02` / Schema Gate 5, and `RSK-11` governs Plaintext PII Exposure under Gate 8). The complete authoritative mapping ledger is maintained in [`SECURITY-STANDARDS.md`](./SECURITY-STANDARDS.md) §7.
+   - Active decisions reference risks by their unified two-digit identifiers (`RSK-01` through `RSK-20`), where foundational Phase A empirical findings (`RSK-S01`–`RSK-S13`) are remapped (`RSK-S08` maps to `RSK-03` Timing Side-Channel, `RSK-08` is exclusively Multi-Factor Authentication under `DEC-AUTH-03`, `RSK-05` governs Account Lockout / DoS under `DEC-CRED-02` / Schema Gate 5, and `RSK-11` governs Plaintext PII Exposure under Gate 8). The complete authoritative mapping ledger is maintained in [`SECURITY-STANDARDS.md`](./docs/development/SECURITY-STANDARDS.md) §7.
 8. **System Architecture Style & Transactional Consistency Baseline:**
-   - The architectural baseline is confirmed as an enterprise **Modular Monolith** (`ADR-001`, `ADR-R03`). As a centralized single-database application, the CAP theorem does not apply as a blanket architectural label; rather, the core requirement is that all critical licensing, examination, and fee workflows must preserve **strong transactional consistency (ACID)**. If a distributed partition or external dependency failure prevents guaranteeing a business invariant, the operation must fail safely rather than commit inconsistent state. Microservices, distributed sagas, eventual consistency, and premature distributed infrastructure are rejected. The complete evaluation of the 17 system design concepts and horizontal readiness standards is maintained in [`ENGINEERING-STANDARDS.md`](./ENGINEERING-STANDARDS.md) §13.
+   - The architectural baseline is confirmed as an enterprise **Modular Monolith** (`ADR-001`, `ADR-R03`). As a centralized single-database application, the CAP theorem does not apply as a blanket architectural label; rather, the core requirement is that all critical licensing, examination, and fee workflows must preserve **strong transactional consistency (ACID)**. If a distributed partition or external dependency failure prevents guaranteeing a business invariant, the operation must fail safely rather than commit inconsistent state. Microservices, distributed sagas, eventual consistency, and premature distributed infrastructure are rejected. The complete evaluation of the 17 system design concepts and horizontal readiness standards is maintained in [`ENGINEERING-STANDARDS.md`](./docs/development/ENGINEERING-STANDARDS.md) §13.
 9. **Product Scope Decision — Single Organization Architecture (Rejection of Multi-Tenancy):**
    - **Status:** `ACCEPTED ARCHITECTURAL DECISION` (Decision Date: 2026-11-08)
    - **Authority:** Project Owner

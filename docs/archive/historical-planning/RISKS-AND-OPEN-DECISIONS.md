@@ -5,7 +5,7 @@
 > This document is preserved strictly as a historical planning source. It is **NOT** an active decision register, roadmap, or current implementation authority.
 > - **Current Decision Register:** [`ENGINEERING-DECISIONS.md`](../../../ENGINEERING-DECISIONS.md)
 > - **Current Execution Roadmap:** [`ENGINEERING-ROADMAP.md`](../../../ENGINEERING-ROADMAP.md)
-> - **Active Technical Standards:** [`ENGINEERING-STANDARDS.md`](../../../ENGINEERING-STANDARDS.md), [`TESTING-STANDARDS.md`](../../../TESTING-STANDARDS.md), and [`SECURITY-STANDARDS.md`](../../../SECURITY-STANDARDS.md).
+> - **Active Technical Standards:** [`ENGINEERING-STANDARDS.md`](../../development/ENGINEERING-STANDARDS.md), [`TESTING-STANDARDS.md`](../../development/TESTING-STANDARDS.md), and [`SECURITY-STANDARDS.md`](../../development/SECURITY-STANDARDS.md).
 > All text and metadata below represent the original historical artifact.
 
 > **System Name:** Driver & Vehicle Licensing Department (DVLD) Management System  

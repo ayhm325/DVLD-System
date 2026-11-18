@@ -1,100 +1,36 @@
-# DVLD — Driving & Vehicle License Department System
+# DVLD — Driver & Vehicle Licensing Department System
 
-DVLD is a .NET 8 driving-license department management system with an ASP.NET Core Web API, SQL Server persistence, transactional business workflows, authentication/authorization, a browser-based React frontend (`ClientApp`), and automated testing.
+DVLD is a .NET 8 driving-license department management system with an ASP.NET Core Web API (`DVLD.Api`), SQL Server persistence (`Infrastructure`), transactional business workflows (`Application`), pure domain models (`Domain`), shared HTTP contracts (`DVLD.Contracts`), a React 19 single-page application (`ClientApp`), and automated unit/integration/E2E test suites.
 
-## Functional scope
+---
 
-The system manages:
-
-- People and users
-- Drivers
-- Countries
-- Applications and application types
-- License classes
-- Local driving-license applications
-- Test types, appointments, and results
-- First-license issuance
-- License renewal and replacement
-- License detention and release
-- International licenses
-- Dashboard statistics
-
-## Architecture
+## Architecture Overview
 
 ```text
-  ClientApp (React 19 + Vite)
+  ClientApp (React 19 + TypeScript + Vite)
               │
-              │ HTTP + JSON + JWT
+              │ HTTP + JSON + JWT + HttpOnly Refresh Cookie
               v
-          DVLD.Api
+          DVLD.Api (ASP.NET Core 8)
               │
               v
          Application
               │
               v
-        Infrastructure
-              │
-              v
-          SQL Server
+        Infrastructure (EF Core 8 + SQL Server)
 ```
 
-`DVLD.Contracts` is the shared .NET HTTP contract boundary referenced by `DVLD.Api` and backend test suites. `ClientApp` is a standalone React + TypeScript + Vite frontend that communicates with `DVLD.Api` over HTTP + JSON + JWT (`http://localhost:5260/api`) via the `"ReactApp"` CORS policy (`http://localhost:5173`).
+---
 
-## Solution structure
+## Quick Start
 
-```text
-DVLD.sln
-Domain/
-Application/
-Infrastructure/
-DVLD.Contracts/
-API/DVLD.Api/
-ClientApp/
-  ├── README.md
-  └── docs/
-Test/
-  ├── Application.UnitTests/
-  ├── API.IntegrationTests/
-  └── Infrastructure.IntegrationTests/
-docs/
-```
+### Prerequisites
+- **.NET 8 SDK** (`8.0.427` pinned in [`global.json`](./global.json); note Microsoft ended .NET 8 support on `2026-11-10` — see [`TECHNOLOGY-STACK.md`](./docs/development/TECHNOLOGY-STACK.md))
+- **SQL Server** (`MSSQLSERVER` or LocalDB) with Windows Authentication
+- **Node.js** (20+ LTS recommended) and `npm`
 
-## Technology stack
-
-- C# / .NET 8
-- ASP.NET Core Web API
-- Entity Framework Core 8
-- SQL Server
-- React 19 + TypeScript + Vite (`ClientApp`)
-- JWT bearer authentication
-- ASP.NET Core policy-based authorization (`AdminOnly`, `StaffOnly`, `StaffOrAdmin`)
-- BCrypt password hashing (`BCrypt.Net-Next`)
-- Dependency Injection
-- Repository + Unit of Work
-- Result / Result<T> pattern
-- DTOs and API contracts (`DVLD.Contracts`)
-- Fetch API (React / ClientApp)
-- Unit and integration testing (xUnit, Moq, `WebApplicationFactory`)
-- Azure DevOps Pipelines
-
-## Architectural characteristics
-
-- Thin API controllers
-- Application services own use-case orchestration
-- Infrastructure owns EF Core and SQL Server persistence
-- Shared scoped `DVLDDbContext` / `UnitOfWork` for transactional workflows
-- Deferred physical commit, automatic rollback + `ChangeTracker.Clear()` on failure `Result`, and ambiguous-commit verification in `UnitOfWork`
-- Serializable transactions for concurrency-sensitive workflows
-- Database constraints (unique and filtered unique indexes) and `UPDLOCK` row-lock reads on base tables reinforce business invariants
-- Backend authorization is the security boundary
-- Client role-based UI is a usability mechanism, not the security boundary
-- React frontend (`ClientApp`) is under active iterative development and documented separately under [`ClientApp/README.md`](ClientApp/README.md) and [`ClientApp/AGENTS.md`](ClientApp/AGENTS.md)
-
-## Run the API and Clients
-
-### 1. Build and run the .NET API
-
-From the repository root, pass `"DVLD.sln"` to solution-level `.NET` CLI commands:
+### 1. Run the Backend API (`DVLD.Api`)
+Configure `Jwt:SecretKey` (minimum 32 UTF-8 bytes) via User Secrets or environment variables, then run from `D:\DVLD-System`:
 
 ```powershell
 dotnet restore DVLD.sln
@@ -102,10 +38,9 @@ dotnet build DVLD.sln --configuration Release
 dotnet run --project ".\API\DVLD.Api\DVLD.Api.csproj" --launch-profile http
 ```
 
-The local HTTP profile runs at `http://localhost:5260`; current launch settings (`API/DVLD.Api/Properties/launchSettings.json`) are authoritative if the port changes.
+By default, the local HTTP profile listens on `http://localhost:5260` (Swagger UI at `/swagger` in Development).
 
-### 2. Run the React frontend (`ClientApp`)
-
+### 2. Run the React Frontend (`ClientApp`)
 With `DVLD.Api` running at `http://localhost:5260`:
 
 ```powershell
@@ -114,104 +49,22 @@ npm install
 npm run dev
 ```
 
-See [`ClientApp/README.md`](ClientApp/README.md) and [`ClientApp/AGENTS.md`](ClientApp/AGENTS.md) for React setup, scripts, and frontend development standards.
+For full setup, configuration, safe test execution (`DVLDf` isolation rules), and CI details, see [`docs/development/DEVELOPMENT-GUIDE.md`](./docs/development/DEVELOPMENT-GUIDE.md) and [`ClientApp/README.md`](./ClientApp/README.md).
 
-## Run all .NET tests
+---
 
-```powershell
-dotnet test DVLD.sln --configuration Release
-```
+## Documentation Navigation
 
-Individual suites:
+All project documentation is organized around a single-source-of-truth hierarchy under [`docs/README.md`](./docs/README.md):
 
-```powershell
-dotnet test ".\Test\Application.UnitTests\Application.UnitTests.csproj" --configuration Release
-dotnet test ".\Test\API.IntegrationTests\API.IntegrationTests.csproj" --configuration Release
-dotnet test ".\Test\Infrastructure.IntegrationTests\Infrastructure.IntegrationTests.csproj" --configuration Release
-```
-
-## Documentation Hierarchy & System References
-
-The DVLD repository maintains a strictly governed, streamlined documentation hierarchy:
-
-### 1. Root Engineering Standards & Governance
-- [**AI Engineering Governance** (`AGENTS.md`)](AGENTS.md) — Universal mandatory AI rules, safety gates, and Git protocols.
-- [**AI Engineering Instructions** (`AI-ENGINEERING-INSTRUCTIONS.md`)](AI-ENGINEERING-INSTRUCTIONS.md) — Mandatory 10-step engineering workflow.
-- [**Engineering Standards** (`ENGINEERING-STANDARDS.md`)](ENGINEERING-STANDARDS.md) — Architectural invariants, UnitOfWork, Jordan Time, and concurrency rules.
-- [**Security Standards** (`SECURITY-STANDARDS.md`)](SECURITY-STANDARDS.md) — Authentication architecture, SoD (ADR-O01 Model B), and profile photo upload protection.
-- [**Testing Standards** (`TESTING-STANDARDS.md`)](TESTING-STANDARDS.md) — Test isolation, ephemeral database lifecycle (`DVLD_IntegrationTests_<GUID>`), and CI rules.
-- [**Technology Stack** (`TECHNOLOGY-STACK.md`)](TECHNOLOGY-STACK.md) — Verified inventory of frameworks, package manifests, and dependencies.
-- [**Architectural Decisions** (`ENGINEERING-DECISIONS.md`)](ENGINEERING-DECISIONS.md) — Formal Architectural Decision Records (ADRs).
-- [**Engineering Roadmap** (`ENGINEERING-ROADMAP.md`)](ENGINEERING-ROADMAP.md) — Prioritized remediation backlog and evidence tracking.
-
-### 2. Session Continuity Suite (`docs/continuity/`)
-- [**Project Charter & Continuity** (`docs/continuity/PROJECT-CHARTER-AND-CONTINUITY.md`)](docs/continuity/PROJECT-CHARTER-AND-CONTINUITY.md) — Operational charter, authority model, and continuity framework.
-- [**Current Project State** (`docs/continuity/snapshots/CURRENT-PROJECT-STATE-2026-11-08.md`)](docs/continuity/snapshots/CURRENT-PROJECT-STATE-2026-11-08.md) — Baseline point-in-time snapshot of codebase health.
-- [**Correction Log** (`docs/continuity/CORRECTION-LOG.md`)](docs/continuity/CORRECTION-LOG.md) — Immutable chronological log of corrections.
-- [**Session Logs** (`docs/continuity/SESSION-LOGS/`)](docs/continuity/SESSION-LOGS/README.md) — Session handoff log conventions.
-
-### 3. Civic Domain Specifications (`docs/domain/`)
-- [**Licensing Domain Specification** (`docs/domain/LICENSING-DOMAIN-SPECIFICATION.md`)](docs/domain/LICENSING-DOMAIN-SPECIFICATION.md) — Authoritative domain business invariants, sequential examination progression, application lifecycle, and post-issuance workflows.
-
-### 4. Foundational Engineering Discovery Reports (`docs/audits/`)
-- [**Phase A Discovery Report** (`docs/audits/phase-a-repository-discovery.md`)](docs/audits/phase-a-repository-discovery.md) — Deep architectural baseline discovery (Commit `29e43d6`).
-- [**Phase A.1 Supplementary Review** (`docs/audits/phase-a-supplementary-review.md`)](docs/audits/phase-a-supplementary-review.md) — 11 detailed workflow analyses, UnitOfWork deep analysis, and SQL locking.
-- [**Security Architecture Audit** (`docs/audits/phase-a-security-architecture-audit.md`)](docs/audits/phase-a-security-architecture-audit.md) — Consolidated security audit, STRIDE threat model, and 13-risk register (Commit `29e43d6`).
-
-### 5. Preserved Historical Planning & Sources (`docs/archive/`)
-- [**Historical Planning Archive** (`docs/archive/historical-planning/`)](docs/archive/historical-planning/) — Preserved original development plan, vision, target architecture, and early risks register.
-- [**Security Sources Archive** (`docs/archive/security-sources/`)](docs/archive/security-sources/) — Preserved Security Master Plan and Implementation Readiness Assessment.
-
-### 6. Frontend Development & Governance (`ClientApp/`)
-- [**ClientApp Overview & Setup** (`ClientApp/README.md`)](ClientApp/README.md) — Vite SPA setup, scripts, and feature baseline summary.
-- [**Frontend Agent Governance** (`ClientApp/AGENTS.md`)](ClientApp/AGENTS.md) — Frontend AI instructions, TypeScript standards, and design system rules.
-
-## Test inventory and verification status
-
-### Current source & VSTest inventory (commit `4f75658`)
-
-| Suite | Source Methods (`[Fact]+[Theory]`) | Source Test Cases (`[Fact]+[InlineData]`) | VSTest Discovered (`--list-tests`) | Audit Execution Outcome |
-|---|---:|---:|---:|---|
-| `Application.UnitTests` | 603 | 642 | 633 | Executed (`--no-build`): **633 Passed, 0 Failed, 0 Skipped** (~5 s) |
-| `API.IntegrationTests` | 362 | 442 | 435 | Discovered (`435` entries); not executed against live SQL Server during audit |
-| `Infrastructure.IntegrationTests` | 469 | 507 | 494 | Discovered (`494` entries); not executed against live SQL Server during audit |
-| **Total** | **1,434** | **1,591** | **1,562** | `Application.UnitTests` passed; integration suites enumerated only |
-
-Discovered VSTest counts (`435` and `494`) represent test discovery only and are not claimed as passing test runs. During the audit inside a network-isolated sandbox, `dotnet build` failed (`NU1900` / sandbox MSBuild restriction), so `--no-build` execution and discovery used existing `bin/Debug/net8.0` assemblies. Those assemblies were built on 2026-10-26 (12:39–15:21), before commits `b5dc945`, `3056f88`, and `61cbdcc` added 29 source test cases; this is why the VSTest counts (`1,562`) are lower than the source attribute counts at `HEAD` (`1,591`). Source counts are static attribute counts, not executed test results; only the `633` `Application.UnitTests` entries were actually executed.
-
-### Historical full test run result
-
-The latest complete full-suite result reported during earlier development was:
-
-| Suite | Passed | Failed | Skipped |
-|---|---:|---:|---:|
-| Application.UnitTests | 631 | 0 | 0 |
-| API.IntegrationTests | 364 | 0 | 0 |
-| Infrastructure.IntegrationTests | 492 | 0 | 0 |
-| **Total** | **1487** | **0** | **0** |
-
-These are historical user-reported results, not a claim that the documentation update freshly executed all integration tests against SQL Server.
-
-## Continuous Integration
-
-The Azure DevOps pipeline (`azure-pipelines.yml`) currently provides Continuous Integration for the `.NET` solution (`DVLD.sln`):
-
-```text
-main push
-    ↓
-.NET 8 SDK
-    ↓
-Restore
-    ↓
-Release Build
-    ↓
-Tests
-    ↓
-Publish Test Results
-```
-
-`azure-pipelines.yml` does not currently include build or lint steps for `ClientApp/`, and no production deployment/CD stage is claimed by the current documentation.
-
-## Documentation principle
-
-Implemented behavior, verified test behavior, and future improvements are kept distinct. When source behavior changes, update the relevant documentation in the same change.
+| Category / Purpose | Entry Point |
+|---|---|
+| **Central Documentation Index** | [`docs/README.md`](./docs/README.md) |
+| **End-User & Staff Guide (`docs/client/`)** | [`docs/client/USER-GUIDE.md`](./docs/client/USER-GUIDE.md) |
+| **Developer Setup, Architecture, Security, Testing & Stack (`docs/development/`)** | [`docs/development/DEVELOPMENT-GUIDE.md`](./docs/development/DEVELOPMENT-GUIDE.md) |
+| **Licensing Domain Rules (`docs/reference/`)** | [`docs/reference/LICENSING-DOMAIN-SPECIFICATION.md`](./docs/reference/LICENSING-DOMAIN-SPECIFICATION.md) |
+| **Frontend Portal Setup (`ClientApp/`)** | [`ClientApp/README.md`](./ClientApp/README.md) |
+| **AI Engineering Governance** | [`AGENTS.md`](./AGENTS.md) and [`ClientApp/AGENTS.md`](./ClientApp/AGENTS.md) |
+| **Engineering Backlog & Task Authorization** | [`ENGINEERING-ROADMAP.md`](./ENGINEERING-ROADMAP.md) |
+| **Architecture & Policy Decisions (ADRs)** | [`ENGINEERING-DECISIONS.md`](./ENGINEERING-DECISIONS.md) |
+| **Historical Audits, Snapshots & Superseded Plans (`docs/archive/`)** | [`docs/archive/README.md`](./docs/archive/README.md) |

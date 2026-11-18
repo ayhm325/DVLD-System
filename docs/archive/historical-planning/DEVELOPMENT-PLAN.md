@@ -5,8 +5,8 @@
 > This document is preserved strictly as a historical planning source. It is **NOT** an active roadmap, decision register, or current implementation authority.
 > - **Current Execution Roadmap:** [`ENGINEERING-ROADMAP.md`](../../../ENGINEERING-ROADMAP.md)
 > - **Current Decision Register:** [`ENGINEERING-DECISIONS.md`](../../../ENGINEERING-DECISIONS.md)
-> - **Active Civic Domain Specification:** The core business rules originally in Section 2 were extracted and are maintained in [`docs/domain/LICENSING-DOMAIN-SPECIFICATION.md`](../../domain/LICENSING-DOMAIN-SPECIFICATION.md).
-> - **Active Technical Standards:** [`ENGINEERING-STANDARDS.md`](../../../ENGINEERING-STANDARDS.md), [`TESTING-STANDARDS.md`](../../../TESTING-STANDARDS.md), and [`SECURITY-STANDARDS.md`](../../../SECURITY-STANDARDS.md).
+> - **Active Civic Domain Specification:** The core business rules originally in Section 2 were extracted and are maintained in [`docs/domain/LICENSING-DOMAIN-SPECIFICATION.md`](../../reference/LICENSING-DOMAIN-SPECIFICATION.md).
+> - **Active Technical Standards:** [`ENGINEERING-STANDARDS.md`](../../development/ENGINEERING-STANDARDS.md), [`TESTING-STANDARDS.md`](../../development/TESTING-STANDARDS.md), and [`SECURITY-STANDARDS.md`](../../development/SECURITY-STANDARDS.md).
 > All text and metadata below represent the original historical artifact.
 
 > **System Name:** Driver & Vehicle Licensing Department (DVLD) Management System  
@@ -33,7 +33,7 @@
 
 ## 2. Core Licensing Domain Business Constraints
 
-*These domain invariants were extracted and validated from historical business discovery in [`docs/audits/phase-a-supplementary-review.md`](../../audits/phase-a-supplementary-review.md) §3.*
+*These domain invariants were extracted and validated from historical business discovery in [`docs/audits/phase-a-supplementary-review.md`](../audits/phase-a-supplementary-review.md) §3.*
 
 ### 2.1 Local Driving License (LDL) Application Lifecycle
 1. **Prerequisite Citizen Demographic Profile:** An applicant must exist in the `People` directory before an application can be created.
@@ -133,7 +133,7 @@ graph LR
 
 ## 4. Evidence-Backed Findings Register (Three-Dimensional Model)
 
-The following historical findings—extracted from Phase A ([`docs/audits/phase-a-repository-discovery.md`](../../audits/phase-a-repository-discovery.md)) and Phase A.1 ([`docs/audits/phase-a-supplementary-review.md`](../../audits/phase-a-supplementary-review.md))—are tracked across three orthogonal dimensions:
+The following historical findings—extracted from Phase A ([`docs/audits/phase-a-repository-discovery.md`](../audits/phase-a-repository-discovery.md)) and Phase A.1 ([`docs/audits/phase-a-supplementary-review.md`](../audits/phase-a-supplementary-review.md))—are tracked across three orthogonal dimensions:
 
 | Finding ID & Description | Dimension A: Evidence Status | Dimension B: Decision Status | Dimension C: Implementation Status | Source Anchor & Baseline |
 |---|---|---|---|---|

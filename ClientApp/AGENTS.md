@@ -1,116 +1,61 @@
 # AI Agent Engineering Instructions — DVLD ClientApp
 
-> **Authority Level:** Mandatory Repository Instruction  
-> **Target System:** Google Antigravity / AI Pair Programming Sessions  
-> **Project Root:** `D:\DVLD-WPF\ClientApp`  
+> **Authority Level:** Frontend Component Instruction  
+> **Parent Governance:** [`../AGENTS.md`](../AGENTS.md) *(sole general AI engineering governance — Git safety, DB protection, approval gates, and verification rules apply here without exception)*  
+> **Project Root:** `D:\DVLD-System\ClientApp`  
 > **Governance Status:** ACTIVE & ENFORCED
 
 ---
 
-## 1. Overview & Scope
+## 1. Overview & Frontend Scope
 
-This file governs all AI coding sessions operating within the `ClientApp` repository.
-
-`ClientApp` is the browser-based single-page application for the Driver & Vehicle Licensing Department (DVLD) system. It connects to the `DVLD.Api` backend over HTTP + JSON + JWT at `http://localhost:5260/api`.
-
-All AI agents operating in this codebase **must** adhere strictly to the protocols, documentation hierarchy, and protected boundaries defined in this document.
+This file defines **frontend-specific** architecture conventions and quality gates for `ClientApp/`, the React + TypeScript + Vite SPA communicating with `DVLD.Api` over HTTP + JSON + JWT (`http://localhost:5260/api`). General repository-wide agent rules (Git safety, protected databases, approval gates, evidence standards, and 10-step workflow) live exclusively in [`../AGENTS.md`](../AGENTS.md).
 
 ---
 
-## 2. Authoritative Documentation Hierarchy
+## 2. Authoritative Documentation References
 
-Before implementing changes or answering architectural questions, AI agents must consult documentation in the following order:
-
-```mermaid
-flowchart TD
-    A["ClientApp/AGENTS.md (Operational Rules & Boundaries)"] --> B["ClientApp/README.md (Master Entry Point & Setup)"]
-    B --> C["ENGINEERING-STANDARDS.md (System Architecture, Layering & Contracts)"]
-    B --> D["SECURITY-STANDARDS.md (Auth Policies, SoD, Session Lifecycle)"]
-    B --> E["docs/domain/LICENSING-DOMAIN-SPECIFICATION.md (Domain Business Rules)"]
-```
-
-1. [`ClientApp/AGENTS.md`](./AGENTS.md) — Universal operational instructions, governance rules, and safety boundaries for frontend development (this document).
-2. [`ClientApp/README.md`](./README.md) — Authoritative project entry point, technology stack, setup scripts, development workflows, and feature baseline summary.
-3. [`ENGINEERING-STANDARDS.md`](../ENGINEERING-STANDARDS.md) — System architecture, Clean Architecture layers, API contracts, persistence, and concurrency rules.
-4. [`SECURITY-STANDARDS.md`](../SECURITY-STANDARDS.md) — Authentication architecture, Segregation of Duties (SoD), role policies, and file upload validation.
-5. [`docs/domain/LICENSING-DOMAIN-SPECIFICATION.md`](../docs/domain/LICENSING-DOMAIN-SPECIFICATION.md) — Authoritative domain business invariants and licensing workflow constraints.
+1. [`../AGENTS.md`](../AGENTS.md) — Universal repository AI governance, safety gates, and workflow.
+2. [`./README.md`](./README.md) — `ClientApp` prerequisites, scripts, and setup commands.
+3. [`../docs/development/ENGINEERING-STANDARDS.md`](../docs/development/ENGINEERING-STANDARDS.md) — System architecture, API contracts, and persistence rules.
+4. [`../docs/development/SECURITY-STANDARDS.md`](../docs/development/SECURITY-STANDARDS.md) — Authentication, `AUTH-01` session lifecycle, RBAC/SoD, and client token storage rules.
+5. [`../docs/reference/LICENSING-DOMAIN-SPECIFICATION.md`](../docs/reference/LICENSING-DOMAIN-SPECIFICATION.md) — Authoritative civic licensing business rules.
 
 ---
 
-## 3. Core Architecture & Standards
+## 3. Frontend Architecture & Coding Standards
 
-1. **Authentication Portal:**
-   - Active production login is the **Simplified Light-Theme Portal** implemented in `src/components/Login.tsx` and `Login.css`.
-   - The access token is held in memory by `authTokenStore.ts`; the refresh token is stored only in an HttpOnly cookie and is never readable from JavaScript. `localStorage` contains only the optional remembered username and the visual theme preference, never authentication tokens.
+1. **Authentication & Browser Storage (`Login.tsx`, `AuthContext.tsx`, `authTokenStore.ts`):**
+   - Active login portal is implemented in `src/components/auth/Login.tsx` and `Login.css`.
+   - The access token is held strictly in memory (`authTokenStore.ts`); the refresh token is held only in an `HttpOnly` cookie and is never readable from JavaScript.
+   - `localStorage` stores **only** the optional remembered username (`dvld_remembered_username` in `Login.tsx`), never authentication tokens.
 2. **Authenticated Application Shell:**
-   - Root application coordinator in `src/App.tsx`.
-   - Page routing and RBAC access guards in `src/components/AppRouter.tsx`.
-   - Global keyboard command palette (Ctrl+K) in `src/components/common/CommandPalette.tsx`.
-   - Navigation sidebar with role-filtered links in `src/components/Sidebar.tsx`.
-   - Topbar with user profile dropdown and logout trigger in `src/components/Topbar.tsx`.
+   - Root coordinator in `src/App.tsx`; page routing and RBAC guards in `src/components/layout/AppRouter.tsx` and `src/utils/permissions.ts`.
+   - Command palette (`Ctrl+K`) in `src/components/layout/CommandPalette.tsx`.
+   - Role-filtered navigation sidebar in `src/components/layout/Sidebar.tsx` and `sidebarNavigation.ts`; topbar in `src/components/layout/Topbar.tsx`.
 3. **Shared Design System (`src/components/common/` & `src/components/ui/`):**
-   - Reusable enterprise UI components: `DataTable`, `TableToolbar`, `StatusBadge`, `StatCard`, `PageHero`, `ErrorAlert`, `EmptyState`, `ConfirmModal`, `ModalShell`.
-   - Accessible primitives based on Radix UI (`@radix-ui/react-*`) and Tailwind CSS v4.
-4. **TypeScript & Linter Standards:**
-   - Target `ES2023`, `DOM`.
-   - Strict module resolution with `verbatimModuleSyntax: true` — **always use `import type` for type-only imports**.
-   - Path alias `@/*` maps to `./src/*`.
-   - Strict compiler checks: `noUnusedLocals`, `noUnusedParameters`, `noFallthroughCasesInSwitch`.
+   - Reuse shared components (`DataTable`, `DataTableContainer`, `TableToolbar`, `StatusBadge`, `StatCard`, `PageHero`, `ErrorAlert`, `EmptyState`, `ConfirmModal`, `ModalShell`) built on Radix UI (`@radix-ui/react-*`) and Tailwind CSS v4.
+4. **TypeScript & Compiler Rules (`tsconfig.app.json`):**
+   - Target `ES2023`, `DOM`; path alias `@/*` maps to `./src/*`.
+   - `verbatimModuleSyntax: true` — always use `import type` for type-only imports.
+   - Enforce `noUnusedLocals`, `noUnusedParameters`, `erasableSyntaxOnly`, and `noFallthroughCasesInSwitch`. (Note: `tsconfig.app.json` does not currently set `"strict": true`.)
 5. **Data Fetching & Custom Hooks (`src/hooks/`):**
-   - Centralize stateful data operations into dedicated hooks (`usePeople`, `useDashboardStatistics`, `useAsyncData`).
-   - Abstract pagination and filtering via `usePagination`, `useTableFilters`, and `useDebounce`.
+   - Encapsulate stateful operations in dedicated hooks (`useDashboardStatistics`, `useAsyncData`, `usePagination`, `useTableFilters`, `useDebounce`).
 6. **HTTP Transport Client (`src/services/apiClient.ts`):**
-   - Route all API calls through `apiRequest<T>()`. Never call `fetch()` directly inside UI components.
-   - Automatically injects `Authorization: Bearer <token>` when authenticated.
-   - Normalizes RFC 7807 `ProblemDetails` into strongly-typed `ApiError` instances for user-facing alert messages.
-   - Automated 401 interception triggers session termination via `setUnauthorizedHandler()` and redirect to login with a friendly session-expired notice.
+   - Route all API calls through `apiRequest<T>()` / `apiBlobRequest()`; never invoke `fetch()` directly from UI components.
+   - Normalizes RFC 7807 `ProblemDetails` into typed `ApiError`, `UnauthorizedError`, and `ForbiddenError` instances.
+   - Handles single-flight 401 refresh with bounded 409 retry and triggers `setUnauthorizedHandler()` on fatal auth failure.
 
 ---
 
-## 4. Mandatory Execution Rules
+## 4. Frontend Boundaries & Quality Gates
 
-### 4.1 Scope Confinement
-- Execute strictly within the scope requested by the user.
-- Never perform unrequested redesigns, refactors, or dependency upgrades.
-- Complete the requested deliverables, verify quality gates, and **STOP**.
-
-### 4.2 Working Tree & Git Safety
-- Always run `git status --short` before modifying any file.
-- Preserve pre-existing uncommitted changes in the working tree.
-- **Zero Destructive Git Commands:** Do **NOT** commit, push, create branches, stash, reset, or checkout away from the working branch unless explicitly instructed in writing by the user.
-
-### 4.3 Technology & Dependency Discipline
-- Inspect `package.json` directly. Never assume a package exists based on conversation history.
-- Do not install, upgrade, or remove dependencies without explicit user authorization.
-- Any dependency addition or removal must be evaluated and recorded in documentation.
-
-### 4.4 Protected Application Boundaries
-Unless explicitly authorized by the user, the following areas are **STRICTLY OFF-LIMITS**:
-- Backend C# code (`API/`, `Core/`, `Infrastructure/`, `Application/`)
-- Database schemas, migrations, and SQL procedures
-- Backend authorization policies and controller attributes
-- Production authentication contracts (`POST /api/Auth/login`)
-
----
-
-## 5. Technical Quality Gates
-
-Every implementation or cleanup task must satisfy the following non-negotiable verification gates before concluding:
-
-1. **TypeScript Build:**
-   ```powershell
-   npm.cmd --prefix ClientApp run build
-   ```
-   Must exit with code 0 (`tsc -b && vite build`).
-2. **ESLint Verification:**
-   ```powershell
-   npm.cmd --prefix ClientApp run lint
-   ```
-   Must exit with code 0 (zero errors, zero warnings).
-3. **Whitespace & Diff Verification:**
-   ```powershell
-   git diff --check
-   ```
-   Must report zero whitespace errors, trailing spaces, or conflict markers.
-4. **Documentation Sync:**
-   All documentation paths, commands, and feature descriptions must reflect the actual verified state of the codebase.
+- **Scope Confinement:** When executing a frontend-only task, keep edits inside `ClientApp/` and do **not** modify backend C# code (`API/`, `Application/`, `Infrastructure/`, `Domain/`, `DVLD.Contracts/`), database migrations, or backend authorization attributes without explicit authorization.
+- **Dependency Discipline:** Inspect `ClientApp/package.json` directly; never install, upgrade, or remove npm packages without explicit user approval.
+- **Verification Commands (run when executing frontend code changes):**
+  ```powershell
+  npm.cmd --prefix ClientApp run build
+  npm.cmd --prefix ClientApp run lint
+  npm.cmd --prefix ClientApp run test
+  git diff --check
+  ```

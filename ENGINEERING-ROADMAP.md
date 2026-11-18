@@ -2,7 +2,7 @@
 
 > **Authority Level:** Sole Authoritative Engineering Prioritization, Backlog & Execution Roadmap  
 > **Parent Document:** [`AGENTS.md`](./AGENTS.md)  
-> **Repository Root:** `D:\DVLD-WPF`  
+> **Repository Root:** `D:\DVLD-System`  
 > **Baseline Commit:** `9b6d22f8728463f7b80c1341582016e1dda1972f`  
 > **Governance Status:** CONSOLIDATED & ENFORCED (Phase 1)  
 
@@ -20,7 +20,7 @@ This document constitutes the sole authoritative engineering execution roadmap a
 5. **External Regulatory Approvals Are Independent Gates:** Legal and regulatory rulings from the Licensing Authority (such as `ADR-O02` / `DEC-POL-01` and `DEC-POL-02`) are external prerequisite gates under Gate 3. Engineering teams may not anticipate or assume statutory approval. No implementation code may be introduced until written regulatory confirmation is recorded.
 6. **Database Schema Changes Require Independent Approval:** Schema modifications, table alterations, and Entity Framework Core migrations (including Schema Gate 5 for user lockout columns) require separate human DBA review, explicit approval, and isolated verification against ephemeral test databases (`DVLD_IntegrationTests_<GUID>`). Migrations to `DVLDf` are strictly prohibited.
 7. **Documenting a Gate Does Not Satisfy It:** Logging an operational requirement, regulatory condition, or risk gate in documentation does not fulfill that gate. Gates remain unsatisfied until verifiable runtime evidence, DBA sign-off, or formal human authorization is executed.
-8. **Task Readiness vs Implementation Authorization:** Technical readiness (analysis complete, solution designed, zero schema changes) does **not** constitute authorization to begin coding. All Phase 12.2 through 12.5 tasks remain strictly **PROPOSED / UNAUTHORIZED** until explicit human authorization is granted. For comprehensive subsystem maturity evaluations and stage-by-stage dependency mappings, consult the standalone master plan [`docs/PROJECT-COMPLETION-MASTER-PLAN.md`](./docs/PROJECT-COMPLETION-MASTER-PLAN.md).
+8. **Task Readiness vs Implementation Authorization:** Technical readiness (analysis complete, solution designed, zero schema changes) does **not** constitute authorization to begin coding. All Phase 12.2 through 12.5 tasks remain strictly **PROPOSED / UNAUTHORIZED** until explicit human authorization is granted. Cross-check architectural boundaries in [`docs/development/ENGINEERING-STANDARDS.md`](./docs/development/ENGINEERING-STANDARDS.md) and formal decisions in [`ENGINEERING-DECISIONS.md`](./ENGINEERING-DECISIONS.md). *(The former `PROJECT-COMPLETION-MASTER-PLAN.md` is preserved only as superseded history in [`docs/archive/superseded/PROJECT-COMPLETION-MASTER-PLAN.md`](./docs/archive/superseded/PROJECT-COMPLETION-MASTER-PLAN.md).)*
 
 ---
 
@@ -240,7 +240,7 @@ graph TD
 - **Priority:** `P2`
 - **Affected Components:** `API/DVLD.Api/Controllers/` (20 controllers), `API/DVLD.Api/BackgroundServices/LicenseExpirationBackgroundService.cs`, `Application/Interfaces/`, `Application/Services/` (26 services), `Infrastructure/Repositories/` (15 repositories), `Infrastructure/Services/PhysicalFileStorageService.cs`.
 - **Description:** Controller actions, service methods, and repository queries omitted `CancellationToken` parameters, allowing orphaned database queries to continue executing after client disconnection.
-- **Technical Remediation Implemented:** Propagated `CancellationToken` from all 109 async controller actions across 20 controllers (out of 110 total actions, where `AuthController.Me` is the sole synchronous claims-reading action) through all async application service methods, `IFileStorageService`/`PhysicalFileStorageService` stream operations (`CopyToAsync`, `FlushAsync`), and repository queries to 100% of EF Core async operations (`ToListAsync`, `FirstOrDefaultAsync`, `SingleOrDefaultAsync`, `SingleAsync`, `AnyAsync`, `CountAsync`, `AddAsync`, `ToDictionaryAsync`, `ExecuteUpdateAsync`, `ExecuteSqlInterpolatedAsync`) and `UnitOfWork` transaction/save operations across all 5 domain bundles. Also propagated `stoppingToken` in `LicenseExpirationBackgroundService` and guaranteed `OperationCanceledException` is never swallowed. Full inventory and final audit recorded in `docs/audits/api-01-cancellation-token-inventory.md`.
+- **Technical Remediation Implemented:** Propagated `CancellationToken` from all 109 async controller actions across 20 controllers (out of 110 total actions, where `AuthController.Me` is the sole synchronous claims-reading action) through all async application service methods, `IFileStorageService`/`PhysicalFileStorageService` stream operations (`CopyToAsync`, `FlushAsync`), and repository queries to 100% of EF Core async operations (`ToListAsync`, `FirstOrDefaultAsync`, `SingleOrDefaultAsync`, `SingleAsync`, `AnyAsync`, `CountAsync`, `AddAsync`, `ToDictionaryAsync`, `ExecuteUpdateAsync`, `ExecuteSqlInterpolatedAsync`) and `UnitOfWork` transaction/save operations across all 5 domain bundles. Also propagated `stoppingToken` in `LicenseExpirationBackgroundService` and guaranteed `OperationCanceledException` is never swallowed. Full inventory and final audit recorded in `docs/archive/audits/api-01-cancellation-token-inventory.md`.
 - **Verification Requirements:** Verified by 935 passing tests in `Application.UnitTests` (0 failed), 461 passing controller and background service integration tests in `API.IntegrationTests` (0 failed), and clean compilation of `Infrastructure.IntegrationTests` (0 warnings, 0 errors; 34 database-free tests passed, while 622 SQL-dependent tests require external `DVLD_TEST_CONNECTION` configuration).
 - **Current Status:** **`Verified`** (All 5 domain bundles & Final Audit 100% implemented and verified).
 - **Implementation Authorization:** **AUTHORIZED & COMPLETED (Phase 12.3 Scope).**
@@ -251,7 +251,7 @@ graph TD
 - **Priority:** `P2`
 - **Affected Components:** `API/DVLD.Api/Results/ResultHttpMapper.cs`, `API/DVLD.Api/Results/ApiProblemDetails.cs`, `API/DVLD.Api/Security/GlobalExceptionHandler.cs`, `API/DVLD.Api/Controllers/AuthController.cs`, `API/DVLD.Api/Controllers/PeopleController.cs`, `API/DVLD.Api/Program.cs`, `Application/Common/Results/`, `ClientApp/src/services/apiClient.ts`.
 - **Description:** `AuthController` returned custom `{ error = "..." }` schemas, `PeopleController` returned a custom upload envelope, and `GlobalExceptionHandler` returned standard `ProblemDetails`. Middleware-generated failures (401 challenge, 403 forbidden, unmatched-route 404, rate-limiter 429) had empty bodies, malformed JSON surfaced as 500, and every `Result` failure without an explicit category surfaced as 500.
-- **Error Catalog Outcome:** All failure factories in `Application/Services` were audited. The earlier report's "143 `Result.Failure` call sites" was a combined regular expression over every failure factory; measured counts are **26 `Result.Failure(...)`** and **43 `Result<T>.FromFailure(...)`**. The 26 direct sites are persistence/consistency failures (zero rows affected, repository update returned false, missing parent aggregate) and correctly remain HTTP 500. The genuine misclassifications were the login contract (401 encoded as an ad-hoc body) and the absence of an authentication category in `ErrorType`. Full catalog in `docs/audits/rest-01-error-handling-and-test-database-safety.md`.
+- **Error Catalog Outcome:** All failure factories in `Application/Services` were audited. The earlier report's "143 `Result.Failure` call sites" was a combined regular expression over every failure factory; measured counts are **26 `Result.Failure(...)`** and **43 `Result<T>.FromFailure(...)`**. The 26 direct sites are persistence/consistency failures (zero rows affected, repository update returned false, missing parent aggregate) and correctly remain HTTP 500. The genuine misclassifications were the login contract (401 encoded as an ad-hoc body) and the absence of an authentication category in `ErrorType`. Full catalog in `docs/archive/audits/rest-01-error-handling-and-test-database-safety.md`.
 - **Technical Remediation Implemented:**
   1. `ErrorType.Unauthorized` added and propagated by all `PropagateFailure<T>` translators; `AuthService` returns it for invalid credentials.
   2. `ResultHttpMapper` rewritten as the single deterministic `ErrorType` → HTTP translator, with `ValidationProblemDetails` for validation (aggregated `detail` plus structured `errors`), and explicit 401/403/404/409/500 mappings.
@@ -331,7 +331,7 @@ graph TD
 - **Proposed Technical Remediation:** Apply `[EnableRateLimiting("PasswordChangeLimit")]` with sliding-window policy.
 - **Scope Boundary Enforcement:** `SEC-03` is strictly an endpoint rate-limiting task on `change-password`. It does **not** encompass login timing side-channel defenses (`SEC-PKG-08`), password complexity policies (`SEC-PKG-09`), or account lockout counters (`SEC-PKG-11`).
 - **Verification Requirements:** Integration tests asserting HTTP 429 Too Many Requests when exceeding configured rate limits.
-- **Current Status:** `Confirmed / Planned`
+- **Current Status:** `Confirmed / Planned` *(Cross-reference note: `[AUTH-01]` subsequently added `[EnableRateLimiting("ChangePasswordRateLimit")]` — 5 requests/minute per IP — on `AuthController.ChangePassword` in `Program.cs` and `AuthController.cs`; formal verification against the `SEC-03` acceptance criteria remains tracked here.)*
 - **Implementation Authorization:** **NOT AUTHORIZED (Phase 12.5 Scope).**
 
 #### [ARCH-01] Consolidate Duplicated Contracts DTOs
@@ -418,7 +418,7 @@ graph TD
 - **Description:** Implements database-backed refresh tokens with family tracking, token reuse detection, and multi-session revocation.
 - **Associated Security Packages:** `SEC-PKG-10` (Token Lifetime Bounding) and `SEC-PKG-17` (Refresh Token Lifecycle & Session Modernization).
 - **Governing Architectural Decisions:** `DEC-SEC05-01` (Transport Mechanism) and `DEC-SEC05-02` (Reuse Invalidation Scope).
-- **Current Status:** **`DEFERRED / STRICTLY UNAUTHORIZED`**.
+- **Current Status:** **`DEFERRED / STRICTLY UNAUTHORIZED`** *(Cross-reference note: The historical `SEC-05` deferral above was later superseded by the implemented `[AUTH-01]` (`ADR-006`) task in §3.3, which implemented `UserSession` SHA-256 refresh tokens, rotation, reuse detection, `HttpOnly` cookie transport, and CSRF checks.)*
 
 #### [FE-01] React Authentication Lifecycle & Silent Refresh Coordination
 - **Finding ID:** `FE-01`
@@ -427,7 +427,7 @@ graph TD
 - **Affected Components:** `ClientApp/src/context/AuthContext.tsx`, `ClientApp/src/services/apiClient.ts`, `ClientApp/src/hooks/useAuth.ts`.
 - **Description:** Manages silent token refresh, in-memory token state, and session timeout warnings in the React SPA.
 - **Associated Security Package:** `SEC-PKG-17`.
-- **Current Status:** **`DEFERRED / STRICTLY UNAUTHORIZED`**.
+- **Current Status:** **`DEFERRED / STRICTLY UNAUTHORIZED`** *(Cross-reference note: React single-flight refresh, in-memory access token storage, and cross-tab coordination were subsequently delivered under `[AUTH-01]`; making server logout revocation failure observable in the UI remains an open reliability follow-up.)*
 
 #### [TEST-02] Security, Session & Transactional Audit Integration Test Suite
 - **Finding ID:** `TEST-02`
@@ -441,7 +441,7 @@ graph TD
 
 ## 4. Security Package Specifications (All 17 Packages)
 
-The 17 security packages defined in [`docs/archive/security-sources/SECURITY-MASTER-PLAN.md`](./docs/archive/security-sources/SECURITY-MASTER-PLAN.md) are incorporated as technical specifications, acceptance criteria, or operational gates. The unified risk inventory associates each package with its canonical risk (where foundational Phase A findings `RSK-S01`–`RSK-S13` map to `RSK-01`–`RSK-14`, `RSK-16`, and 7 additional risk records `RSK-08`, `RSK-11`, `RSK-15`, `RSK-17`–`RSK-20` complete the 20-risk inventory; full canonical mapping is maintained in [`SECURITY-STANDARDS.md`](./SECURITY-STANDARDS.md) §7). No artificial task mappings are applied, and no new task IDs are created:
+The 17 security packages defined in [`docs/archive/security-sources/SECURITY-MASTER-PLAN.md`](./docs/archive/security-sources/SECURITY-MASTER-PLAN.md) are incorporated as technical specifications, acceptance criteria, or operational gates. The unified risk inventory associates each package with its canonical risk (where foundational Phase A findings `RSK-S01`–`RSK-S13` map to `RSK-01`–`RSK-14`, `RSK-16`, and 7 additional risk records `RSK-08`, `RSK-11`, `RSK-15`, `RSK-17`–`RSK-20` complete the 20-risk inventory; full canonical mapping is maintained in [`SECURITY-STANDARDS.md`](./docs/development/SECURITY-STANDARDS.md) §7). No artificial task mappings are applied, and no new task IDs are created:
 
 | Package ID | Title & Technical Specification | Governance Classification | Attached Canonical Task / Gate | Governing Authority & Status |
 |:---|:---|:---|:---|:---:|
@@ -473,7 +473,7 @@ The 17 security packages defined in [`docs/archive/security-sources/SECURITY-MAS
 
 | Phase | Scope & Key Work Items | Governance Status | Prerequisites & Authorization Dependencies |
 |:---|:---|:---:|:---|
-| **Phase A / A.1** | Deep Repository Discovery & Supplementary Review | **Completed** | Concluded and documented in `docs/audits/`. |
+| **Phase A / A.1** | Deep Repository Discovery & Supplementary Review | **Completed** | Concluded and documented in `docs/archive/audits/`. |
 | **Phase B** | Engineering Governance Suite Setup | **Completed** | Approved and documented across governance markdown suite. |
 | **Phases C / D / E** | Decisions, Detention Domain & Concurrency Investigation | **Completed** | `ADR-O01` approved; `ADR-O02` provisionally selected; concurrency review closed. |
 | **Phase 12.2** | P0 & P1 Critical Integrity & Performance (`INT-01`, `INT-02`, `PERF-01`) | **PROPOSED / NOT AUTHORIZED** | Requires explicit human review and approval of Phase 12.2 scope; telemetry verification for `INT-01` (`DEC-APP-01`). |
