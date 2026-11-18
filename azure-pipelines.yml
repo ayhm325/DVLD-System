@@ -205,67 +205,126 @@ stages:
                 $auditDir = Join-Path '$(Build.ArtifactStagingDirectory)' 'clientapp-npm-audit'
                 New-Item -ItemType Directory -Path $auditDir -Force | Out-Null
 
-                # Tier 1: Mandatory blocking production dependency check (--omit=dev)
+                function Test-NpmAuditReport {
+                  param(
+                    [Parameter(Mandatory = $true)][string]$TierName,
+                    [Parameter(Mandatory = $true)][string]$JsonPath,
+                    [Parameter(Mandatory = $true)][int]$CommandExitCode,
+                    [Parameter(Mandatory = $true)][bool]$BlockOnHigh
+                  )
+
+                  if (-not (Test-Path -LiteralPath $JsonPath)) {
+                    Write-Host "##vso[task.logissue type=error]$TierName npm audit report file was not generated at '$JsonPath'."
+                    return $false
+                  }
+
+                  $rawContent = Get-Content -LiteralPath $JsonPath -Raw -ErrorAction SilentlyContinue
+                  if ([string]::IsNullOrWhiteSpace($rawContent)) {
+                    Write-Host "##vso[task.logissue type=error]$TierName npm audit report file '$JsonPath' is empty."
+                    return $false
+                  }
+
+                  try {
+                    $parsed = $rawContent | ConvertFrom-Json -ErrorAction Stop
+                  }
+                  catch {
+                    Write-Host "##vso[task.logissue type=error]$TierName npm audit output is not valid JSON: $($_.Exception.Message)"
+                    return $false
+                  }
+
+                  if ($null -eq $parsed) {
+                    Write-Host "##vso[task.logissue type=error]$TierName npm audit JSON parsed to null."
+                    return $false
+                  }
+
+                  if ($parsed.PSObject.Properties.Match('error').Count -gt 0 -and $null -ne $parsed.error) {
+                    $errCode = 'UNKNOWN'
+                    $errSum = "$($parsed.error)"
+                    if ($parsed.error.PSObject -and $parsed.error.PSObject.Properties.Match('code').Count -gt 0 -and $null -ne $parsed.error.code) {
+                      $errCode = "$($parsed.error.code)"
+                    }
+                    if ($parsed.error.PSObject -and $parsed.error.PSObject.Properties.Match('summary').Count -gt 0 -and $null -ne $parsed.error.summary) {
+                      $errSum = "$($parsed.error.summary)"
+                    }
+                    Write-Host "##vso[task.logissue type=error]$TierName npm audit failed with registry/CLI error ($errCode): $errSum"
+                    return $false
+                  }
+
+                  if ($parsed.PSObject.Properties.Match('metadata').Count -eq 0 -or $null -eq $parsed.metadata -or
+                      $parsed.metadata.PSObject.Properties.Match('vulnerabilities').Count -eq 0 -or $null -eq $parsed.metadata.vulnerabilities) {
+                    Write-Host "##vso[task.logissue type=error]$TierName npm audit JSON lacked metadata.vulnerabilities."
+                    return $false
+                  }
+
+                  $v = $parsed.metadata.vulnerabilities
+                  $requiredFields = @('critical', 'high', 'moderate', 'low', 'info')
+                  foreach ($field in $requiredFields) {
+                    $prop = $v.PSObject.Properties.Match($field)
+                    if ($prop.Count -eq 0 -or $null -eq $prop[0].Value -or
+                        -not (($prop[0].Value -is [int]) -or ($prop[0].Value -is [long])) -or ([long]$prop[0].Value -lt 0)) {
+                      Write-Host "##vso[task.logissue type=error]$TierName npm audit metadata.vulnerabilities.$field is missing or not a non-negative integer."
+                      return $false
+                    }
+                  }
+
+                  Write-Host "$TierName npm vulnerability summary - critical=$($v.critical), high=$($v.high), moderate=$($v.moderate), low=$($v.low), info=$($v.info) (exitCode=$CommandExitCode)"
+
+                  if ([long]$v.critical -gt 0) {
+                    Write-Host "##vso[task.logissue type=error]$TierName npm dependencies contain $($v.critical) critical vulnerability(ies)."
+                    return $false
+                  }
+
+                  if ($BlockOnHigh -and ([long]$v.high -gt 0)) {
+                    Write-Host "##vso[task.logissue type=error]$TierName npm dependencies contain $($v.high) high vulnerability(ies)."
+                    return $false
+                  }
+
+                  if ($CommandExitCode -ne 0) {
+                    Write-Host "##vso[task.logissue type=error]$TierName npm audit command exited with non-zero code $CommandExitCode."
+                    return $false
+                  }
+
+                  if ($BlockOnHigh -and (([long]$v.moderate -gt 0) -or ([long]$v.low -gt 0))) {
+                    Write-Host "##vso[task.logissue type=warning]$TierName npm audit detected non-blocking advisories (moderate=$($v.moderate), low=$($v.low)). Review clientapp-npm-audit/npm-audit-prod.json."
+                  }
+                  elseif ((-not $BlockOnHigh) -and (([long]$v.high -gt 0) -or ([long]$v.moderate -gt 0) -or ([long]$v.low -gt 0))) {
+                    Write-Host "##vso[task.logissue type=warning]$TierName npm audit detected non-critical development/tooling advisories (high=$($v.high), moderate=$($v.moderate), low=$($v.low)). Review clientapp-npm-audit/npm-audit-full.json."
+                  }
+
+                  return $true
+                }
+
+                # Tier 1: Mandatory fail-closed production dependency check (--omit=dev --audit-level=high)
                 $prodAuditJsonPath = Join-Path $auditDir 'npm-audit-prod.json'
-                npm.cmd audit --omit=dev --json > $prodAuditJsonPath
-                $prodAuditExit = $LASTEXITCODE
-                Write-Host "Production npm audit (--omit=dev) exited with code $prodAuditExit."
-
-                $prodHighOrCrit = $false
-                if (Test-Path $prodAuditJsonPath) {
-                  try {
-                    $prodParsed = Get-Content $prodAuditJsonPath -Raw | ConvertFrom-Json
-                    if ($null -ne $prodParsed.metadata -and $null -ne $prodParsed.metadata.vulnerabilities) {
-                      $pv = $prodParsed.metadata.vulnerabilities
-                      Write-Host "Production npm vulnerability summary — critical=$($pv.critical), high=$($pv.high), moderate=$($pv.moderate), low=$($pv.low), info=$($pv.info)"
-                      if ($pv.critical -gt 0 -or $pv.high -gt 0) {
-                        $prodHighOrCrit = $true
-                        Write-Host "##vso[task.logissue type=error]Production npm dependencies contain high/critical vulnerabilities (critical=$($pv.critical), high=$($pv.high))."
-                      }
-                    }
-                    else {
-                      $prodHighOrCrit = $true
-                      Write-Host "##vso[task.logissue type=error]Production npm audit JSON lacked metadata.vulnerabilities."
-                    }
-                  }
-                  catch {
-                    $prodHighOrCrit = $true
-                    Write-Host "##vso[task.logissue type=error]Unable to parse production npm audit JSON summary: $($_.Exception.Message)"
-                  }
+                $global:LASTEXITCODE = 0
+                $prodAuditExit = 1
+                try {
+                  npm.cmd audit --omit=dev --audit-level=high --json > $prodAuditJsonPath
+                  $prodAuditExit = [int]$LASTEXITCODE
                 }
-                else {
-                  $prodHighOrCrit = $true
-                  Write-Host "##vso[task.logissue type=error]Production npm audit report was not generated at '$prodAuditJsonPath'."
+                catch {
+                  Write-Host "##vso[task.logissue type=error]Production npm audit command failed to execute: $($_.Exception.Message)"
+                  $prodAuditExit = 1
                 }
+                Write-Host "Production npm audit (--omit=dev --audit-level=high) exited with code $prodAuditExit."
+                $prodPassed = Test-NpmAuditReport -TierName 'Production' -JsonPath $prodAuditJsonPath -CommandExitCode $prodAuditExit -BlockOnHigh $true
 
-                # Tier 2: Full dependency audit report (all dependencies)
+                # Tier 2: Fail-closed full dependency security gate (--audit-level=critical)
                 $fullAuditJsonPath = Join-Path $auditDir 'npm-audit-full.json'
-                npm.cmd audit --json > $fullAuditJsonPath
-                $fullAuditExit = $LASTEXITCODE
-                Write-Host "Full npm audit exited with code $fullAuditExit. Reports staged to clientapp-npm-audit."
-
-                $fullCritical = $false
-                if (Test-Path $fullAuditJsonPath) {
-                  try {
-                    $fullParsed = Get-Content $fullAuditJsonPath -Raw | ConvertFrom-Json
-                    if ($null -ne $fullParsed.metadata -and $null -ne $fullParsed.metadata.vulnerabilities) {
-                      $fv = $fullParsed.metadata.vulnerabilities
-                      Write-Host "Full npm vulnerability summary — critical=$($fv.critical), high=$($fv.high), moderate=$($fv.moderate), low=$($fv.low), info=$($fv.info)"
-                      if ($fv.critical -gt 0) {
-                        $fullCritical = $true
-                        Write-Host "##vso[task.logissue type=error]npm dependency graph contains critical vulnerabilities (critical=$($fv.critical))."
-                      }
-                      elseif ($fv.high -gt 0 -or $fv.moderate -gt 0) {
-                        Write-Host "##vso[task.logissue type=warning]Dev/tooling npm dependencies contain advisories (high=$($fv.high), moderate=$($fv.moderate)). Review clientapp-npm-audit artifact."
-                      }
-                    }
-                  }
-                  catch {
-                    Write-Host "##vso[task.logissue type=warning]Unable to parse full npm audit JSON summary: $($_.Exception.Message)"
-                  }
+                $global:LASTEXITCODE = 0
+                $fullAuditExit = 1
+                try {
+                  npm.cmd audit --audit-level=critical --json > $fullAuditJsonPath
+                  $fullAuditExit = [int]$LASTEXITCODE
                 }
+                catch {
+                  Write-Host "##vso[task.logissue type=error]Full npm audit command failed to execute: $($_.Exception.Message)"
+                  $fullAuditExit = 1
+                }
+                Write-Host "Full npm audit (--audit-level=critical) exited with code $fullAuditExit. Reports staged to clientapp-npm-audit."
+                $fullPassed = Test-NpmAuditReport -TierName 'Full' -JsonPath $fullAuditJsonPath -CommandExitCode $fullAuditExit -BlockOnHigh $false
 
-                if ($prodAuditExit -ne 0 -or $prodHighOrCrit -or $fullCritical) {
+                if (-not $prodPassed -or -not $fullPassed) {
                   exit 1
                 }
                 exit 0
