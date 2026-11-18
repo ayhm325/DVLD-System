@@ -82,7 +82,7 @@ public sealed class AuthSessionRefreshSqlConcurrencyTests
 
         // Exactly the consumed generation and one replacement: no second chain.
         Assert.Equal(2, family.Count);
-        Assert.Single(family.Where(item => item.RevokedAtUtc is null));
+        Assert.Single(family, item => item.RevokedAtUtc is null);
 
         var consumed = family.Single(item => item.Id == session.Id);
         Assert.NotNull(consumed.RevokedAtUtc);
@@ -469,8 +469,8 @@ public sealed class AuthSessionRefreshSqlConcurrencyTests
 
         Assert.Equal(2, sessions1.Count);
         Assert.Equal(2, sessions2.Count);
-        Assert.Single(sessions1.Where(s => s.RevokedAtUtc == null));
-        Assert.Single(sessions2.Where(s => s.RevokedAtUtc == null));
+        Assert.Single(sessions1, s => s.RevokedAtUtc == null);
+        Assert.Single(sessions2, s => s.RevokedAtUtc == null);
     }
 
     [Fact]

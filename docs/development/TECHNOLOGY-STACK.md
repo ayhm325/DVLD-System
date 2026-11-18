@@ -107,7 +107,9 @@ The web frontend resides in `ClientApp/` and is built independently using Node.j
 
 ## 5. Continuous Integration & Pipeline Configuration (`azure-pipelines.yml`)
 
-- **Platform & Image:** Azure Pipelines running on `windows-latest` (`CONFIGURED — NOT EXECUTED` on hosted Azure DevOps in this pass; pipeline runtime status requires hosted CI run proof).
+- **Platform & Image:** Azure Pipelines running on `windows-latest` (`PARTIALLY VERIFIED — HISTORICAL HOSTED RUN PASSED; CURRENT PIPELINE REVISION PENDING HOSTED VERIFICATION`, tracked under `G-02`).
+  - **Hosted Verification Evidence (Run `20261118.3`):** Executed on branch `main` at commit `15730709` (`1573070953681a61ac9a3b104dfa7d85a90dfe75`): `Frontend_CI` **Succeeded** (`5m 15s`), `Backend_CI` **Succeeded** (`16m 27s`), total duration `22m 04s`, **Tests: `100%` Passed**, **Code Coverage: `94.28%`**, and **`7` Published Artifacts**.
+  - **Current Hosted Verification Status:** Subsequent `azure-pipelines.yml` fail-closed `npm audit` security gate hardening (commit `66654e0`) and `xUnit2031` test warning cleanups are verified locally but await a dedicated hosted Azure DevOps run on the latest revision before `G-02` can be closed.
 - **Stage 1 — `Frontend_CI` (`timeoutInMinutes: 25`):**
   - Installs Node.js `26.x`, restores npm cache, runs `npm ci --no-fund`, enforces two-tier fail-closed `npm audit` (`--omit=dev --audit-level=high --json` blocking production `high`/`critical` and malformed reports + `--audit-level=critical --json` blocking critical advisories and registry/JSON/metadata errors while logging dev-only `high`/`moderate`/`low` warnings; stages `npm-audit-prod.json` & `npm-audit-full.json` to `clientapp-npm-audit`), runs `npm run lint`, `npx --no-install tsc -b --pretty false`, Vitest (`npm run test` with JUnit output + `PublishTestResults@2`), Chromium install (`npx --no-install playwright install chromium`) + Playwright E2E (`npm run test:e2e` with `CI=true`, JUnit reporting, HTML/trace `clientapp-playwright-reports`), and `npx --no-install vite build`, then publishes `clientapp-dist`.
 - **Stage 2 — `Backend_CI` (`timeoutInMinutes: 60`):**

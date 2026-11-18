@@ -453,7 +453,8 @@ public sealed class AuthServiceTests
         Assert.Equal(1, results.Count(result => result.IsSuccess));
         Assert.Equal(1, results.Count(result => result.ErrorType == ErrorType.Conflict));
         Assert.Single(
-            repository.Sessions.Where(session => session.RevokedAtUtc is null));
+            repository.Sessions,
+            session => session.RevokedAtUtc is null);
     }
 
     [Fact]

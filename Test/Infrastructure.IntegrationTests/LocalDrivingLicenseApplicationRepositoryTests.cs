@@ -94,7 +94,7 @@ public sealed class LocalDrivingLicenseApplicationRepositoryTests
 
         var result = await repository.GetAllAsync(request);
 
-        var entity = Assert.Single(result.Items.Where(x => x.LocalDrivingLicenseApplicationID == seed.LocalApplicationId));
+        var entity = Assert.Single(result.Items, x => x.LocalDrivingLicenseApplicationID == seed.LocalApplicationId);
 
         Assert.NotNull(entity.Application);
 
@@ -119,7 +119,7 @@ public sealed class LocalDrivingLicenseApplicationRepositoryTests
 
         var result = await repository.GetAllAsync(new PaginationRequest { PageNumber = 1, PageSize = 100 });
 
-        var entity = Assert.Single(result.Items.Where(x => x.LocalDrivingLicenseApplicationID == seed.LocalApplicationId));
+        var entity = Assert.Single(result.Items, x => x.LocalDrivingLicenseApplicationID == seed.LocalApplicationId);
 
         Assert.Equal(EntityState.Detached, context.Entry(entity).State);
     }
@@ -506,7 +506,7 @@ public sealed class LocalDrivingLicenseApplicationRepositoryTests
 
         var result = await repository.GetByPersonIdAsync(seed.PersonId);
 
-        var entity = Assert.Single(result.Where(x => x.LocalDrivingLicenseApplicationID == seed.LocalApplicationId));
+        var entity = Assert.Single(result, x => x.LocalDrivingLicenseApplicationID == seed.LocalApplicationId);
 
         Assert.NotNull(entity.Application);
         Assert.NotNull(entity.Application.Person);
@@ -634,7 +634,7 @@ public sealed class LocalDrivingLicenseApplicationRepositoryTests
 
         var result = await repository.GetByLicenseClassIdAsync(seed.LicenseClassId);
 
-        var entity = Assert.Single(result.Where(x => x.LocalDrivingLicenseApplicationID == seed.LocalApplicationId));
+        var entity = Assert.Single(result, x => x.LocalDrivingLicenseApplicationID == seed.LocalApplicationId);
 
         Assert.NotNull(entity.LicenseClass);
 

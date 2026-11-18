@@ -126,10 +126,10 @@ public sealed class InternationalRepositoryTests
         // Assert
         var entity =
             Assert.Single(
-                result.Where(
+                result,
                     x =>
                         x.InternationalLicenseID ==
-                        seed.InternationalLicenseId));
+                        seed.InternationalLicenseId);
 
         Assert.NotNull(entity.Application);
 
@@ -158,10 +158,10 @@ public sealed class InternationalRepositoryTests
         // Assert
         var entity =
             Assert.Single(
-                result.Where(
+                result,
                     x =>
                         x.InternationalLicenseID ==
-                        seed.InternationalLicenseId));
+                        seed.InternationalLicenseId);
 
         Assert.NotNull(entity.Driver);
 
@@ -196,10 +196,10 @@ public sealed class InternationalRepositoryTests
         // Assert
         var entity =
             Assert.Single(
-                result.Where(
+                result,
                     x =>
                         x.InternationalLicenseID ==
-                        seed.InternationalLicenseId));
+                        seed.InternationalLicenseId);
 
         Assert.NotNull(
             entity.IssuedUsingLocalLicense);
@@ -229,10 +229,10 @@ public sealed class InternationalRepositoryTests
         // Assert
         var entity =
             Assert.Single(
-                result.Where(
+                result,
                     x =>
                         x.InternationalLicenseID ==
-                        seed.InternationalLicenseId));
+                        seed.InternationalLicenseId);
 
         Assert.NotNull(entity.CreatedByUser);
 
@@ -261,10 +261,10 @@ public sealed class InternationalRepositoryTests
         // Assert
         var entity =
             Assert.Single(
-                result.Where(
+                result,
                     x =>
                         x.InternationalLicenseID ==
-                        seed.InternationalLicenseId));
+                        seed.InternationalLicenseId);
 
         Assert.Equal(
             EntityState.Detached,
