@@ -275,7 +275,10 @@ stages:
     jobs:
       - job: Build_And_Test_Backend
         displayName: 'Restore, Build, Unit & SQL Integration Tests'
-        timeoutInMinutes: 45
+        # Microsoft-hosted agents have a 60-minute limit for private projects/repos
+        # unless additional capacity is enabled. The previous 45-minute cap
+        # canceled the backend job while Infrastructure Integration Tests were running.
+        timeoutInMinutes: 60
         cancelTimeoutInMinutes: 5
         pool:
           vmImage: $(vmImageName)
