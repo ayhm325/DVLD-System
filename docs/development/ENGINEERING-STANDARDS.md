@@ -3,9 +3,11 @@
 > **Authority Level:** Mandatory Backend & Full-Stack Development Standards  
 > **Parent Document:** [`AGENTS.md`](../../AGENTS.md)  
 > **Roadmap & Decisions:** [`ENGINEERING-ROADMAP.md`](../../ENGINEERING-ROADMAP.md) | [`ENGINEERING-DECISIONS.md`](../../ENGINEERING-DECISIONS.md)  
-> **Repository Root:** `D:\DVLD-System`  
-> **Baseline Commit:** `baa356705c3b5c364a9c5aabf0cd62a5aa21e4b9` (Reconciled 2026-11-18)  
-> **Governance Status:** CONSOLIDATED & ENFORCED (Phase 2.1 Reconciled)  
+> **Repository Root:** `D:\DVLD-System`
+>
+> **Baseline Commit:** `e9e843e974af86a86003bcc364f0e7686c3faa87` (Reconciled with source on 2026-11-18)
+>
+> **Governance Status:** CONSOLIDATED & ENFORCED (Reconciled with Active Implementation)
 
 ---
 
@@ -115,7 +117,7 @@ public class Result<T> : Result
 
 ## 4. Unit of Work & Transaction Boundaries
 
-The backend implements a sophisticated, explicit transaction state machine in `Infrastructure/Repositories/UnitOfWork.cs`.
+The backend implements a sophisticated, explicit transaction state machine in `Infrastructure/UnitOfWork.cs`.
 
 ```mermaid
 stateDiagram-v2
@@ -250,7 +252,7 @@ To prevent unapproved proposals from being mistaken for active code, every secur
 > [!NOTE]
 > **Reconciliation with Implemented `AUTH-01` (`ADR-006`):** The earlier deferred `SEC-05` stateless-only description below has been superseded by the implemented `AUTH-01` session architecture. Current behavior uses 15-minute HS256 JWT access tokens with `sst` (security stamp) and `sid` (session ID) claims validated per request, SHA-256 hashed refresh tokens persisted in `UserSessions`, `HttpOnly` `SameSite=Lax` cookie transport, `X-CSRF-Protection: 1` enforcement, and in-memory access-token storage in `ClientApp`. See [`SECURITY-STANDARDS.md`](./SECURITY-STANDARDS.md) §2 and §12 for the authoritative current specification.
 
-- **Current Session Model `[EXISTING VERIFIED BEHAVIOR]` (`ADR-003`, `ADR-006` / `AUTH-01`):** `DVLD.Api` issues 15-minute JWT Bearer access tokens (`Authorization: Bearer <token>`) paired with opaque 256-bit refresh tokens persisted as SHA-256 hashes in `UserSessions` and transported in an `HttpOnly` cookie scoped to `/api/auth`.
+- **Current Session Model `[EXISTING VERIFIED BEHAVIOR]` (`ADR-003`, `ADR-006` / `AUTH-01`):** `DVLD.Api` issues 15-minute JWT Bearer access tokens (`Authorization: Bearer <token>`) paired with opaque 256-bit refresh tokens persisted as SHA-256 hashes in `UserSessions` and transported in an `HttpOnly` cookie scoped to `/api/Auth`.
 - **Dynamic Revocation & Session Currency `[EXISTING VERIFIED BEHAVIOR]` (`ADR-003`, `ADR-006`):** `JwtBearerEvents.OnTokenValidated` in `Program.cs` queries `IAuthService.IsPrincipalCurrentAsync` on every authenticated request, validating active status, `sst` security stamp, and `sid` session currency.
 - **Client-Side In-Memory Storage `[EXISTING VERIFIED BEHAVIOR]`:** `ClientApp` holds JWT access tokens strictly in memory (`authTokenStore.ts`). Persistent browser web storage (`localStorage` / `sessionStorage`) of authentication tokens is prohibited.
 - **Historical Unapproved Proposals (`DEC-AUTH-01`, `DEC-AUTH-02`, `SEC-PKG-10`):**
@@ -279,13 +281,13 @@ To prevent unapproved proposals from being mistaken for active code, every secur
   - Current code enforces only length 8–100 (`UserValidator.cs:196-215`).
   - Proposal to adopt NIST SP 800-63B (minimum 12–16 characters, top-10,000 breached password blocklist, elimination of arbitrary character composition rules).
   - **Governance Status:** Unapproved proposal; carries zero implementation authorization.
-- **Password-Change Rate Limiting `[PROPOSAL — UNAPPROVED]` (`SEC-03`):** Proposed sliding-window endpoint throttling on `POST /api/auth/change-password` scheduled under Phase 12.5.
+- **Password-Change Rate Limiting `[PARTIALLY IMPLEMENTED]` (`SEC-03`):** `API/DVLD.Api/Program.cs` (lines 233–250) and `AuthController.cs` (line 230) implement `[EnableRateLimiting("ChangePasswordRateLimit")]` using a fixed-window IP limiter (5 requests/1 minute per `RemoteIpAddress`), rather than the originally proposed sliding-window `PasswordChangeLimit`. Automated HTTP 429 integration tests for `POST /api/Auth/change-password` remain **`NOT IMPLEMENTED`** (`AuthControllerTests.cs` tests 429 on `Login` only), so `SEC-03` stays open for test verification in [`ENGINEERING-ROADMAP.md`](../../ENGINEERING-ROADMAP.md).
 
 ---
 
 ### 9.4 Account-Level Lockout Defense & Anti-Brute-Force Standards
 
-- **IP-Based Login Rate Limiting `[EXISTING VERIFIED BEHAVIOR]`:** `Program.cs:157-175` enforces IP-partitioned rate limiting (10 requests/minute) on login routes.
+- **IP-Based Authentication Rate Limiting `[EXISTING VERIFIED BEHAVIOR]`:** `API/DVLD.Api/Program.cs` (lines 182–251) enforces fixed-window IP-partitioned rate limiters (`RejectionStatusCode = 429`): `LoginRateLimit` (5 requests/1 minute), `RefreshRateLimit` (30 requests/1 minute), and `ChangePasswordRateLimit` (5 requests/1 minute). Note that `UseForwardedHeaders` is not currently configured; reverse-proxy deployments require `DEC-DEP-01` before `RemoteIpAddress` reflects downstream clients.
 - **Account Lockout Architecture `[PROPOSAL — UNAPPROVED]` (`DEC-CRED-02`, `SEC-PKG-11`):**
   - Proposal to introduce database-backed failed attempt counters and lockout timestamps on `Users`.
   - Threshold ($N$ failures) and lockout duration ($M$ minutes) remain unresolved under `DEC-CRED-02`.
@@ -298,10 +300,8 @@ To prevent unapproved proposals from being mistaken for active code, every secur
 
 ### 9.5 Administrative Privilege Safety & Anti-Self-Demotion
 
-- **Hardcoded Admin Logic `[EXISTING CODE (TO BE REMEDIATED)]` (`RSK-09`):** `UserService.cs:350-370` protects user ID 2 and username `"ayhm"` via hardcoded checks.
-- **Dynamic Administrative Safety Standard `[PROPOSAL — UNAPPROVED]` (`SEC-PKG-04`):**
-  - Proposal to replace hardcoded strings with atomic database queries asserting at least one active administrator remains, and preventing active administrators from self-demoting or self-deactivating.
-  - **Governance Status:** Unapproved proposal; carries zero implementation authorization.
+- **Dynamic Last-Admin & Self-Demotion Guards `[EXISTING VERIFIED BEHAVIOR]` (`CONCURRENCY-01` / `ADR-007`):** `UserService.cs` (lines 404–435) prevents active administrators from deactivating or demoting themselves, and `UserService` / `UserRepository` serialize administrator mutations inside a transaction-owned `sp_getapplock('DVLD_AdminMutation')` with an authoritative `GetActiveAdminCountAsync` re-check returning HTTP 409 on conflict.
+- **Hardcoded Primary-Admin Check `[EXISTING CODE (TO BE REMEDIATED)]` (`RSK-09` / `SEC-PKG-04`):** Alongside dynamic `CONCURRENCY-01` enforcement, `UserService.cs` (lines 381–402) still retains hardcoded protection checks referencing `id == 2` and `user.UserName == "ayhm"`. Removing hardcoded primary-administrator special-casing in favor of pure role/invariant rules remains tracked under `SEC-PKG-04`.
 
 ---
 
@@ -317,11 +317,11 @@ To prevent unapproved proposals from being mistaken for active code, every secur
 
 ### 9.7 Query Pagination Clamping & Data Minimization
 
-- **Basic Entity Pagination `[EXISTING VERIFIED BEHAVIOR]`:** Pagination exists across People, Drivers, Licenses, and Local Applications when query parameters are supplied.
-- **Unpaged Fallback Defect `[EXISTING CODE (TO BE REMEDIATED)]` (`RSK-10`):** `PeopleController.cs:48` falls back to unpaged `GetAllPeopleAsync()` if query parameters are omitted.
-- **Mandatory Server-Side Clamping `[PROPOSAL — UNAPPROVED]` (`SEC-PKG-03`):**
-  - Proposal to enforce default parameters (page 1, size 10), clamp maximum page size to 50, and eliminate unpaged bulk queries.
-  - **Governance Status:** Scheduled acceptance criterion under Phase 12.2; carries zero current implementation authorization.
+- **Basic Entity Pagination & Clamping `[EXISTING VERIFIED BEHAVIOR]`:** `PaginationRequest` (`Application/Common/Pagination/PaginationRequest.cs`) defaults to page `1`, size `10`, and clamps `MaxPageSize = 100`. Paged queries exist on People, Drivers, Licenses, and Local Applications when query parameters are supplied.
+- **Unpaged Endpoints & Fallbacks `[EXISTING CODE (TO BE REMEDIATED)]` (`RSK-10` / `CAND-09`):** `PeopleController.GetAll`, `DriversController.GetAll`, and `LicensesController.GetAll` fall back to unpaged `GetAll*Async()` retrieval when `pageNumber`/`pageSize` query parameters are omitted, and `UsersController`, `DetainedLicensesController`, `InternationalLicensesController`, `TestAppointmentsController`, and `TestsController` execute unpaged `GetAll` endpoints.
+- **Mandatory Server-Side Clamping Target `[PROPOSAL — UNAPPROVED]` (`SEC-PKG-03`):**
+  - Proposal to eliminate unpaged fallbacks across list endpoints and tighten maximum page bounds (currently clamped at `100` in `PaginationRequest`, whereas `SEC-PKG-03` / `TST-PAG-01` proposed capping at `50`).
+  - **Governance Status:** Scheduled acceptance criterion; removing remaining unpaged paths remains **NOT AUTHORIZED**.
 - **Citizen PII Masking & Data Minimization `[OPERATIONAL APPROVAL GATE]` (`RSK-11`):**
   - Plaintext citizen PII is exposed to all staff without field-level masking. Dynamic masking is a deferred architecture specification.
   - **Production Release Gate:** The platform is **ineligible for production release** under `RSK-11` until documented formal risk acceptance is granted under Gate 8 by the appointed Risk Owner.
@@ -358,10 +358,9 @@ To prevent unapproved proposals from being mistaken for active code, every secur
 
 ### 9.11 Workflow State Machine & Application Completion Route Integrity
 
-- **Prohibition of Direct Application Completion `[PROPOSAL — UNAPPROVED]` (`INT-01`, `SEC-PKG-01`, `ADR-P03`, `DEC-APP-01`):**
-  - `POST /api/applications/{id}/complete` allows authenticated `Staff` users to transition an application directly to `Completed` without verifying prerequisite workflow conditions (vision/theory/practical test passage, fee payments, license issuance).
-  - **Remediation Specification (`SEC-PKG-01`):** Hard deletion of `POST /api/applications/{id}/complete` route and corresponding service method in `ApplicationService.cs` under canonical task `INT-01` (`ADR-P03`).
-  - **Governance & Approval Gate:** Deletion is blocked on empirical telemetry observation window under `DEC-APP-01` and Gate 6 (API Breaking Change Gate) to confirm zero unrepresented external consumers before route removal.
+- **Removal of Direct Application Completion Endpoint `[EXISTING VERIFIED BEHAVIOR]` (`INT-01`, `SEC-PKG-01`, `ADR-P03`, `DEC-APP-01`):**
+  - Previously, `POST /api/applications/{id}/complete` allowed authenticated `Staff` users to transition an application directly to `Completed` without verifying prerequisite workflow invariants.
+  - **Implemented Remediation:** Following Project Owner selection of `DEC-APP-01` Option 1 (`2026-11-09`), the `Complete` action was permanently removed from `ApplicationsController.cs`, and `ApplicationService.CompleteApplicationStateAsync` mutates state only when orchestrated within an outer `UnitOfWork` transaction (e.g., `LicenseIssuanceService`). Calling `POST /api/Applications/{id}/complete` returns HTTP 404 Not Found (`ApplicationsControllerTests.PostComplete_WhenCalled_ReturnsNotFoundBecauseRouteIsRemoved`).
 
 ---
 
@@ -443,8 +442,8 @@ To ensure long-term maintainability, testability, and structural integrity acros
 ### 12.1 Single Responsibility Principle (SRP)
 - **Status:** **Partially Compliant.**
 - **Empirical Baseline:**
-  - *Compliant Architecture:* Workflow-specific service decomposition in license management cleanly separates concerns: [`LicenseIssuanceService`](file:///d:/DVLD-System/Application/Services/LicenseIssuanceService.cs), [`LicenseRenewalService`](file:///d:/DVLD-System/Application/Services/LicenseRenewalService.cs), [`LicenseReplacementService`](file:///d:/DVLD-System/Application/Services/LicenseReplacementService.cs), and [`LicenseQueryService`](file:///d:/DVLD-System/Application/Services/LicenseQueryService.cs). Validation is cleanly isolated in static validator classes (`PersonValidator`, `UserValidator`), and DTO projection is isolated in mappers (`UserMapper`, `PersonMapper`).
-  - *Identified Gaps:* [`UserService.cs`](file:///d:/DVLD-System/Application/Services/UserService.cs) (590 lines) conflates user demographic CRUD with credential verification, BCrypt password hashing, and role authorization checks. [`ApplicationsController.cs`](file:///d:/DVLD-System/API/DVLD.Api/Controllers/ApplicationsController.cs#L85-L90) houses the orphan `Complete` endpoint bypassing business workflow services (`INT-01`).
+  - *Compliant Architecture:* Workflow-specific service decomposition in license management cleanly separates concerns: [`LicenseIssuanceService`](file:///d:/DVLD-System/Application/Services/LicenseIssuanceService.cs), [`LicenseRenewalService`](file:///d:/DVLD-System/Application/Services/LicenseRenewalService.cs), [`LicenseReplacementService`](file:///d:/DVLD-System/Application/Services/LicenseReplacementService.cs), and [`LicenseQueryService`](file:///d:/DVLD-System/Application/Services/LicenseQueryService.cs). Validation is cleanly isolated in static validator classes (`PersonValidator`, `UserValidator`), DTO projection in mappers (`UserMapper`, `PersonMapper`), and constraint translation in [`Infrastructure/UnitOfWork.cs`](file:///d:/DVLD-System/Infrastructure/UnitOfWork.cs).
+  - *Identified Gaps:* [`UserService.cs`](file:///d:/DVLD-System/Application/Services/UserService.cs) (778 lines) conflates user demographic CRUD with credential verification, BCrypt password hashing, and role authorization checks. Also note that `POST /api/applications/{id}/complete` (`INT-01`) has already been removed from [`ApplicationsController.cs`](file:///d:/DVLD-System/API/DVLD.Api/Controllers/ApplicationsController.cs).
   - *Future Remediation Direction:* Under proposed roadmap task `ARCH-03`, assess decomposing `UserService` into a dedicated `IUserCredentialService` (password hashing, credential validation) while preserving user profile orchestration in `UserService`, avoiding unnecessary abstractions until Phase 12.5.
 - **Architectural Rules:**
   1. API Controllers must act solely as thin HTTP transport coordinators (routing, model binding, authorization, status code mapping via `ResultHttpMapper`). Controllers must never execute business rules or interact directly with Entity Framework DbContexts.
@@ -453,7 +452,7 @@ To ensure long-term maintainability, testability, and structural integrity acros
 ### 12.2 Open/Closed Principle (OCP)
 - **Status:** **Partially Compliant.**
 - **Empirical Baseline:**
-  - *Compliant Architecture:* Repository abstractions (`IPersonRepository`, `ILicenseRepository`) and service interfaces enable behavioral extension via decorators (e.g., caching decorators for static lookups under `API-02`) without altering core business orchestration.
+  - *Compliant Architecture:* Repository abstractions (`IPersonRepository`, `ILicenseRepository`) and service interfaces allow extensible implementations and future decorators (note: `API-02` rejected pagination on tiny static lookups under `ADR-R03`; `IMemoryCache` caching decorators remain an unimplemented `PROPOSED` improvement).
   - *Identified Gaps:* Examination progression in [`TestWorkflowService.cs`](file:///d:/DVLD-System/Application/Services/TestWorkflowService.cs#L16-L21) hardcodes the sequential array `[Theory, Written, Practical]`. Adding or modifying test types requires modifying procedural service logic rather than configuring extensible domain rules.
 - **Architectural Rules:**
   1. Prefer polymorphism, strategy patterns, and decorator patterns over sprawling `switch` statements when branching on domain entity types or examination classifications.
@@ -499,61 +498,40 @@ As a centralized single-database enterprise application, the CAP theorem does no
 
 ### 13.3 Evaluation Matrix: The 17 System Design Concepts
 
-| Concept | Classification | Technical Justification & Implementation Baseline |
-|---|:---:|---|
-| **1. Load Balancing** | **Prepare for Future** | `DVLD.Api` is stateless (JWT auth, no in-memory session state). Multiple API nodes can sit behind an L7 reverse proxy (Nginx / Azure Application Gateway / IIS ARR) as concurrency expands across regional offices. |
-| **2. Caching** | **Implement Now** | Roadmap task `API-02`: In-memory caching (`IMemoryCache`) for immutable static reference lookups (`Countries`, `LicenseClasses`, `ApplicationTypes`, `TestTypes`). Eliminates redundant database roundtrips for frequent UI dropdowns. |
-| **3. CDN** | **Not Applicable / Not Justified** | DVLD is an internal civic intranet/extranet application for staff and officers. Citizen photographs are sensitive biometric data that must never be cached on public CDN edge nodes. Static SPA bundles are served via local web servers. |
-| **4. API Gateway** | **Not Applicable / Not Justified** | DVLD is a single Modular Monolith Web API, not a microservice fleet. Introducing YARP, Ocelot, or Kong adds unnecessary network hops and operational latency without architectural benefit. Reverse proxy needs are met by IIS/Kestrel. |
-| **5. Microservices** | **Not Applicable / Not Justified** | Formally rejected under `ADR-001` / `ADR-R03`. Civic credential issuance requires strong ACID transactions across multiple aggregates. Distributed transactions introduce eventual consistency bugs and unnecessary operational complexity. |
-| **6. Monolithic Architecture** | **Implement Now** | Current verified architecture. Modular Monolith with clean internal layer boundaries (`Domain`, `Application`, `Infrastructure`, `DVLD.Api`). Optimal for deployment simplicity, operational debuggability, and transactional safety. |
-| **7. Replication** | **Conditional — Only When Needed** | SQL Server Always On Availability Groups with asynchronous read-only replicas can be introduced if heavy analytical or reporting workloads cause lock contention on the primary OLTP instance. Unjustified at current staff scale. |
-| **8. Partitioning** | **Conditional — Only When Needed** | Table partitioning (by Year/Month) on the `AuditLogs` table will be valuable once audit logging accumulates multi-million record histories. Database sharding is unjustified for regional civic licensing scale. |
-| **9. Message Queues** | **Conditional — Only When Needed** | External asynchronous notifications (SMS/Email alerts for license expiration) or audit offloading can utilize RabbitMQ or Azure Service Bus in future phases (`SEC-05`). In-process hosted services cleanly handle current scheduled sweeps. |
-| **10. Rate Limiting** | **Implement Now** | Roadmap tasks `SEC-03` (`POST /api/auth/change-password` rate limiting) and `SEC-PKG-03` (collection pagination clamping $PageSize \le 50$). Protects against brute-force attacks and resource exhaustion. |
-| **11. Consistent Hashing** | **Not Applicable / Not Justified** | Applicable to distributed caching rings (Memcached/DynamoDB) across dynamic clusters. DVLD utilizes a centralized SQL Server database and single-node or shared Redis caches; consistent hashing has zero application. |
-| **12. CAP Theorem (Consistency Principles)** | **Implement Now** | Apply relevant consistency principles; do not classify the entire application as CP. Strong transactional consistency is strictly enforced for all legal licensing mutations. |
-| **13. Horizontal Scaling** | **Prepare for Future** | API tier is stateless and ready for horizontal scale. Full multi-instance deployment requires externalizing the distributed token revocation list (`DEC-AUTH-01`) and mounting shared network storage (SMB/NFS or Azure Blob) for citizen photos. |
-| **14. Vertical Scaling** | **Implement Now** | The primary, cost-effective scaling path for DVLD. Scaling SQL Server database compute (vCPUs), memory (RAM for buffer pool), and high-throughput NVMe SSD storage easily supports tens of thousands of daily civic transactions. |
-| **15. Fault Tolerance** | **Implement Now** | `GlobalExceptionHandler` RFC 7807 shielding, SQL Server execution retry strategy (`EnableRetryOnFailure` in `UnitOfWork.ExecuteInTransactionAsync`), and Health Checks (`OBS-01`). |
-| **16. Circuit Breaker** | **Conditional — Only When Needed** | Circuit breakers (Polly) are appropriate when integrating unreliable external third-party HTTP services (e.g. national payment gateways or external SMS gateways). Unjustified for local database and storage calls. |
-| **17. Event-Driven Architecture** | **Conditional — Only When Needed** | Direct service orchestration remains the approved design; in-process event buses were evaluated and rejected (`ADR-R01`, `ADR-R02`) to prevent speculative indirection. Internal domain events considered only when justified. |
+| Concept | Current State (`e9e843e`) | Technical Justification & Multi-Instance Constraints |
+|---|---|---|
+| **1. Load Balancing** | **Prepare for Future** (`PARTIALLY READY`) | Multi-node load balancing requires externalizing/sharing local state: `DVLD.Api` is **not** purely stateless—every authenticated request hits SQL Server via `OnTokenValidated` (`IsPrincipalCurrentAsync`) and `UserSessions` (`ADR-006`). True scale-out behind an L7 reverse proxy also requires configuring `UseForwardedHeaders` (`DEC-DEP-01`), shared file storage for photos (`PhysicalFileStorageService`), distributed rate limiting, and leader/singleton coordination for background services. |
+| **2. Caching** | **`PROPOSED` / `NOT IMPLEMENTED`** | Zero `IMemoryCache` / `AddMemoryCache` registrations currently exist in `API/`, `Application/`, or `Infrastructure/` (`API-02` in `ADR-R03` rejected pagination on tiny static tables, not implemented caching). An in-memory lookup cache remains an unimplemented candidate optimization. |
+| **3. CDN** | **Not Applicable / Not Justified** | DVLD is an internal civic intranet/extranet application for staff and officers. Citizen photographs are sensitive biometric data that must never be cached on public CDN edge nodes (`Cache-Control: private` authenticated retrieval). |
+| **4. API Gateway** | **Not Applicable / Not Justified** | DVLD is a single Modular Monolith Web API, not a microservice fleet. Introducing YARP, Ocelot, or Kong adds unnecessary hops without architectural benefit. Reverse proxy needs (`DEC-DEP-01`) are handled at the web host / proxy tier. |
+| **5. Microservices** | **Not Applicable / Not Justified** | Formally rejected under `ADR-001` / `ADR-R03`. Civic credential issuance requires strong ACID transactions across multiple aggregates. |
+| **6. Monolithic Architecture** | **`IMPLEMENTED`** | Current verified architecture: Modular Monolith (`Domain`, `Application`, `Infrastructure`, `DVLD.Api`). Optimal for transactional safety and deployment simplicity. |
+| **7. Replication** | **Conditional — Only When Needed** | SQL Server Always On Availability Groups with read-only replicas can be introduced if reporting workloads contend with OLTP writes; unjustified at current scope. |
+| **8. Partitioning** | **Conditional — Only When Needed** | Time-based partitioning on future `AuditLogs` (`AUD-01`) may help once audit rows grow to multi-million scale; database sharding is unjustified. |
+| **9. Message Queues** | **Conditional — Only When Needed** | External async notifications/audit offloading may justify RabbitMQ / Azure Service Bus in future phases. Currently, `NoShowBackgroundService` and `LicenseExpirationBackgroundService` run as in-process `BackgroundService` polling loops gated by `options.IsEnabled`. |
+| **10. Rate Limiting** | **`PARTIALLY IMPLEMENTED`** | `Program.cs` & `AuthController.cs` implement fixed-window in-process IP limiters (`LoginRateLimit` 5/min, `RefreshRateLimit` 30/min, `ChangePasswordRateLimit` 5/min). Remaining gaps: no HTTP 429 test for `ChangePassword`/`Refresh` (`SEC-03`), no `UseForwardedHeaders` proxy trust (`DEC-DEP-01`), in-process limits are not shared across multiple API nodes, and `SEC-PKG-03` unpaged endpoint fallbacks remain open. |
+| **11. Consistent Hashing** | **Not Applicable / Not Justified** | Applies to partitioned distributed cache/storage rings; DVLD uses a centralized SQL Server database (`ADR-001`). |
+| **12. CAP Theorem (Consistency Principles)** | **`IMPLEMENTED`** | Centralized SQL Server database preserves strong transactional ACID consistency for legal licensing mutations (`UnitOfWork` + `sp_getapplock`). |
+| **13. Horizontal Scaling** | **Not Multi-Instance Ready (`PARTIALLY IMPLEMENTED`)** | Horizontal scale-out is currently constrained by five stateful/single-node bindings: (1) local filesystem photo storage (`PhysicalFileStorageService`), (2) in-process `FixedWindowRateLimiter` partitioning per host, (3) uncoordinated in-process `BackgroundService` polling loops (`NoShowBackgroundService`, `LicenseExpirationBackgroundService`) across nodes, (4) per-request SQL dependency in `OnTokenValidated`, and (5) missing `UseForwardedHeaders` (`DEC-DEP-01`) behind proxies. Database mutexes (`sp_getapplock`) and `UserSessions` rotation already support multi-process SQL coordination (`AUTH-01-CROSS-PROCESS`). |
+| **14. Vertical Scaling** | **Primary Near-Term Scaling Path** | Scaling SQL Server compute (vCPUs), RAM, NVMe I/O, and API host resources supports single-instance/vertical growth without distributed-state complexity. |
+| **15. Fault Tolerance** | **`PARTIALLY IMPLEMENTED`** | `GlobalExceptionHandler` RFC 7807 shielding and SQL Server `EnableRetryOnFailure` / `UnitOfWork.ExecuteInTransactionAsync` commit probes are `IMPLEMENTED`; however, Health & Readiness endpoints (`OBS-01`: `AddHealthChecks` / `MapHealthChecks`) are **`NOT IMPLEMENTED`** (`PLANNED`), and no database backup/DR verification runbook is automated. |
+| **16. Circuit Breaker** | **Conditional — Only When Needed** | Relevant only when integrating external third-party HTTP services (payment/SMS gateways). |
+| **17. Event-Driven Architecture** | **Conditional — Only When Needed** | Direct service orchestration remains the approved design; speculative event buses are rejected without an approved ADR. |
+
+### 13.4 Scalability, Reliability, Performance & Security Synthesis
+1. **Stateful Server-Validated Token Architecture (Not Purely Stateless):** Although `DVLD.Api` uses JWT Bearer access tokens (`15` min) without ASP.NET Core in-memory `ISession`, `JwtBearerEvents.OnTokenValidated` queries SQL Server (`IAuthService.IsPrincipalCurrentAsync`) on every authenticated request, and refresh tokens rotate inside SQL Server `UserSessions`. Multi-instance scaling therefore depends on shared SQL Server throughput, shared photo storage, distributed rate limiting, proxy headers (`DEC-DEP-01`), and background-job coordination.
+2. **Transaction Integrity & Retries:** Multi-aggregate operations utilize `UnitOfWork.ExecuteInTransactionAsync`, which wraps operations in EF Core's `IExecutionStrategy` and resets the `ChangeTracker` on retry to handle transient database connection faults safely.
+3. **Idempotency & Concurrency Guarantees:** Critical workflow endpoints rely on database unique indexes (`LicenseConfiguration`, `DetainedLicenseConfiguration`, `InternationalLicenseConfiguration`, `UserSessionConfiguration`), `RowVersion` (`Person`), `WITH (UPDLOCK, HOLDLOCK)` update reads (`GetForUpdateAsync`), and transaction-owned `sp_getapplock` mutexes (`TestAppointmentRepository`, `UserRepository`, `UserSessionRepository`).
+4. **Unimplemented Observability & Caching Baselines:** `IMemoryCache`, ASP.NET Core Health Checks (`OBS-01`), Serilog structured JSON logging (`OBS-03`), OpenTelemetry tracing, and transactional `AuditLogs` (`AUD-01`) are **not** currently present in the codebase.
 
 ---
 
-## 14. Formal Technology Baseline & Evaluation
+## 14. Authoritative Technology Baseline Reference
 
-> [!NOTE]
-> **Single Source of Truth:** For the verified, manifest-exact runtime, SDK, NuGet, and npm package inventory, always consult [`TECHNOLOGY-STACK.md`](./TECHNOLOGY-STACK.md). Note that `.NET 8` support ended on `2026-11-10` and `ClientApp` now has Vitest and Playwright configured locally.
+> [!IMPORTANT]
+> **Single Source of Truth:** [`TECHNOLOGY-STACK.md`](./TECHNOLOGY-STACK.md) is the **sole authoritative inventory** for `.NET` SDK, target frameworks, NuGet packages, `ClientApp/package.json` versions, `typescript` configuration, frontend test tooling (`9` Vitest unit test files + `1` Playwright E2E spec), and `azure-pipelines.yml` CI stages. Do **not** duplicate version or test-tool status tables here.
 
-The technology stack is governed by verified package manifests and explicit architectural approvals. Zero unauthorized packages may be introduced:
-
-| Engineering Area | Intended Baseline Technology | Governance Classification | Technical Rationale & Architectural Boundary |
-|---|---|:---:|---|
-| **Backend Framework** | ASP.NET Core 8 (`Microsoft.AspNetCore.App`) | **Existing and Retained** | Modern LTS web framework providing high-throughput Kestrel hosting, dependency injection, and endpoint routing. |
-| **Programming Language** | C# 12 / .NET 8 SDK | **Existing and Retained** | Type-safe, high-performance runtime across `API/`, `Application/`, `Infrastructure/`, and `Domain/`. |
-| **Frontend Framework** | React 19 (`react: ^19.3.1`) | **Existing and Retained** | Current active SPA in `ClientApp/`. Zero React 18 or legacy web dependencies. |
-| **Frontend Language** | TypeScript (`typescript: ~6.0.3`) | **Existing and Retained** | Full type safety across contracts, API hooks, and UI components in `ClientApp/`. |
-| **Frontend Build Tool** | Vite 8 (`vite: ^8.3.4`) | **Existing and Retained** | Fast HMR dev server and optimized production rollup bundler. |
-| **UI Styling** | Tailwind CSS 4 (`tailwindcss: ^4.3.3`) | **Existing and Retained** | Modern utility-first CSS framework with Vite plugin integration. |
-| **UI Primitives** | Radix UI Primitives | **Existing and Retained** | Accessible, unstyled UI components (Dialog, Dropdown, Select, Tooltip). |
-| **Iconography** | Lucide React (`lucide-react: ^1.65.0`) | **Existing and Retained** | Lightweight SVG icon library. |
-| **Relational Database** | Microsoft SQL Server (LocalDB / Enterprise) | **Existing and Retained** | Centralized transactional database supporting ACID transactions, table constraints, and `sp_getapplock`. |
-| **ORM / Data Access** | Entity Framework Core 8 (`EF Core 8.0.24`) | **Existing and Retained** | Code-first mapping with migrations, change tracking, and execution retry strategies. |
-| **API Architectural Style** | RESTful JSON Web API | **Existing and Retained** | HTTP verbs, RFC 7807 `ProblemDetails` error envelopes, and `Result<T>` mapping via `ResultHttpMapper`. |
-| **API Documentation** | OpenAPI 3.0 / Swagger UI (`Swashbuckle.AspNetCore 6.6.2`) | **Existing and Retained** | Interactive API specification generated at `/swagger`. |
-| **Authentication** | JWT Bearer Tokens (`JwtBearerHandler`) | **Existing and Retained** | Stateless HMAC-SHA256 tokens; lifecycle governed under `DEC-AUTH-01/02`. |
-| **Authorization** | Policy-Based (`StaffOnly`, `AdminOnly`) | **Existing and Retained** | ASP.NET Core authorization policies enforcing Segregation of Duties (`ADR-O01`). |
-| **Structured Logging** | Serilog (`Serilog.AspNetCore`) | **Approved Target** | Roadmap task `OBS-03` (Phase 12.3); requires NuGet approval before package install. |
-| **Distributed Tracing** | OpenTelemetry | **Conditional / Verification Required** | Not currently installed. Conditional upon distributed APM requirements in future hosting topology. |
-| **Backend Testing** | xUnit, Moq, FluentAssertions | **Existing and Retained** | 1,967 cataloged tests across `Application.UnitTests`, `Infrastructure.IntegrationTests`, and `API.IntegrationTests`. |
-| **Frontend Unit Testing** | Vitest + React Testing Library | **Approved Target** | Roadmap candidate `FE-TEST` (Phase 12.4); requires npm approval before install. |
-| **End-to-End (E2E) Testing** | Playwright | **Conditional / Verification Required** | Not currently installed. Conditional upon full-stack regression automation needs post-Phase 12.4. |
-| **CI/CD Platform** | Azure Pipelines (`azure-pipelines.yml`) | **Existing and Retained** | Automated multi-stage build and test execution pipeline (`OBS-02`). |
-| **Source Control** | Git + GitHub | **Existing and Retained** | Distributed version control governed by strict safety rules. |
-
-### 13.4 Scalability, Reliability, Performance & Security Synthesis
-1. **Stateless API Design:** Authentication relies on signed JWT Bearer tokens. Controller instances hold no user session state in memory.
-2. **Transaction Integrity & Retries:** Multi-aggregate operations utilize `UnitOfWork.ExecuteInTransactionAsync`, which wraps operations in EF Core's `IExecutionStrategy` and resets the `ChangeTracker` on retry to handle transient database connection faults safely.
-3. **Idempotency Guarantees:** Critical workflow endpoints (license issuance, detention release) enforce unique database constraints and application status validations (`AppStatus.Completed`, `IsActive = true`) to ensure replayed requests return deterministic conflict errors without duplicating legal credentials.
-4. **Defense in Depth:** Input validation in static validators, parameterized SQL via EF Core, path normalization in file storage, and rate limiting protect against OWASP Top 10 vulnerabilities.
+Key baseline reminders verified against checked-in manifests at `e9e843e`:
+- **Runtime Lifecycle Warning:** Projects target `net8.0` and pin SDK `8.0.427` (`.NET 8` EOS occurred `2026-11-10`); upgrading to `.NET 10 LTS` is `PLANNED` / `NOT AUTHORIZED`.
+- **Pipeline Scope:** [`azure-pipelines.yml`](../../azure-pipelines.yml) runs `Frontend_CI` (`npm ci`, `lint`, `tsc -b`, `build` on Node.js `22.x` LTS—without Vitest or Playwright) and `Backend_CI` (Release build + unit + LocalDB SQL integration tests).
+- **No Unauthorized Packages:** Introducing Serilog (`OBS-03`), OpenTelemetry, HealthChecks packages (`OBS-01`), Redis, MediatR, or Dapper requires explicit approval and ADR updates.

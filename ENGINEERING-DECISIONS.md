@@ -2,9 +2,11 @@
 
 > **Authority Level:** Sole Authoritative Architectural, Technical & Security Decision Register  
 > **Parent Document:** [`AGENTS.md`](./AGENTS.md)  
-> **Repository Root:** `D:\DVLD-System`  
-> **Baseline Commit:** `9b6d22f8728463f7b80c1341582016e1dda1972f`  
-> **Governance Status:** CONSOLIDATED & ENFORCED (Phase 1)  
+> **Repository Root:** `D:\DVLD-System`
+>
+> **Baseline Commit:** `e9e843e974af86a86003bcc364f0e7686c3faa87` (Reconciled with Active Source on 2026-11-18)
+>
+> **Governance Status:** CONSOLIDATED & ENFORCED (Reconciled Baseline)
 
 ---
 
@@ -145,10 +147,10 @@ flowchart LR
 - **Consequences:** Clean separation of concerns. Backend API remains the sole validation authority.
 
 ### ADR-003: JWT Bearer Token Authentication with Dynamic DB Revocation
-- **Status:** `ACCEPTED` (Implemented & Active)
+- **Status:** `ACCEPTED` (Implemented & Active; Extended under `ADR-006`)
 - **Context:** Stateless JWT tokens cannot natively be revoked immediately upon user deactivation without distributed state.
-- **Decision:** Implement `JwtBearerEvents.OnTokenValidated` in `Program.cs` to verify `IUserService.IsUserActiveAsync(userId)` in SQL Server on every authenticated request.
-- **Consequences:** Provides immediate deactivation defense without requiring distributed cache infrastructure.
+- **Decision:** Implement `JwtBearerEvents.OnTokenValidated` in `Program.cs` to verify revocation state in SQL Server on every authenticated request (initially via `IUserService.IsUserActiveAsync(userId)`, and subsequently extended under `ADR-006` to `IAuthService.IsPrincipalCurrentAsync(userId, securityStampClaim, sessionId)` validating active status, `sst`, and `sid`).
+- **Consequences:** Provides immediate deactivation, role/password rotation, and session-revocation defense via SQL Server without Redis; note this means `DVLD.Api` is server-validated per request rather than purely stateless.
 
 ### ADR-004: Distributed Slot Mutual Exclusion via `sp_getapplock`
 - **Status:** `ACCEPTED` (Implemented & Active)
@@ -218,15 +220,15 @@ flowchart LR
 - **Status:** `ACCEPTED` (Implemented & Verified — 2026-11-09)
 - **Context:** The API issued a single 240-minute HS256 bearer token. There was no refresh token, no server-side revocation, and no invalidation on password change, role change, or deactivation beyond a per-request `IsActive` check. The SPA persisted the access token in `sessionStorage` (and read legacy `localStorage` keys). A stolen token remained valid for four hours and could not be revoked.
 - **Decision:**
-  1. The access token is a 15-minute HS256 JWT carrying `sub`, `name`, `role`, `FullName`, `PersonId`, `sst` (security stamp), and `jti`.
-  2. Refresh tokens are 256-bit opaque values delivered only in an `HttpOnly`, `SameSite=Lax`, `Secure`-when-HTTPS cookie scoped to `/api/auth`. Only their SHA-256 hash is persisted.
+  1. The access token is a 15-minute HS256 JWT carrying `sub` (`NameIdentifier`), `name`, `role`, `FullName`, `PersonId`, `sst` (security stamp), `sid` (session GUID), and `jti`.
+  2. Refresh tokens are 256-bit opaque values (32 random bytes, 43 Base64Url chars) delivered only in an `HttpOnly`, `SameSite=Lax`, `Secure`-when-HTTPS cookie (`dvld_rt`) scoped to `/api/Auth` (`AuthSessionOptions.RefreshCookiePath` and `appsettings.json`). Only their Base64Url SHA-256 hash is persisted in `UserSessions`.
   3. A `UserSessions` row represents one issued refresh generation. `TokenFamilyId` groups a login; `ReplacedBySessionId` records the rotation chain. Absolute expiry is 14 days and is never extended; idle expiry is 7 days.
   4. Every refresh consumes the current row through one conditional `UPDATE ... WHERE RevokedAtUtc IS NULL AND ExpiresAtUtc > now`; the database row lock guarantees exactly one winner across instances. A loser receives 409 and retries.
   5. Presenting a consumed token after a 30-second grace window revokes the entire family (theft response) and returns a generic 401. Inside the window, a still-active family returns 409 without revocation (legitimate multi-tab race).
   6. `User.SecurityStamp` is rotated on password change, role change, and activation change. `OnTokenValidated` compares the `sst` claim with the persisted stamp, so authorization changes take effect immediately.
   7. Logout revokes the current session; logout-all revokes every active session; password change revokes all sessions and issues a fresh session for the current device.
   8. CSRF is mitigated by `SameSite=Lax`, an explicit credential-enabled CORS origin, and a mandatory `X-CSRF-Protection: 1` header on cookie-authenticated endpoints.
-- **Consequences:** Stolen access tokens expire in 15 minutes; refresh tokens are unusable if the database is leaked; sensitive user changes revoke access immediately; the SPA holds no tokens in web storage. Rotation/concurrency guarantees depend on SQL Server conditional-update semantics, which were not exercised against a database in this environment.
+- **Consequences:** Stolen access tokens expire in 15 minutes; refresh tokens are unusable if the database is leaked; sensitive user changes revoke access immediately; the SPA holds no tokens in web storage. Cross-process concurrency against real SQL Server is verified in `CrossProcessRefreshTests.cs` and `AuthSessionRefreshSqlConcurrencyTests.cs`; however, lost HTTP-response / process-crash fault injection and client UI handling when `logoutSession()` server revocation fails remain open follow-ups (and SQL integration suites were not re-executed in the current doc-only audit).
 
 ### ADR-007: Cross-Process Serialization of Administrator Security-State Changes (`CONCURRENCY-01`)
 - **Status:** `ACCEPTED` (Implemented & Verified — 2026-11-09)
@@ -283,19 +285,19 @@ flowchart LR
 ## 9. Security Architecture & Policy Decisions
 
 ### DEC-AUTH-01: Target Stateless JWT Access Token Lifetime
-- **Status:** `PROPOSAL (UNAPPROVED)` (**NOT AUTHORIZED**)
+- **Status:** `PROPOSAL (UNAPPROVED)` (**NOT AUTHORIZED** — Operational 15-minute lifetime is active under `ADR-006`)
 - **Domain:** Identity & Authentication (`RSK-04`, `SEC-PKG-10`)
 - **Strategic Question:** What target access token lifetime should be configured for stateless JWTs prior to refresh token implementation?
 - **Options Evaluated:** Option 1: 15 minutes; Option 2: 30 minutes; Option 3: 60 minutes.
-- **Architectural Proposal:** Option 2 (30 minutes) is proposed for Project Owner evaluation to balance containment with usability during staff shifts. The 30-minute value is an **unapproved proposal**, NOT an approved setting.
+- **Architectural Proposal:** Option 2 (30 minutes) is preserved here as an unapproved historical proposal. Active runtime configuration under `ADR-006` (`appsettings.json`) enforces **15 minutes** paired with persisted refresh sessions (`UserSessions`); increasing lifetime to 30 minutes remains **NOT AUTHORIZED**.
 - **Authority:** Project Owner (Gate 2).
 
 ### DEC-AUTH-02: Server-Side Architecture for JWT Token Revocation
-- **Status:** `PROPOSAL (UNAPPROVED)` (**NOT AUTHORIZED**)
+- **Status:** `PROPOSAL (UNAPPROVED)` (**NOT AUTHORIZED** — SQL validation is active under `ADR-003` & `ADR-006`)
 - **Domain:** Identity & Session Management (`SEC-PKG-10`, Phase 12.2)
 - **Strategic Question:** What server-side architecture should be adopted for JWT token revocation?
 - **Options Evaluated:** Option 1: Purely stateless (rely on short lifetime); Option 2: Distributed in-memory blocklist (Redis); Option 3: Dedicated database token tracking table.
-- **Architectural Proposal:** Option 1 for initial milestone, transitioning to Option 2 or 3 under Phase 12.2.
+- **Architectural Proposal:** Historical Option 1/2/3 trade-off record preserved; active implementation uses `ADR-003` + `ADR-006` (`OnTokenValidated` against `Users.SecurityStamp` and SQL `UserSessions`). Introducing Redis (`Option 2`) or relaxing revocation checks remains **NOT AUTHORIZED**.
 - **Authority:** Project Owner / Architect.
 
 ### DEC-AUTH-03: Multi-Factor Authentication (MFA) for Administrative Roles

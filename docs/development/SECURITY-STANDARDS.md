@@ -3,8 +3,9 @@
 > **Authority Level:** Mandatory Security Baseline  
 > **Parent Document:** [`AGENTS.md`](../../AGENTS.md)  
 > **Roadmap & Decisions:** [`ENGINEERING-ROADMAP.md`](../../ENGINEERING-ROADMAP.md) | [`ENGINEERING-DECISIONS.md`](../../ENGINEERING-DECISIONS.md)  
-> **Repository Root:** `D:\DVLD-System`  
-> **Baseline Commit:** `29e43d6ce26ff6e7f516c45f4f475b10bdc2bfd3` (Reconciled with `AUTH-01` & `ClientApp` source on 2026-11-18)  
+> **Repository Root:** `D:\DVLD-System`
+>
+> **Baseline Commit:** `e9e843e974af86a86003bcc364f0e7686c3faa87` (Reconciled with `DVLD.Api` & `ClientApp` source on 2026-11-18)
 
 ---
 
@@ -87,8 +88,9 @@ The API configures three distinct authorization policies in `Program.cs`:
 | **`CountriesController`**, **`DashboardController`** | `[Authorize]` | **Allowed** | **Allowed** | Read-only country directory and dashboard statistics. |
 | **`AuthController`** (`/api/Auth/*`) | `[Authorize]` (`AllowAnonymous` on `login`, `refresh`, `logout`) | **Allowed** | **Allowed** | Authentication, CSRF-protected cookie refresh/logout, profile, and password change. |
 
-### 3.2 Approved Decision: Segregation of Duties (ADR-O01 / SEC-01)
-- **Current Technical Implementation:** The active API implementation enforces `[Authorize(Policy = "StaffOnly")]` on operational counter endpoints, which strictly excludes `Admin` users from executing operational licensing counter actions. This behavior is reflected in `ClientApp/src/utils/permissions.ts` and verified by unit test `ApplicationsControllerTests.cs`.
+### 3.2 Approved Decision: Segregation of Duties (`ADR-O01` / `SEC-01` / `RSK-12`)
+- **Current Technical Implementation:** The active API implementation enforces `[Authorize(Policy = "StaffOnly")]` on operational counter endpoints (`Applications`, `LocalDrivingLicenseApplications`, `Drivers`, `Licenses`, `LicenseIssuance`, `LicenseRenewal`, `LicenseReplacement`, `DetainedLicenses`, `InternationalLicenses`, `TestAppointments`, `Tests`, `TestWorkflow`), strictly excluding `Admin` users from operational counter actions. This policy is verified in `API/DVLD.Api/Controllers/` and controller authorization tests (`ApplicationsControllerTests.cs`).
+- **Verified Frontend vs. Backend RBAC Mismatch (`SEC-01` / `RSK-12`):** Static inspection of [`ClientApp/src/utils/permissions.ts`](../../ClientApp/src/utils/permissions.ts) confirms `'Person License History': ['Staff', 'Admin']` grants client-side navigation access to `Admin`, whereas `LicensesController` and `InternationalLicensesController` enforce `[Authorize(Policy = "StaffOnly")]` (returning HTTP 403). `ClientApp` guards must be treated strictly as UX controls; backend policies remain the authoritative security boundary.
 - **Approved Architectural Policy:** In [`ENGINEERING-DECISIONS.md`](../../ENGINEERING-DECISIONS.md), `ADR-O01` is formally recorded as: `APPROVED — Model B (Explicit Permission Separation)`. Administrators do not automatically inherit counter staff operational permissions; staff do not receive administrative user-management permissions; shared capabilities are explicitly granted via `StaffOrAdmin`.
 - **Preservation of Current Behavior & Authorization Boundary:** Existing authorization behavior must remain unchanged. Approval of ADR-O01 records architectural policy agreement, but does **not** authorize code refactoring or policy relaxation without an authorized implementation milestone. Engineers and AI agents are strictly prohibited from changing `StaffOnly` to `StaffOrAdmin` or altering role access rules without explicit written Project Owner authorization.
 
@@ -129,16 +131,16 @@ Profile photo uploads undergo strict multi-stage validation and sanitization bef
 
 In `API/DVLD.Api/Program.cs` (lines 182–243) and `API/DVLD.Api/Controllers/AuthController.cs`, fixed-window rate limiting partitioned by `HttpContext.Connection.RemoteIpAddress` (`RejectionStatusCode = 429`) protects all primary authentication routes:
 
-| Policy Name | Endpoint | Limit (Verified in `Program.cs`) | Partition Key |
-|---|---|---|---|
-| `LoginRateLimit` | `POST /api/Auth/login` | 5 requests / 1 minute | `RemoteIpAddress` |
-| `RefreshRateLimit` | `POST /api/Auth/refresh` | 30 requests / 1 minute | `RemoteIpAddress` |
-| `ChangePasswordRateLimit` | `POST /api/Auth/change-password` | 5 requests / 1 minute | `RemoteIpAddress` |
+| Policy Name | Endpoint | Implementation Status & Limit (`Program.cs`) | Partition Key | 429 Automated Test |
+|---|---|---|---|---|
+| `LoginRateLimit` | `POST /api/Auth/login` | `IMPLEMENTED` — Fixed window: 5 requests / 1 minute | `RemoteIpAddress` | Present in `AuthControllerTests.cs` *(unexecuted in doc pass)* |
+| `RefreshRateLimit` | `POST /api/Auth/refresh` | `IMPLEMENTED` — Fixed window: 30 requests / 1 minute | `RemoteIpAddress` | **`NOT IMPLEMENTED`** |
+| `ChangePasswordRateLimit` | `POST /api/Auth/change-password` | `IMPLEMENTED` — Fixed window: 5 requests / 1 minute | `RemoteIpAddress` | **`NOT IMPLEMENTED`** (`SEC-03` test gap) |
 
-**Operational Considerations:**
-- These limiters are in-process per API host instance; multi-instance deployments require a distributed limiting strategy if global enforcement is required.
-- When deploying behind a reverse proxy or load balancer, configure `UseForwardedHeaders` with explicit `KnownProxies` / `KnownNetworks` (`DEC-DEP-01` in [`ENGINEERING-DECISIONS.md`](../../ENGINEERING-DECISIONS.md)) so `RemoteIpAddress` reflects the true client IP rather than the proxy IP.
-- Legacy roadmap reference `SEC-03` (adding rate limiting to `change-password`) is implemented in current source via `ChangePasswordRateLimit`.
+**Operational & Verification Considerations (`SEC-03` Reconciled across 4 Dimensions):**
+- **In-Process Boundary:** These `FixedWindowRateLimiter` instances live in-process per API host; multi-instance deployments require distributed rate limiting if global enforcement is required.
+- **Reverse Proxy Dependency:** Behind a reverse proxy or load balancer, `UseForwardedHeaders` must be configured with explicit `KnownProxies` / `KnownNetworks` (`DEC-DEP-01` in [`ENGINEERING-DECISIONS.md`](../../ENGINEERING-DECISIONS.md)) so `RemoteIpAddress` reflects the true client IP rather than the proxy IP (`UseForwardedHeaders` is **not** currently configured in `Program.cs`).
+- **`SEC-03` Dimensional Status (`PARTIALLY IMPLEMENTED`):** While `AUTH-01` applied `[EnableRateLimiting("ChangePasswordRateLimit")]` (fixed-window 5 req/min) to `AuthController.ChangePassword` (`IMPLEMENTED` in runtime code), automated HTTP `429 TooManyRequests` integration tests exist only for `Login` (`AuthControllerTests.cs:234-292`) and are **missing** for `ChangePassword` and `Refresh`. Furthermore, the original `SEC-03` roadmap specification requested a sliding-window limiter (`PasswordChangeLimit`). Accordingly, `SEC-03` remains **open / `PARTIALLY IMPLEMENTED`** in [`ENGINEERING-ROADMAP.md`](../../ENGINEERING-ROADMAP.md) until HTTP 429 test verification is implemented and executed.
 
 ---
 
@@ -202,13 +204,13 @@ The DVLD platform security governance maintains complete traceability between th
 ## 12. AUTH-01 Session Management Standard
 
 1. **Access tokens:** 15-minute HS256 JWT with `sub` (`NameIdentifier`), `name`, `role`, `FullName`, `PersonId`, `sst` (security stamp), `sid` (session ID), and `jti`. No secrets or sensitive personal data in claims.
-2. **Refresh tokens:** 256-bit CSPRNG values delivered only in an `HttpOnly`, `SameSite=Lax`, `Secure`-when-HTTPS cookie scoped to `/api/auth`. Only the Base64Url SHA-256 hash is stored (`UserSessions.RefreshTokenHash`, unique index).
+2. **Refresh tokens:** 256-bit CSPRNG values (32 random bytes, 43 Base64Url chars in `RefreshTokenService.cs`) delivered only in an `HttpOnly`, `SameSite=Lax`, `Secure`-when-HTTPS cookie (`RefreshCookieName = "dvld_rt"`) scoped to `RefreshCookiePath = "/api/Auth"` (`AuthSessionOptions.cs` & `appsettings.json`). Only the Base64Url SHA-256 hash is persisted (`UserSessions.RefreshTokenHash`, unique index) and verified with `CryptographicOperations.FixedTimeEquals`.
 3. **Session model:** one row per issued refresh generation; `TokenFamilyId` groups a login and `ReplacedBySessionId` records rotation. Absolute lifetime 14 days (never extended); idle lifetime 7 days.
 4. **Rotation:** every refresh consumes the current generation through one conditional `UPDATE ... WHERE RevokedAtUtc IS NULL AND ExpiresAtUtc > now`. Exactly one concurrent caller may win; losers receive 409 and retry once.
 5. **Reuse detection:** a consumed token presented after a 30-second grace window revokes the whole family and returns a generic 401. Inside the grace window with a still-active family it returns 409 without revocation (multi-tab tolerance).
 6. **Immediate invalidation:** `User.SecurityStamp` rotates on password change, role change, and activation change. `OnTokenValidated` compares the `sst` claim with the persisted stamp on every request.
-7. **Revocation triggers:** logout (current session), logout-all (all user sessions), password change (all + fresh session for the current device), role/activation change (all + stamp rotation), deletion (all).
-8. **CSRF:** `SameSite=Lax` cookie + explicit credential-enabled CORS origin + mandatory `X-CSRF-Protection: 1` header on refresh/logout. Refresh and logout are anonymous because the cookie is the credential; the access token is not required.
+7. **Revocation triggers & Two-Step `ChangePassword` Behavior:** logout (current session), logout-all (all user sessions), role/activation change (all + stamp rotation), deletion (all), and password change (commits new BCrypt hash + rotates `SecurityStamp` + revokes all active sessions, then attempts `StartSessionAsync` to issue a fresh session for the current device; if session establishment fails after the password change commits, `AuthController.ChangePassword` clears the `dvld_rt` cookie and `ChangePasswordPage.tsx` clears form fields and logs out the user with a re-login notice—verified in `AuthControllerTests.cs:456-529`).
+8. **CSRF & Local Development Proxy Caveat:** `SameSite=Lax` cookie + explicit credential-enabled CORS origin (`http://localhost:5173`) + mandatory `X-CSRF-Protection: 1` header on refresh/logout. Refresh and logout are anonymous because the cookie is the credential; the access token is not required. *(Local Dev Only Warning: `ClientApp/vite.config.ts` sets `secure: false` and strips `; Secure` from `Set-Cookie` headers when proxying `/api` to `https://localhost:7125` so browsers over HTTP localhost accept the cookie. Never replicate `secure: false` or `; Secure` stripping in Production; deploy Production strictly over HTTPS.)*
 9. **Client storage:** access tokens are held in memory only. Refresh tokens are never readable by JavaScript and never stored in `localStorage`/`sessionStorage`. Legacy token keys are purged at startup.
 10. **Logging:** raw refresh tokens, JWTs, passwords, and signing keys must never be logged. Security events log user id and token-family id only.
 
@@ -220,16 +222,16 @@ The DVLD platform security governance maintains complete traceability between th
 
 ### 13.1 Token & Browser Storage Separation
 1. **Access Token (In-Memory Only):** `ClientApp/src/utils/authTokenStore.ts` stores the active JWT access token solely in a module-scoped JavaScript variable (`currentAccessToken`). It is never written to `localStorage`, `sessionStorage`, or non-HttpOnly cookies, and is automatically lost when the browser tab closes or refreshes.
-2. **Refresh Token (`HttpOnly` Cookie Only):** Refresh tokens are issued and rotated exclusively via an `HttpOnly`, `SameSite=Lax`, `Secure`-when-HTTPS cookie scoped to `/api/auth`. JavaScript (`document.cookie`) cannot read or modify it. On page reload, `AuthContext.tsx` calls `refreshSession()` (`POST /api/Auth/refresh` with `credentials: 'include'` and `X-CSRF-Protection: 1`) to obtain a fresh in-memory access token.
+2. **Refresh Token (`HttpOnly` Cookie Only):** Refresh tokens are issued and rotated exclusively via an `HttpOnly`, `SameSite=Lax`, `Secure`-when-HTTPS cookie (`dvld_rt`) scoped to `/api/Auth` (`AuthSessionOptions.RefreshCookiePath`). JavaScript (`document.cookie`) cannot read or modify it. On page reload, `AuthContext.tsx` calls `refreshSession()` (`POST /api/Auth/refresh` with `credentials: 'include'` and `X-CSRF-Protection: 1`) to obtain a fresh in-memory access token. In local development, `ClientApp/vite.config.ts` proxies `/api` to `https://localhost:7125` with `secure: false` and strips `; Secure` from `Set-Cookie` responses; Production hosts must enforce HTTPS with `Secure` intact.
 3. **Web Storage (`localStorage` / `sessionStorage`) Boundaries:**
    - Authentication tokens are **never** stored in `sessionStorage` or `localStorage` (superseding legacy documentation that described `dvld_auth_session` in `sessionStorage`).
    - On startup, `purgeLegacyTokenStorage()` (`ClientApp/src/utils/sessionStorage.ts`) explicitly removes legacy keys (`access_token`, `dvld_token`, `dvld_auth_session`) from both `localStorage` and `sessionStorage`.
    - The **only** key verified in `localStorage` across `ClientApp/src` is `"dvld_remembered_username"` (`ClientApp/src/components/auth/Login.tsx`), stored strictly when the user opts into "Remember me" on the login form.
 4. **Cross-Tab Synchronization & Single-Flight Refresh:**
    - `apiClient.ts` deduplicates concurrent 401 refresh attempts via a single-flight `inFlightRefresh` promise and session generation counter (`authGeneration`), retrying a 409 rotation conflict once after 250 ms.
-   - `AuthContext.tsx` coordinates login, logout, and token-refresh timing across open tabs via `BroadcastChannel('dvld-auth')`.
-5. **Known Client Logout Reliability Follow-Up:**
-   - `logoutSession()` in `ClientApp/src/services/apiClient.ts` invalidates local session state immediately and calls `POST /api/Auth/logout` without inspecting `response.ok` / `response.status`, clearing the access token in `finally`. If the server call fails (network error, 500, etc.), the `HttpOnly` refresh cookie is not cleared by the server and a subsequent reload may restore the session. Making server revocation failure explicit in the UI remains an open reliability follow-up.
+   - `AuthContext.tsx` coordinates login, logout, and `token-refreshed` timestamps across open tabs on the same browser origin via `BroadcastChannel('dvld-auth')` (`IMPLEMENTED`).
+5. **Known Client Logout Reliability Follow-Up (`logoutSession()` Gap):**
+   - `AuthContext.logout()` triggers `void logoutSession()` (`ClientApp/src/services/apiClient.ts`), clears in-memory session state immediately, and broadcasts `'logout'` to other open tabs via `BroadcastChannel('dvld-auth')`. Because `logoutSession()` does not inspect `response.ok` / `response.status` (and discards network/5xx errors in its `finally`/outer catch path), other local tabs clear their in-memory UI state, **but** if `POST /api/Auth/logout` failed on the server, the `HttpOnly` `dvld_rt` cookie may remain valid and restore the session on a full browser reload (compare with `LogoutAll`, which invokes `logoutAllSessions().finally(...)`, and `Logout_WhenLockAcquisitionFails_ReturnsConflictAndDoesNotClearCookie` on the API side). Surfacing server revocation failure in the UI remains an open reliability follow-up (`FE-01` / `AUTH-01` follow-up).
 
 ### 13.2 XSS & Credential Leakage Controls
 - Static inspection of `ClientApp/src` enforces React JSX escaping with zero raw DOM injection APIs (`dangerouslySetInnerHTML`, `innerHTML`, `outerHTML`, `document.write`) and prohibits logging credentials or tokens to browser console sinks.

@@ -9,7 +9,7 @@
 
 ## 1. Overview & Frontend Scope
 
-This file defines **frontend-specific** architecture conventions and quality gates for `ClientApp/`, the React + TypeScript + Vite SPA communicating with `DVLD.Api` over HTTP + JSON + JWT (`http://localhost:5260/api`). General repository-wide agent rules (Git safety, protected databases, approval gates, evidence standards, and 10-step workflow) live exclusively in [`../AGENTS.md`](../AGENTS.md).
+This file defines **frontend-specific** architecture conventions and quality gates for `ClientApp/`, the React + TypeScript + Vite SPA communicating with `DVLD.Api` over HTTP + JSON + JWT (`/api` proxied to `https://localhost:7125` in local development via `vite.config.ts`, or configured via `VITE_API_BASE_URL`). General repository-wide agent rules (Git safety, protected databases, approval gates, evidence standards, and 10-step workflow) live exclusively in [`../AGENTS.md`](../AGENTS.md).
 
 ---
 

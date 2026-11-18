@@ -3,9 +3,11 @@
 > **Authority Level:** Mandatory Testing & Quality Assurance Standards  
 > **Parent Document:** [`AGENTS.md`](../../AGENTS.md)  
 > **Roadmap & Decisions:** [`ENGINEERING-ROADMAP.md`](../../ENGINEERING-ROADMAP.md) | [`ENGINEERING-DECISIONS.md`](../../ENGINEERING-DECISIONS.md)  
-> **Repository Root:** `D:\DVLD-System`  
-> **Baseline Commit:** `baa356705c3b5c364a9c5aabf0cd62a5aa21e4b9` (Merged with local SQL test guide on 2026-11-18)  
-> **Governance Status:** CONSOLIDATED & ENFORCED (Phase 2)  
+> **Repository Root:** `D:\DVLD-System`
+>
+> **Baseline Commit:** `e9e843e974af86a86003bcc364f0e7686c3faa87` (Reconciled with current `ClientApp/tests/` & `AuthControllerTests.cs` on 2026-11-18)
+>
+> **Governance Status:** CONSOLIDATED & ENFORCED (Reconciled with Codebase)
 
 ---
 
@@ -15,18 +17,18 @@ The DVLD repository enforces a three-tiered testing strategy ensuring fast feedb
 
 ```text
        ┌──────────────────────────────────────────────┐
-       │             API.IntegrationTests             │  (436 cataloged tests; 1 smoke test run in Phase 12.1)
-       │    End-to-End HTTP & WebApplicationFactory   │  Uses Ephemeral Test DB
+       │             API.IntegrationTests             │  (Historical Phase 12.1: 436; 1 smoke run)
+       │    End-to-End HTTP & WebApplicationFactory   │  Current e9e843e source: 58 files
        └──────────────────────┬───────────────────────┘
                               │
        ┌──────────────────────▼───────────────────────┐
-       │       Infrastructure.IntegrationTests        │  (612 cataloged tests; 611 passed, 1 SSL timeout)
-       │     Real SQL Server Repositories & UoW       │  Uses Ephemeral Test DB
+       │       Infrastructure.IntegrationTests        │  (Historical Phase 12.1: 612; 611 pass, 1 fail)
+       │     Real SQL Server Repositories & UoW       │  Current e9e843e source: 41 files
        └──────────────────────┬───────────────────────┘
                               │
        ┌──────────────────────▼───────────────────────┐
-       │            Application.UnitTests             │  (919 cataloged tests; 919 passed)
-       │     Pure In-Memory Logic, Moq, Fast          │  Zero Database Access
+       │            Application.UnitTests             │  (Historical Phase 12.1: 919; 919 pass)
+       │     Pure In-Memory Logic, Moq, Fast          │  Current e9e843e source: 41 files
        └──────────────────────────────────────────────┘
 ```
 
@@ -91,19 +93,38 @@ All integration test suites execute against real SQL Server instances. To preven
 
 ---
 
-## 5. Historical Test Evidence Baseline (Phase 12.1 Results)
+## 5. Historical Test Evidence Baseline vs. Current Static Inventory
 
-For baseline reference, historical execution metrics recorded during the Phase 12.1 audit are cataloged below.
+For historical traceability, the Phase 12.1 discovery execution metrics are preserved alongside the current static source inventory (`e9e843e`).
 
-> **Crucial Audit Note:** These counts represent **historical Phase 12.1 audit data**, NOT current test execution results. Discovered/cataloged tests must never be confused with executed tests.
+> [!IMPORTANT]
+> **Crucial Evidence Distinction:** Historical Phase 12.1 metrics (`1,967` cataloged backend tests) reflect an earlier snapshot, **NOT** the current repository count or current execution results. Static source counts (`[Fact]`/`[Theory]` attributes or `.test.ts(x)` files) must **never** be presented as executed or passing test runs.
 
-| Test Project | Discovered / Cataloged | Historical Executed | Historical Passed | Historical Failed | Observed Execution Behavior / Failure Mode |
+| Test Project | Historical Discovered (Phase 12.1) | Historical Executed | Historical Passed | Historical Failed | Current Static Source Inventory (`e9e843e`) |
 |---|---:|---:|---:|---:|---|
-| **`Application.UnitTests`** | 919 | 919 | **919** | 0 | 100% pass rate in memory. |
-| **`API.IntegrationTests`** | 436 | 1 | **1** | 0 | Only 1 smoke test (`Swagger_EndpointReturnsSuccessAndCorrectContentType`) was executed and passed. **435 tests were cataloged but not executed.** |
-| **`Infrastructure.IntegrationTests`** | 612 | 612 | **611** | **1** | 611 passed. Exactly 1 test failed due to a transient SSL pre-login handshake timeout. |
-| **`ClientApp/` (Frontend)** | 0 | 0 | **0** | **0** | Zero automated tests at historical Phase 12.1 baseline. **Current repository note (2026-11-17/18):** `ClientApp` now contains **7 Vitest unit test files** (`ClientApp/tests/unit/`) and **1 Playwright E2E file** (`ClientApp/tests/e2e/login.spec.ts`) configured locally (`npm run test`, `npm run test:e2e`), though not yet invoked as a step in `azure-pipelines.yml`. |
-| **Total Test Inventory** | **1,967** | **1,532** | **1,531** | **1** | Total cataloged test suite size: 1,967 tests. (1,967 is the cataloged inventory, NOT the passed count). |
+| **`Application.UnitTests`** | 919 | 919 | **919** | 0 | 41 C# files (`842 [Fact]`, `51 [Theory]` / `141 [InlineData]`). *(Not executed in current doc-only audit.)* |
+| **`API.IntegrationTests`** | 436 | 1 | **1** | 0 | 58 C# files (`466 [Fact]`, `56 [Theory]` / `161 [InlineData]`). Historical Phase 12.1 executed 1 smoke test only; later targeted passes ran under `REST-01`/`AUTH-01`, **not executed** in current doc-only pass. |
+| **`Infrastructure.IntegrationTests`** | 612 | 612 | **611** | **1** | 41 C# files (`652 [Fact]`, `38 [Theory]` / `87 [InlineData]`). Phase 12.1 had 1 transient SSL timeout; **not executed** in current doc-only pass. |
+| **`ClientApp/` (Frontend)** | 0 | 0 | **0** | **0** | **9** Vitest unit/component files (`ClientApp/tests/unit/`) + **1** Playwright E2E spec (`ClientApp/tests/e2e/login.spec.ts`) + 16 screenshot baselines. **Not executed** in current doc-only pass and **not invoked in `azure-pipelines.yml`**. |
+| **Phase 12.1 Total** | **1,967** | **1,532** | **1,531** | **1** | See [`ENGINEERING-ROADMAP.md`](../../ENGINEERING-ROADMAP.md) §6.2 & §8 for post-Phase 12.1 execution vs. unexecuted gaps. |
+
+### 5.1 Frontend Test Inventory & 6-Dimension Verification (`ClientApp/tests/`)
+
+| Tier / File | Packages Installed | Runner Configured | Discovered File Path | Executed in Current Audit | Runtime Pass Proof | Included in `azure-pipelines.yml` |
+|---|:---:|:---:|---|---:|---|:---:|
+| **Vitest Unit (`npm run test`)** | `IMPLEMENTED` (`vitest ^5.1.0`, RTL, `jsdom`) | `IMPLEMENTED` ([`vitest.config.ts`](../../ClientApp/vitest.config.ts)) | [`tests/unit/apiClientSession.test.ts`](../../ClientApp/tests/unit/apiClientSession.test.ts) | `Not Executed` | `NEEDS VERIFICATION` | **No** (`Frontend_CI` runs lint, `tsc -b`, build only) |
+| **Vitest Unit (`npm run test`)** | `IMPLEMENTED` | `IMPLEMENTED` | [`tests/unit/authContextStaleRefresh.test.tsx`](../../ClientApp/tests/unit/authContextStaleRefresh.test.tsx) | `Not Executed` | `NEEDS VERIFICATION` | **No** |
+| **Vitest Unit (`npm run test`)** | `IMPLEMENTED` | `IMPLEMENTED` | [`tests/unit/ChangePasswordPage.test.tsx`](../../ClientApp/tests/unit/ChangePasswordPage.test.tsx) | `Not Executed` | `NEEDS VERIFICATION` | **No** |
+| **Vitest Unit (`npm run test`)** | `IMPLEMENTED` | `IMPLEMENTED` | [`tests/unit/DashboardPage.test.tsx`](../../ClientApp/tests/unit/DashboardPage.test.tsx) | `Not Executed` | `NEEDS VERIFICATION` | **No** |
+| **Vitest Unit (`npm run test`)** | `IMPLEMENTED` | `IMPLEMENTED` | [`tests/unit/designTokens.test.ts`](../../ClientApp/tests/unit/designTokens.test.ts) | `Not Executed` | `NEEDS VERIFICATION` | **No** |
+| **Vitest Unit (`npm run test`)** | `IMPLEMENTED` | `IMPLEMENTED` | [`tests/unit/LicenseDetentionPage.test.tsx`](../../ClientApp/tests/unit/LicenseDetentionPage.test.tsx) | `Not Executed` | `NEEDS VERIFICATION` | **No** |
+| **Vitest Unit (`npm run test`)** | `IMPLEMENTED` | `IMPLEMENTED` | [`tests/unit/LocalApplicationsPage.test.tsx`](../../ClientApp/tests/unit/LocalApplicationsPage.test.tsx) | `Not Executed` | `NEEDS VERIFICATION` | **No** |
+| **Vitest Unit (`npm run test`)** | `IMPLEMENTED` | `IMPLEMENTED` | [`tests/unit/TestAppointmentsBookingFlow.test.tsx`](../../ClientApp/tests/unit/TestAppointmentsBookingFlow.test.tsx) | `Not Executed` | `NEEDS VERIFICATION` | **No** |
+| **Vitest Unit (`npm run test`)** | `IMPLEMENTED` | `IMPLEMENTED` | [`tests/unit/TestAppointmentsNavigation.test.tsx`](../../ClientApp/tests/unit/TestAppointmentsNavigation.test.tsx) | `Not Executed` | `NEEDS VERIFICATION` | **No** |
+| **Playwright E2E (`npm run test:e2e`)** | `IMPLEMENTED` (`@playwright/test`, `@axe-core/playwright`) | `IMPLEMENTED` ([`playwright.config.ts`](../../ClientApp/playwright.config.ts)) | [`tests/e2e/login.spec.ts`](../../ClientApp/tests/e2e/login.spec.ts) (+ 16 PNGs under `tests/screenshots/`) | `Not Executed` | `NEEDS VERIFICATION` | **No** |
+
+> [!NOTE]
+> Frontend tests (`ClientApp/tests/setup.ts` + 9 unit files + 1 E2E spec) are configured locally (`npm run test`, `npm run test:e2e`), **not** invoked as a stage or step in [`azure-pipelines.yml`](../../azure-pipelines.yml). Integrating unit/E2E checks into CI remains an open Production Readiness item (`ENGINEERING-ROADMAP.md` §8).
 
 ---
 
@@ -159,10 +180,10 @@ graph TD
 - **Test Scenarios:**
   1. Authenticate with valid credentials; inspect JWT claims.
   2. Verify payload contains valid non-empty `jti` GUID claim (`System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti`).
-  3. Verify token expiration claim (`exp`) matches configured target lifetime (defaulting to 240 minutes; asserted against configured duration if amended under `DEC-AUTH-01`).
-  4. Advance test clock beyond expiration instant; execute authenticated request against protected endpoint (`GET /api/users/current`).
-- **Expected Behavior:** Requests with expired tokens receive HTTP 401 Unauthorized with `Bearer error="invalid_token"`. Issued tokens always emit unique `jti` identifiers.
-- **Dependencies & Status:** Proposed test suite. Implementation of `jti` claim is pending Gate 2 authorization under `SEC-PKG-10`. Existing unit tests in `JwtTokenServiceClockTests.cs` verify clock time conversion and UTC kind anchoring, but do not assert `jti` claim generation or token invalidation.
+  3. Verify token expiration claim (`exp`) matches configured target lifetime (currently `ExpirationMinutes = 15` in `appsettings.json`; previously `240` prior to `AUTH-01`).
+  4. Advance test clock beyond expiration instant; execute authenticated request against a protected endpoint (current API: `GET /api/Auth/me` or `GET /api/Auth/profile`; legacy spec text referenced `/api/users/current`, which does not exist in `UsersController`).
+- **Expected Behavior:** Requests with expired tokens receive HTTP 401 Unauthorized. Issued tokens always emit unique `jti`, `sst`, and `sid` claims.
+- **Dependencies & Status:** `PARTIALLY IMPLEMENTED` / Reconciled under `AUTH-01`: `JwtTokenService.cs` emits `jti`, `sst`, `sid`, and `exp`, and `JwtTokenServiceClockTests.cs` / `AuthControllerTests.cs` test clock anchoring and `AuthController` contracts; unexecuted in current documentation audit pass.
 
 ---
 
@@ -247,7 +268,7 @@ graph TD
   2. Acting administrator attempts to change their own role from `Admin` to `Staff`.
   3. Two concurrent requests attempt to deactivate the last two remaining administrators simultaneously.
 - **Expected Behavior:** Scenarios 1 and 2 return `Result.Failure("Cannot demote or deactivate the active administrator account.")`. Scenario 3 succeeds for exactly one administrator and fails for the second, leaving at least one active administrator.
-- **Dependencies & Status:** Proposed test suite. Implementation pending Gate 2 approval under `SEC-PKG-04`. Existing unit test `UserServiceTests.UpdateUserAsync_SelfDemotion_ReturnsForbidden` provides partial unit-level validation with Moq mocks, but does not provide dynamic, concurrency-safe integration verification against SQL Server.
+- **Dependencies & Status:** Reconciled under `[CONCURRENCY-01]` (`ADR-007`): unit tests (`UserServiceTests.UpdateUserAsync_SelfDemotion_ReturnsForbidden`) and real SQL Server race tests (`LastAdministratorConcurrencyTests.cs`) now exist in the repository (`IMPLEMENTED — RUNTIME UNVERIFIED` in current documentation pass). The broader legacy `SEC-PKG-04` package governance record remains tracked separately in [`ENGINEERING-ROADMAP.md`](../../ENGINEERING-ROADMAP.md).
 
 ---
 
@@ -262,7 +283,7 @@ graph TD
   1. Issue HTTP request: `POST /api/applications/{id}/complete`.
   2. Attempt to transition application to `Completed` via standard legitimate workflow (`LicenseIssuanceService.IssueFirstTimeLicenseAsync`) with prerequisite tests incomplete.
 - **Expected Behavior:** Scenario 1 returns HTTP 404 Not Found (following hard deletion under `ADR-P03`) or emits telemetry with deprecation notice (during observation window under `DEC-APP-01`). Scenario 2 returns `Result.Failure` with HTTP 400 Bad Request.
-- **Dependencies & Status:** Proposed test suite. Execution gated on telemetry observation under `DEC-APP-01`. Existing controller test `ApplicationsControllerTests.Complete_WhenSuccessful_ReturnsNoContent` tests the legacy 204 behavior of the bypass route, not the required 404 deletion / deprecation telemetry standard.
+- **Dependencies & Status:** Reconciled under `[INT-01]` (`ADR-P03` / `DEC-APP-01` Option 1): `POST /api/Applications/{id}/complete` has been permanently removed from `ApplicationsController.cs`, and `ApplicationsControllerTests.PostComplete_WhenCalled_ReturnsNotFoundBecauseRouteIsRemoved` verifies HTTP `404 Not Found` (`IMPLEMENTED` in code; not executed in current doc-only pass). *(Note: the legacy `Complete_WhenSuccessful_ReturnsNoContent` 204 test no longer exists in `ApplicationsControllerTests.cs`.)*
 
 ---
 
@@ -386,13 +407,13 @@ graph TD
 
 | Test Suite ID | Specification Exists | Dedicated Test Source | Matching Test Methods Present | Implementation Authorization | Historical Execution Evidence (Phase 12.1) | Current Audit Status |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|
-| **`TST-AUTH-01`** | Yes (§7.1) | No | No (Clock tests verify UTC anchoring, not `jti`) | **NOT AUTHORIZED** (`SEC-PKG-10` / Gate 2) | No documented execution | Unexecuted |
+| **`TST-AUTH-01`** | Yes (§7.1) | No | Partial (`JwtTokenService` emits `jti`; `AuthControllerTests.cs` tests 401/exp; clock test asserts UTC) | **Superseded by `AUTH-01` / `ADR-006`** (`DEC-AUTH-01/02` separate) | Covered by later `AUTH-01` runs (not executed in current pass) | Reconciled (`PARTIALLY IMPLEMENTED`) |
 | **`TST-AUTH-02`** | Yes (§7.2) | No | No | **BLOCKED** (Schema Gate 5 / `DEC-CRED-02`) | No documented execution | Unexecuted |
 | **`TST-AUTH-03`** | Yes (§7.3) | No | No | **NOT AUTHORIZED** (`SEC-PKG-08` / Gate 2) | No documented execution | Unexecuted |
 | **`TST-AUTH-04`** | Yes (§7.4) | No | No | **NOT AUTHORIZED** (`SEC-PKG-09` / `DEC-CRED-01`) | No documented execution | Unexecuted |
 | **`TST-RBAC-01`** | Yes (§7.5) | No | No | **NOT AUTHORIZED** (`SEC-PKG-05` / `ADR-O01`) | No documented execution | Unexecuted |
-| **`TST-RBAC-02`** | Yes (§7.6) | No | Partial (`UserServiceTests.cs` mocked self-demotion) | **NOT AUTHORIZED** (`SEC-PKG-04` / Gate 2) | Unit test executed in Phase 12.1; integration suite unexecuted | Unexecuted |
-| **`TST-WORK-01`** | Yes (§7.7) | No | Partial (`ApplicationsControllerTests.cs` legacy 204 test) | **NOT AUTHORIZED** (`INT-01` / `DEC-APP-01` Gate 6) | Unit test executed in Phase 12.1; deletion suite unexecuted | Unexecuted |
+| **`TST-RBAC-02`** | Yes (§7.6) | Partial (`LastAdministratorConcurrencyTests.cs`) | Yes (`UserServiceTests.cs` + `CONCURRENCY-01` SQL race) | **Reconciled via `CONCURRENCY-01` (`ADR-007`)**; `SEC-PKG-04` separate | Covered by `CONCURRENCY-01` run (not executed in current pass) | Reconciled (`IMPLEMENTED — RUNTIME UNVERIFIED` here) |
+| **`TST-WORK-01`** | Yes (§7.7) | No | Yes (`ApplicationsControllerTests.PostComplete_WhenCalled_ReturnsNotFoundBecauseRouteIsRemoved`) | **Completed via `INT-01` (`ADR-P03` / `DEC-APP-01` Option 1)** | Covered by post-`INT-01` runs (not executed in current pass) | Reconciled (`IMPLEMENTED — RUNTIME UNVERIFIED` here) |
 | **`TST-WORK-02`** | Yes (§7.8) | No | No | **BLOCKED ON LEGAL** (Regulatory Gate 3) | No documented execution | Unexecuted |
 | **`TST-FILE-01`** | Yes (§7.9) | No | No | **NOT AUTHORIZED** (`SEC-PKG-02` / `DEC-FILE-01`) | No documented execution | Unexecuted |
 | **`TST-FILE-02`** | Yes (§7.10)| No | Partial (`ImageProcessingServiceTests.cs` MZ/SVG/HTML tests)| **NOT AUTHORIZED** (`SEC-PKG-02` / Gate 2) | Unit test executed in Phase 12.1; full endpoint suite unexecuted | Unexecuted |
@@ -432,6 +453,18 @@ Level 3 must not be reported as passed unless it was actually executed against a
 1. Cross-row invariants (for example, the last-active-administrator rule) require a real SQL race test with independent DbContexts, UnitsOfWork and transactions.
 2. Each test must assert both the operation outcome (success vs. 409) and the persisted final state.
 3. Application locks must be verified through SQL, not only through unit mocks; `CONCURRENCY-01` evidence is `LastAdministratorConcurrencyTests` (two concurrent demotions, one success, one conflict, one active administrator).
+
+### 9.3 Rate-Limiting Test Coverage (`SEC-03` Gap)
+
+While `API/DVLD.Api/Program.cs` registers and `AuthController.cs` applies three fixed-window IP rate limiters (`LoginRateLimit`, `RefreshRateLimit`, `ChangePasswordRateLimit`), automated test verification in [`AuthControllerTests.cs`](../../Test/API.IntegrationTests/Controllers/AuthControllerTests.cs) is asymmetric:
+
+| Endpoint | Policy (`Program.cs`) | Automated `429 TooManyRequests` Test | Status |
+|---|---|---|---|
+| `POST /api/Auth/login` | `LoginRateLimit` (5/min fixed window) | `Login_WhenRateLimitIsExceeded_ReturnsTooManyRequests`, `LoginRateLimit_DoesNotAffectAuthenticatedEndpoints` | `IMPLEMENTED — RUNTIME UNVERIFIED` (not run in doc pass) |
+| `POST /api/Auth/change-password` | `ChangePasswordRateLimit` (5/min fixed window) | None in `Test/API.IntegrationTests/` | **`NOT IMPLEMENTED`** (`SEC-03` open test gap) |
+| `POST /api/Auth/refresh` | `RefreshRateLimit` (30/min fixed window) | None in `Test/API.IntegrationTests/` | **`NOT IMPLEMENTED`** |
+
+- **`SEC-03` Governance Rule:** Do **not** mark `SEC-03` fully closed or verified until `API.IntegrationTests` includes explicit `429 TooManyRequests` verification for `POST /api/Auth/change-password` (and policy alignment—fixed window vs. sliding window—is confirmed).
 
 ---
 

@@ -14,7 +14,7 @@ Ensure the following tools are installed on your development machine:
    > [!WARNING]
    > Microsoft ended official support for **.NET 8** and **EF Core 8** on **2026-11-10**. The commands below reflect the current checked-in manifests (`net8.0`). Upgrading to `.NET 10 LTS` is a planned priority; do not change target frameworks or packages without explicit approval.
 2. **SQL Server:** Local SQL Server (`MSSQLSERVER` service) or SQL Server LocalDB with Windows Authentication (`Integrated Security=True`) and `sqlcmd` on `PATH`.
-3. **Node.js & npm:** Node.js 20+ LTS recommended locally (`22.x` LTS is used in Azure Pipelines).
+3. **Node.js & npm:** **Node.js `22.x` LTS** (configured in [`azure-pipelines.yml`](../../azure-pipelines.yml); Active LTS `24.x`/`26.x` are also supported; Node.js `20.x` reached EOL on `2026-04-30`). On Windows PowerShell, use `npm.cmd` if execution policy restricts `npm.ps1`.
 
 ---
 
@@ -57,18 +57,19 @@ Run from the repository root (`D:\DVLD-System`):
 ```powershell
 dotnet restore DVLD.sln
 dotnet build DVLD.sln --configuration Release
-dotnet run --project ".\API\DVLD.Api\DVLD.Api.csproj" --launch-profile http
+dotnet run --project ".\API\DVLD.Api\DVLD.Api.csproj" --launch-profile https
 ```
 
-- **HTTP profile:** `http://localhost:5260` (see [`API/DVLD.Api/Properties/launchSettings.json`](../../API/DVLD.Api/Properties/launchSettings.json)).
-- **HTTPS profile:** `https://localhost:7125;http://localhost:5260` (`--launch-profile https`).
+- **HTTPS profile (Recommended Quick Start):** `https://localhost:7125;http://localhost:5260` (`--launch-profile https` in [`API/DVLD.Api/Properties/launchSettings.json`](../../API/DVLD.Api/Properties/launchSettings.json)), matching the default Vite dev proxy target (`https://localhost:7125`).
+- **Local HTTPS Dev Certificate:** If HTTPS trust is not yet initialized on your workstation, run `dotnet dev-certs https --trust` once before launching.
+- **HTTP-Only Alternative (`http://localhost:5260`):** `--launch-profile http` binds only `http://localhost:5260`. If you choose the HTTP profile, set `VITE_API_BASE_URL=http://localhost:5260/api` before starting `ClientApp`; otherwise `/api` proxy calls will fail trying to reach `https://localhost:7125`.
 - **Swagger / OpenAPI:** Enabled automatically at `/swagger` when `ASPNETCORE_ENVIRONMENT=Development`.
 
 ---
 
 ## 4. Running the Frontend (`ClientApp`)
 
-With `DVLD.Api` running at `http://localhost:5260` (matching the `"ReactApp"` CORS policy allowing `http://localhost:5173` with credentials):
+Start `DVLD.Api` first using `--launch-profile https`, then launch the Vite dev server (`http://localhost:5173`, matching the `"ReactApp"` CORS origin in `API/DVLD.Api/Program.cs`):
 
 ```powershell
 cd ClientApp
@@ -76,12 +77,16 @@ npm install
 npm run dev
 ```
 
+- **Vite `/api` Proxy & `VITE_API_BASE_URL`:** [`ClientApp/src/services/apiClient.ts`](../../ClientApp/src/services/apiClient.ts) defaults `API_BASE_URL` to `'/api'`. In local development, [`ClientApp/vite.config.ts`](../../ClientApp/vite.config.ts) proxies `/api` to `https://localhost:7125` with `changeOrigin: true`. Override the target in other environments by setting `VITE_API_BASE_URL`.
+- > [!WARNING]
+  > **Local Dev Proxy Only (`secure: false` & Cookie Header Stripping):** [`ClientApp/vite.config.ts`](../../ClientApp/vite.config.ts) sets `secure: false` and strips `; Secure` from proxied `Set-Cookie` responses strictly so the `HttpOnly` refresh cookie (`dvld_rt`) functions over `http://localhost:5173`. This is **never** acceptable in Staging or Production—always terminate valid TLS certificates and retain `Secure` cookies in deployed environments.
+
 Additional frontend scripts in [`ClientApp/package.json`](../../ClientApp/package.json) (on Windows PowerShell, use `npm.cmd` if script execution policy blocks `npm.ps1`):
 - `npm run build` — Runs `tsc -b && vite build` into `ClientApp/dist/`.
 - `npm run lint` — Runs ESLint across TypeScript/React source files.
 - `npm run preview` — Serves the production build locally.
-- `npm run test` — Runs Vitest unit/component tests (`ClientApp/tests/unit/`).
-- `npm run test:e2e` — Runs Playwright E2E tests (`ClientApp/tests/e2e/`).
+- `npm run test` — Runs Vitest unit/component tests (**9** test files in `ClientApp/tests/unit/`; not currently invoked in `azure-pipelines.yml`).
+- `npm run test:e2e` — Runs Playwright E2E tests (**1** spec `ClientApp/tests/e2e/login.spec.ts` + 16 screenshots under `ClientApp/tests/screenshots/`; not currently invoked in `azure-pipelines.yml`).
 
 See [`ClientApp/README.md`](../../ClientApp/README.md) and [`ClientApp/AGENTS.md`](../../ClientApp/AGENTS.md) for frontend-specific guidelines.
 

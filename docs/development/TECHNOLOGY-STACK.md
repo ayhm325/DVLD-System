@@ -2,18 +2,24 @@
 
 > **Authority Level:** Authoritative Technical Inventory  
 > **Parent Document:** [`AGENTS.md`](../../AGENTS.md)  
-> **Repository Root:** `D:\DVLD-System`  
-> **Last Reviewed:** 2026-11-18 (Local Manifest Inspection at `HEAD` `dead101`)  
+> **Repository Root:** `D:\DVLD-System`
+>
+> **Last Reviewed:** 2026-11-18 (Local Manifest Inspection at `HEAD` `e9e843e974af86a86003bcc364f0e7686c3faa87`)
 
 ---
 
 ## 1. Overview and Principles
 
-This document inventories the runtime environments, frameworks, libraries, build tools, and CI/CD configurations verified directly from local manifests in `D:\DVLD-System` (`global.json`, `*.csproj`, `ClientApp/package.json`, `ClientApp/tsconfig.app.json`, and `azure-pipelines.yml`). AI agents and engineers must **not** upgrade, downgrade, or add packages without explicit written approval and an approved Architecture Decision Record.
+This document is the **sole authoritative inventory** for runtime environments, SDKs, libraries, NuGet/npm manifests, and CI/CD toolchains verified directly from local files in `D:\DVLD-System` (`global.json`, `*.csproj`, `ClientApp/package.json`, `ClientApp/tsconfig.app.json`, and `azure-pipelines.yml`). AI agents and engineers must **not** upgrade, downgrade, or add packages without explicit written approval and an approved Architecture Decision Record.
+
+> [!NOTE]
+> **Evidence & Canonical Status Vocabulary:** Throughout active DVLD documentation, declared manifests (`*.csproj`, `package.json`, `azure-pipelines.yml`) establish configuration presence only—never runtime verification. Active docs classify features using nine canonical states: `IMPLEMENTED`, `IMPLEMENTED — RUNTIME UNVERIFIED`, `PARTIALLY IMPLEMENTED`, `CONFIGURED — NOT EXECUTED`, `PLANNED`, `PROPOSED`, `NOT AUTHORIZED`, `NOT IMPLEMENTED`, and `NEEDS VERIFICATION`.
 
 > [!WARNING]
-> **Runtime Support Lifecycle (.NET 8 End of Support):**  
-> This repository currently targets `net8.0` and pins SDK `8.0.427`. Microsoft ended official support for **.NET 8** and **EF Core 8** on **2026-11-10** ([Microsoft .NET Support Policy](https://dotnet.microsoft.com/en-us/platform/support/policy)). Upgrading to a supported LTS line (currently `.NET 10 LTS`, supported through `2028-11-14`, with `EF Core 10`) is an urgent planned workstream, **not** an implemented state.
+> **Runtime Support Lifecycle (.NET 8 & Node.js 20 End of Support):**
+>
+> - **.NET / EF Core:** This repository currently targets `net8.0` and pins SDK `8.0.427`. Microsoft ended official support for **.NET 8** and **EF Core 8** on **2026-11-10** ([Microsoft .NET Support Policy](https://dotnet.microsoft.com/en-us/platform/support/policy)). Upgrading to a supported LTS line (currently `.NET 10 LTS`, supported through `2028-11-14`, with `EF Core 10`) is an urgent planned workstream (`PLANNED` / `NOT AUTHORIZED`), **not** an implemented state.
+> - **Node.js:** `azure-pipelines.yml` pins `nodeVersionSpec: '22.x'` (Node.js 22 *Maintenance LTS*, EOL `2027-04-30`). Node.js 20 reached End-of-Life (`2026-04-30`) and is **unsupported**. Local development should match CI (`22.x` LTS) or use an Active LTS release (`24.x` / `26.x`).
 
 ---
 
@@ -48,11 +54,11 @@ This document inventories the runtime environments, frameworks, libraries, build
 The web frontend resides in `ClientApp/` and is built independently using Node.js and `npm` (`ClientApp/package.json`, `ClientApp/package-lock.json`).
 
 ### 3.1 Core Runtime, Language & Tooling
-- **Package Manager:** `npm` (`package-lock.json` present for deterministic CI `npm ci`).
-- **Node.js Version:** Node.js 20+ recommended locally; `22.x` LTS configured in `azure-pipelines.yml`.
+- **Package Manager:** `npm` (`ClientApp/package-lock.json` present for deterministic CI `npm ci`).
+- **Node.js Version:** `22.x` LTS configured in [`azure-pipelines.yml`](../../azure-pipelines.yml) (`Maintenance LTS` until `2027-04-30`). Use Node.js `22.x` LTS locally to match CI (or an Active LTS release `24.x` / `26.x`); Node.js `20.x` reached EOL on `2026-04-30` and is no longer recommended.
 - **UI Library:** `react` `^19.3.1`, `react-dom` `^19.3.1`.
-- **Language / Compiler:** `typescript` `~6.0.3`. In `ClientApp/tsconfig.app.json`, target is `es2023` (`lib: ["ES2023", "DOM"]`), `moduleResolution: "bundler"`, and lint/safety flags `noUnusedLocals`, `noUnusedParameters`, `noFallthroughCasesInSwitch`, `verbatimModuleSyntax`, and `erasableSyntaxOnly` are `true`; however, `"strict": true` is **not** explicitly declared.
-- **Bundler & Dev Server:** `vite` `^8.3.4` (`@vitejs/plugin-react` `^6.1.2`).
+- **Language / Compiler:** `typescript` `~6.0.3`. In [`ClientApp/tsconfig.app.json`](../../ClientApp/tsconfig.app.json), target is `es2023` (`lib: ["ES2023", "DOM"]`), `moduleResolution: "bundler"`, and safety flags `noUnusedLocals`, `noUnusedParameters`, `noFallthroughCasesInSwitch`, `verbatimModuleSyntax`, and `erasableSyntaxOnly` are `true`; however, `"strict": true` is **not** explicitly declared.
+- **Bundler & Dev Server:** `vite` `^8.3.4` (`@vitejs/plugin-react` `^6.1.2`). In [`ClientApp/vite.config.ts`](../../ClientApp/vite.config.ts), the local dev server listens on `0.0.0.0:5173` (`strictPort: true`) and proxies `/api` to `https://localhost:7125` (`secure: false` and `; Secure` cookie attribute stripping are local-dev-only conveniences, never suitable for Production).
 - **Styling Engine:** `tailwindcss` `^4.3.3` with `@tailwindcss/vite` `^4.3.3`.
 
 ### 3.2 Key Frontend Runtime & Dev Dependencies (`ClientApp/package.json`)
@@ -75,6 +81,8 @@ The web frontend resides in `ClientApp/` and is built independently using Node.j
 
 ### 4.1 Backend Test Projects (`Test/`)
 
+*(Static inventory inspected at `e9e843e`: `Application.UnitTests` has 41 C# files with 842 `[Fact]` and 51 `[Theory]` attributes [141 `[InlineData]` rows]; `Infrastructure.IntegrationTests` has 41 C# files with 652 `[Fact]` and 38 `[Theory]` attributes [87 `[InlineData]` rows]; `API.IntegrationTests` has 58 C# files with 466 `[Fact]` and 56 `[Theory]` attributes [161 `[InlineData]` rows]; `Test/Shared/` has 1 helper file. Attribute counts reflect static source declarations, not current-pass test execution.)*
+
 | Package | `Application.UnitTests` | `Infrastructure.IntegrationTests` | `API.IntegrationTests` | Role |
 |---|---:|---:|---:|---|
 | **xunit** | `2.5.3` | `2.5.3` | `2.9.2` | Primary unit/integration test framework |
@@ -86,19 +94,24 @@ The web frontend resides in `ClientApp/` and is built independently using Node.j
 | **Microsoft.EntityFrameworkCore.SqlServer** | — | `8.0.0` | (via `Infrastructure`) | Ephemeral SQL Server test execution |
 
 ### 4.2 Frontend Test Suites (`ClientApp/tests/`)
-- **Unit Tests:** `vitest` (`npm run test`) configured via `ClientApp/vitest.config.ts` with 7 test files under `ClientApp/tests/unit/`.
-- **E2E Tests:** `@playwright/test` (`npm run test:e2e`) configured via `ClientApp/playwright.config.ts` with 1 test file under `ClientApp/tests/e2e/login.spec.ts`.
+- **Unit & Component Tests:** `vitest` `^5.1.0`, `@testing-library/react` `^16.3.3`, `@testing-library/jest-dom` `^7.0.1`, `@testing-library/user-event` `^14.6.8`, and `jsdom` `^31.0.0` configured in [`ClientApp/vitest.config.ts`](../../ClientApp/vitest.config.ts) (`setupFiles: ['./tests/setup.ts']`) with **9 test files** under `ClientApp/tests/unit/`.
+- **End-to-End (E2E) Tests:** `@playwright/test` `^1.65.0` and `@axe-core/playwright` `^4.14.0` configured in [`ClientApp/playwright.config.ts`](../../ClientApp/playwright.config.ts) with **1 spec file** (`ClientApp/tests/e2e/login.spec.ts`) and 16 visual snapshot PNGs under `ClientApp/tests/screenshots/`.
+
+| Test Tier | Package Declared | Config Present | Discovered Files (`e9e843e`) | Executed in Current Audit | Runtime Pass Proof | Included in `azure-pipelines.yml` |
+|---|:---:|:---:|---|---|---|:---:|
+| **Vitest Unit/Component (`npm run test`)** | `IMPLEMENTED` | `IMPLEMENTED` | **9** `.test.ts(x)` files (+ `tests/setup.ts`) | `Not Executed` | `NEEDS VERIFICATION` | **No** (`CONFIGURED — NOT EXECUTED` in CI) |
+| **Playwright E2E (`npm run test:e2e`)** | `IMPLEMENTED` | `IMPLEMENTED` | **1** `login.spec.ts` (+ 16 screenshots) | `Not Executed` | `NEEDS VERIFICATION` | **No** (`NOT IMPLEMENTED` in CI) |
 
 ---
 
 ## 5. Continuous Integration & Pipeline Configuration (`azure-pipelines.yml`)
 
-- **Platform & Image:** Azure Pipelines running on `windows-latest`.
+- **Platform & Image:** Azure Pipelines running on `windows-latest` (`CONFIGURED — NOT EXECUTED` locally during documentation audit; pipeline runtime status requires hosted CI run proof).
 - **Stage 1 — `Frontend_CI` (`timeoutInMinutes: 15`):**
-  - Installs Node.js `22.x`, restores npm cache, runs `npm ci`, `npm run lint`, `npx --no-install tsc -b --pretty false`, and `npm run build`, then publishes `clientapp-dist`.
-  - **Gap:** Does not currently invoke `npm run test` (Vitest) or `npm run test:e2e` (Playwright).
+  - Installs Node.js `22.x`, restores npm cache, runs `npm ci --no-fund`, `npm run lint`, `npx --no-install tsc -b --pretty false`, and `npm run build`, then publishes `clientapp-dist`.
+  - **CI Verification Gap:** Does **not** currently invoke `npm run test` (Vitest) or `npm run test:e2e` (Playwright).
 - **Stage 2 — `Backend_CI` (`timeoutInMinutes: 60`):**
-  - Note: `timeoutInMinutes` was increased from `45` to `60` in commit `dead101` (`azure-pipelines.yml:281`). This is a static pipeline configuration change, not runtime proof that a subsequent pipeline run succeeded.
+  - Note: `timeoutInMinutes` is configured at `60` in [`azure-pipelines.yml`](../../azure-pipelines.yml) alongside a run-specific LocalDB instance `DVLD_CI_$(Build.BuildId)_$(System.JobAttempt)`. This is static pipeline configuration (`CONFIGURED — NOT EXECUTED` in current pass), not runtime proof that a subsequent Azure DevOps run succeeded.
   - Installs .NET 8 SDK from `global.json`, logs `dotnet --info`, restores and builds `DVLD.sln` (`Release`), runs `Application.UnitTests`, initializes an isolated run-specific LocalDB instance (`eng/scripts/Initialize-TestSqlEngine.ps1`), validates `SqlExpectedInstance` and `Jwt__SecretKey`, executes `API.IntegrationTests` and `Infrastructure.IntegrationTests`, runs ownership-verified cleanup (`eng/scripts/Cleanup-TestSqlEngine.ps1` with `condition: always()`), stages TRX/Cobertura reports (`eng/scripts/Stage-BackendTestReports.ps1`), and publishes `dvld-api-release`.
 
 ---

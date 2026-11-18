@@ -2,9 +2,11 @@
 
 > **Authority Level:** Sole Authoritative Engineering Prioritization, Backlog & Execution Roadmap  
 > **Parent Document:** [`AGENTS.md`](./AGENTS.md)  
-> **Repository Root:** `D:\DVLD-System`  
-> **Baseline Commit:** `9b6d22f8728463f7b80c1341582016e1dda1972f`  
-> **Governance Status:** CONSOLIDATED & ENFORCED (Phase 1)  
+> **Repository Root:** `D:\DVLD-System`
+>
+> **Baseline Commit:** `e9e843e974af86a86003bcc364f0e7686c3faa87` (Reconciled with Active Source on 2026-11-18)
+>
+> **Governance Status:** CONSOLIDATED & ENFORCED (Reconciled Baseline + Production Readiness Plan)
 
 ---
 
@@ -80,17 +82,14 @@ graph TD
 
 #### [INT-01] Direct Application Completion Endpoint Removal
 - **Finding ID:** `INT-01`
-- **Evidence Classification:** `CONFIRMED`
+- **Evidence Classification:** `CONFIRMED — REMEDIATED & VERIFIED IN CODE` (`IMPLEMENTED — RUNTIME UNVERIFIED` in current doc-only audit)
 - **Priority:** `P0 (Critical)`
-- **Affected Components:** `API/DVLD.Api/Controllers/ApplicationsController.cs` (lines 85–90), `Application/Services/ApplicationService.cs` (`CompleteApplicationAsync`).
-- **Description:** `POST /api/applications/{id}/complete` allows authenticated staff to update an application's status directly to `Completed` (`EnApplicationStatus.Completed`), bypassing fee payment, test passage, and license issuance workflows. This corrupts applicant records and locks them out of ever receiving a license.
-- **Proposed Technical Remediation:** Delete the `CompleteApplicationAsync` endpoint from `ApplicationsController` and remove the underlying method from `IApplicationService` and `ApplicationService`.
-- **Governing Architectural Decisions:** `ADR-P03` (Permanent Endpoint Deletion) cross-referenced to `DEC-APP-01` (Option 1: Immediate route deletion selected by Project Owner).
-- **Associated Security Package:** `SEC-PKG-01` (CompleteApplication Route Deletion & Telemetry).
-- **Dependencies & Mandatory Approvals:** **Explicit Human Engineering Approval Required.** Removing or changing a public API endpoint represents a breaking contract change. Explicitly authorized by Project Owner selecting `DEC-APP-01` Option 1.
-- **Verification Requirements:** Execute API integration tests verifying endpoint returns HTTP 404 Not Found.
-- **Current Status:** `Verified`
-- **Implementation Authorization:** **AUTHORIZED (Phase 12.2 Scope).**
+- **Affected Components:** `API/DVLD.Api/Controllers/ApplicationsController.cs`, `Application/Services/ApplicationService.cs` (`CompleteApplicationStateAsync`), `Test/API.IntegrationTests/Controllers/ApplicationsControllerTests.cs`.
+- **Description:** Historically, `POST /api/applications/{id}/complete` allowed authenticated staff to update an application's status directly to `Completed`, bypassing fee payment and test invariants.
+- **Technical Remediation Implemented:** Following `DEC-APP-01` Option 1 (`ADR-P03`), the `Complete` endpoint was permanently deleted from `ApplicationsController.cs`, and `ApplicationService.CompleteApplicationStateAsync` executes only inside an outer `UnitOfWork` workflow transaction.
+- **Verification Requirements:** `ApplicationsControllerTests.PostComplete_WhenCalled_ReturnsNotFoundBecauseRouteIsRemoved` asserts HTTP `404 Not Found` (`not executed` during current doc-only pass).
+- **Current Status:** `IMPLEMENTED` *(historically verified; not re-executed in current pass)*.
+- **Implementation Authorization:** **COMPLETED (Phase 12.2 / DEC-APP-01 Option 1).**
 
 ---
 
@@ -98,42 +97,36 @@ graph TD
 
 #### [PERF-01] Sequential N+1 in LicenseQueryService
 - **Finding ID:** `PERF-01`
-- **Evidence Classification:** `CONFIRMED`
-- **Priority:** `P1 (Provisional Engineering Priority)`
-- **Affected Components:** `Application/Services/LicenseQueryService.cs` (lines 237–252).
-- **Description:** For paged license listings, the service loops through each item sequentially, executing an individual database query (`GetNewerLicenseForDriverAndClassAsync`) per row. On a page of 50 items, this generates 51 database round-trips.
-- **Proposed Technical Remediation:** Replace sequential per-row queries with a single set-based SQL query utilizing `ROW_NUMBER() OVER (PARTITION BY DriverID, LicenseClass ORDER BY IssueDate DESC)` or a compiled EF Core LINQ join.
-- **Associated Security Package:** `SEC-PKG-03` establishes phase acceptance criteria for clamping list pagination query bounds ($PageSize \le 100$).
-- **Dependencies & Approvals:** Review of LINQ projection query plan on test database.
-- **Verification Requirements:** Integration tests verifying identical output projection with database query count asserting exactly 1 round-trip.
-- **Current Status:** `Confirmed / Planned`
-- **Implementation Authorization:** **NOT AUTHORIZED (Phase 12.2 Scope).**
+- **Evidence Classification:** `RECONCILED IN CODE — BATCHING IMPLEMENTED` (broader `SEC-PKG-03` unpaged endpoint clamping remains `NOT IMPLEMENTED`)
+- **Priority:** `P1`
+- **Affected Components:** `Application/Services/LicenseQueryService.cs` (`MapToDtosBatchAsync`, `EvaluateRenewalEligibilityAsync`), `Infrastructure/Repositories/LicenseRepository.cs` (`GetNewerLicensesBatchAsync`).
+- **Description:** Historical discovery flagged sequential per-row queries (`GetNewerLicenseForDriverAndClassAsync`) inside paged license listings.
+- **Current Source Reality (`e9e843e`):** `LicenseQueryService.MapToDtosBatchAsync` (lines 194–289) now preloads active detentions via `GetActiveDetainedLicenseIdsAsync` and newer licenses in batch via `GetNewerLicensesBatchAsync` (`IMPLEMENTED` for list projections; single-item `EvaluateRenewalEligibilityAsync` still evaluates a single license). Meanwhile, `SEC-PKG-03` (eliminating unpaged fallbacks across controllers and tightening max page bounds from `100` to `50`) remains **`NOT IMPLEMENTED`** (`NOT AUTHORIZED`).
+- **Verification Requirements:** `API.IntegrationTests` / `Application.UnitTests` verifying single-batch SQL behavior and future `SEC-PKG-03` pagination clamping when authorized.
+- **Current Status:** `PARTIALLY IMPLEMENTED` (list batching `IMPLEMENTED`; broader `SEC-PKG-03` unpaged-endpoint clamping `PLANNED` / `NOT AUTHORIZED`).
+- **Implementation Authorization:** **List batching COMPLETED; `SEC-PKG-03` clamping remains NOT AUTHORIZED.**
 
 #### [PERF-02] Pessimistic Lock on Read-Only License Queries
 - **Finding ID:** `PERF-02`
-- **Evidence Classification:** `CONFIRMED (Locking Behavior); Unmeasured Production Impact`
-- **Priority:** `P1 (Provisional Engineering Priority)`
-- **Affected Components:** `Infrastructure/Repositories/LicenseRepository.cs` (lines 28–41).
-- **Description:** `GetLicenseByIdAsync` hardcodes `WITH (UPDLOCK, HOLDLOCK)` table hints on read-only queries, serializing readers against concurrent updates and other readers.
-- **Proposed Technical Remediation:** Refactor `GetLicenseByIdAsync` to execute shared non-locking reads. Introduce a dedicated `GetForUpdateAsync` method exclusively for state-modifying write workflows per `ADR-P01`.
-- **Governing Architectural Decisions:** `ADR-P01` (Separation of Non-Locking Reads from Update-Locking Queries).
-- **Dependencies & Approvals:** Review of repository contract changes.
-- **Verification Requirements:** Concurrent read performance benchmarks; integration tests verifying readers do not block readers.
-- **Current Status:** `Confirmed / Planned`
-- **Implementation Authorization:** **NOT AUTHORIZED (Phase 12.2 Scope).**
+- **Evidence Classification:** `RECONCILED IN CODE (ADR-P01)` (`IMPLEMENTED — RUNTIME UNVERIFIED` for concurrent benchmarks)
+- **Priority:** `P1`
+- **Affected Components:** `Infrastructure/Repositories/LicenseRepository.cs` (lines 24–53).
+- **Description:** Historically, `LicenseRepository.GetLicenseByIdAsync` hardcoded `WITH (UPDLOCK, HOLDLOCK)` on read-only queries, serializing readers.
+- **Current Source Reality (`e9e843e`):** Per `ADR-P01`, `GetLicenseByIdAsync` (lines 24–33) executes ordinary non-locking `.AsNoTracking().AsSplitQuery()` reads, while `GetForUpdateAsync` (lines 35–53) isolates `WITH (UPDLOCK, HOLDLOCK)` for write workflows. Concurrent load benchmarks remain unexecuted.
+- **Verification Requirements:** Concurrent read integration tests and load measurements.
+- **Current Status:** `IMPLEMENTED — RUNTIME UNVERIFIED` (benchmarks pending).
+- **Implementation Authorization:** **COMPLETED (Phase 12.2 / `ADR-P01`).**
 
 #### [INT-02] User Creation Persistence Boundary Exception Translation
 - **Finding ID:** `INT-02`
-- **Evidence Classification:** `CONFIRMED`
-- **Priority:** `P1 (Provisional Engineering Priority)`
-- **Affected Components:** `Application/Services/UserService.cs`, `Infrastructure/Repositories/UserRepository.cs`.
-- **Description:** When creating a user with a duplicate `UserName` or `PersonID`, unique database indexes cause persistence to fail with an unhandled exception that propagates to `GlobalExceptionHandler` and returns HTTP 500 instead of a client conflict error.
-- **Proposed Technical Remediation:** Preserve strict architectural layering. Do not couple `Application` to `Microsoft.EntityFrameworkCore`. Translate persistence constraint violations (`DbUpdateException`) at the `Infrastructure` repository/UnitOfWork boundary into domain failure results (`Result<UserDto>.Failure("Username or Person is already assigned to a user.")`), mapped by controllers to HTTP 409 Conflict.
-- **Scope Boundary Enforcement:** `INT-02` is strictly an exception-translation task at the database persistence boundary. It does **not** encompass administrator self-demotion or active administrator counting, which are tracked separately under `SEC-PKG-04`.
-- **Dependencies & Approvals:** Architectural review of repository error-translation pattern.
-- **Verification Requirements:** Integration tests asserting `Result.Failure` and HTTP 409 Conflict on duplicate user creation.
-- **Current Status:** `Confirmed / Planned`
-- **Implementation Authorization:** **NOT AUTHORIZED (Phase 12.2 Scope).**
+- **Evidence Classification:** `RECONCILED IN CODE` (`IMPLEMENTED — RUNTIME UNVERIFIED` in current doc-only pass)
+- **Priority:** `P1`
+- **Affected Components:** `Infrastructure/UnitOfWork.cs` (`TranslateAndRethrowIfKnownConstraint`, lines 262–284), `Application/Services/UserService.cs` (lines 319–330), `API/DVLD.Api/Security/GlobalExceptionHandler.cs` (lines 118–137), `Test/Infrastructure.IntegrationTests/UnitOfWorkConstraintTranslationTests.cs`.
+- **Description:** Duplicate `UserName` or `PersonID` races during user creation previously propagated raw `DbUpdateException`s as HTTP 500.
+- **Current Source Reality (`e9e843e`):** `UnitOfWork.TranslateAndRethrowIfKnownConstraint` translates `IX_Users_UserName` and `IX_Users_PersonId` violations into domain exceptions (`DuplicateUsernameException`, `DuplicatePersonUserException`) without coupling `Application` to EF Core; `UserService.AddUserAsync` catches both and returns `Result<int>.FromConflict`, and `GlobalExceptionHandler` maps un-caught constraint exceptions to HTTP 409 Conflict.
+- **Scope Boundary Enforcement:** Separate from `CONCURRENCY-01` / `SEC-PKG-04` (`UserService` still retains hardcoded `id == 2 && "ayhm"` check separately).
+- **Current Status:** `IMPLEMENTED — RUNTIME UNVERIFIED` (not executed in current doc pass; verify `UpdateUserAsync` & sibling constraint coverage under Production Readiness Domain B/C).
+- **Implementation Authorization:** **COMPLETED (Phase 12.2 Scope).**
 
 ---
 
@@ -141,14 +134,14 @@ graph TD
 
 #### [OBS-01] Health and Readiness Endpoints
 - **Finding ID:** `OBS-01`
-- **Evidence Classification:** `CONFIRMED`
+- **Evidence Classification:** `CONFIRMED — NOT IMPLEMENTED`
 - **Priority:** `P2`
-- **Affected Components:** `API/DVLD.Api/Program.cs`.
-- **Description:** DVLD.Api lacks standard `/health/live` and `/health/ready` endpoints for container orchestrators, load balancers, and monitoring systems.
+- **Affected Components:** `API/DVLD.Api/Program.cs` (zero `AddHealthChecks` / `MapHealthChecks` calls exist).
+- **Description:** `DVLD.Api` lacks standard `/health/live` and `/health/ready` endpoints for container orchestrators, load balancers, and monitoring systems.
 - **Proposed Technical Remediation:** Register ASP.NET Core Health Checks middleware with SQL Server connectivity checks.
-- **Dependencies & Approvals:** Review of health probe security (suppressing detailed connection errors from anonymous callers).
+- **Dependencies & Approvals:** Review of health probe security (suppressing detailed connection errors from anonymous callers) and any NuGet approval (`AspNetCore.HealthChecks.SqlServer` if added).
 - **Verification Requirements:** Automated tests checking HTTP 200 on healthy probes and HTTP 503 on degraded connectivity.
-- **Current Status:** `Confirmed / Planned`
+- **Current Status:** `NOT IMPLEMENTED` (`PLANNED`)
 - **Implementation Authorization:** **NOT AUTHORIZED (Phase 12.3 Scope).**
 
 #### [OBS-03] Centralized Structured Application Logging & Correlation IDs
@@ -278,9 +271,9 @@ graph TD
 - **Technical Remediation Implemented:** 15-minute access tokens with an `sst` security-stamp claim validated per request; SHA-256-hashed opaque refresh tokens in a persisted `UserSessions` family model with a 14-day absolute / 7-day idle lifetime; single-winner rotation via a conditional `UPDATE`; 30-second reuse grace with 409 retry, then family revocation on confirmed reuse; logout, logout-all, password-change, role-change and deactivation revocation; HttpOnly `SameSite=Lax` cookie transport with a CSRF header and credential-scoped CORS; React single-flight refresh, one retry per request, proactive renewal, cross-tab logout synchronization and removal of all token persistence.
 - **Verification Requirements:** Auth unit tests (login/refresh/rotation/reuse/expiry/idle/logout/stamp), service-level concurrency test, API contract tests for cookie attributes/CSRF/401-409 behavior, and full database-free regression.
 - **Evidence:** **945** Application unit tests passed (0 failed), **514** database-free API tests passed (0 failed); frontend lint/build exit 0.
-- **Current Status:** **`Verified`** (database-free + SQL persistence/rotation/reuse/revocation + **cross-process rotation/reuse**; lost-response fault injection outstanding).
+- **Current Status:** **`IMPLEMENTED`** *(verified under prior `AUTH-01` & `AUTH-01-CROSS-PROCESS` runs; not re-executed in current doc pass)*.
 - **Implementation Authorization:** **AUTHORIZED & COMPLETED.**
-- **Known Limitation:** Cross-process concurrency is verified with two real API OS processes sharing one isolated SQL database (`AUTH-01-CROSS-PROCESS`: one 200, one 409, family revoked across processes). Lost HTTP-response and process-termination fault injection were not reproduced; grace-window timing is covered by injected-clock unit tests only.
+- **Known Limitations & Open Client Follow-Up:** Cross-process concurrency was previously verified with two real API OS processes sharing one isolated SQL database (`AUTH-01-CROSS-PROCESS`); lost HTTP-response and process-termination fault injection remain unverified, grace-window timing relies on injected-clock unit tests, and in `ClientApp` (`AuthContext.tsx` / `apiClient.ts`) `logoutSession()` runs best-effort without surfacing server revocation failure in the UI (so a failed `/api/Auth/logout` request can leave the `dvld_rt` cookie valid across page reloads). Additionally, `AuthContext.logoutAll` has no dedicated UI button outside automated password-change revocation.
 
 #### [CI-SQL-01] Azure Pipelines SQL Server Test Environment Reliability
 - **Finding ID:** `CI-SQL-01`
@@ -324,15 +317,18 @@ graph TD
 
 #### [SEC-03] Rate Limiting on Password Change
 - **Finding ID:** `SEC-03`
-- **Evidence Classification:** `CONFIRMED`
+- **Evidence Classification:** `PARTIALLY IMPLEMENTED` (reconciled across 4 dimensions)
 - **Priority:** `P3`
-- **Affected Components:** `API/DVLD.Api/Controllers/AuthController.cs` (lines 117–134).
-- **Description:** `/api/auth/change-password` lacks endpoint rate limiting, creating potential brute-force risk on active user sessions.
-- **Proposed Technical Remediation:** Apply `[EnableRateLimiting("PasswordChangeLimit")]` with sliding-window policy.
+- **Affected Components:** `API/DVLD.Api/Controllers/AuthController.cs` (line 230), `API/DVLD.Api/Program.cs` (lines 233–250), `Test/API.IntegrationTests/Controllers/AuthControllerTests.cs`.
+- **4-Dimension Reconciliation:**
+  1. **Original Specification:** Proposed sliding-window `[EnableRateLimiting("PasswordChangeLimit")]` throttling on `POST /api/Auth/change-password`.
+  2. **Current Code (`IMPLEMENTED`):** `[AUTH-01]` added `[EnableRateLimiting("ChangePasswordRateLimit")]` using a `FixedWindowRateLimiter` (5 requests / 1 minute per `RemoteIpAddress`, HTTP 429).
+  3. **Automated Tests (`NOT IMPLEMENTED`):** `AuthControllerTests.cs` verifies HTTP 429 only for `Login` (`Login_WhenRateLimitIsExceeded_ReturnsTooManyRequests`); zero HTTP 429 integration tests exist for `ChangePassword` or `Refresh`.
+  4. **Roadmap Status (Open):** Remains **`PARTIALLY IMPLEMENTED`** / Open pending automated HTTP 429 integration tests and confirmation on fixed-window vs. sliding-window policy (plus `UseForwardedHeaders` `DEC-DEP-01` behind proxies).
 - **Scope Boundary Enforcement:** `SEC-03` is strictly an endpoint rate-limiting task on `change-password`. It does **not** encompass login timing side-channel defenses (`SEC-PKG-08`), password complexity policies (`SEC-PKG-09`), or account lockout counters (`SEC-PKG-11`).
-- **Verification Requirements:** Integration tests asserting HTTP 429 Too Many Requests when exceeding configured rate limits.
-- **Current Status:** `Confirmed / Planned` *(Cross-reference note: `[AUTH-01]` subsequently added `[EnableRateLimiting("ChangePasswordRateLimit")]` — 5 requests/minute per IP — on `AuthController.ChangePassword` in `Program.cs` and `AuthController.cs`; formal verification against the `SEC-03` acceptance criteria remains tracked here.)*
-- **Implementation Authorization:** **NOT AUTHORIZED (Phase 12.5 Scope).**
+- **Verification Requirements:** Integration tests asserting HTTP `429 TooManyRequests` when `POST /api/Auth/change-password` exceeds configured rate limits.
+- **Current Status:** `PARTIALLY IMPLEMENTED` (rate limiter attribute `IMPLEMENTED`; 429 integration test `NOT IMPLEMENTED`).
+- **Implementation Authorization:** **Additional changes/tests remain NOT AUTHORIZED until scheduled (Phase 12.5 Scope).**
 
 #### [ARCH-01] Consolidate Duplicated Contracts DTOs
 - **Finding ID:** `ARCH-01`
@@ -389,7 +385,7 @@ graph TD
 - **Finding ID:** `API-02`
 - **Evidence Classification:** `REJECTED (INFORMATIONAL)`
 - **Governing Architectural Decisions:** `ADR-R03`.
-- **Description:** Reference tables (`ApplicationTypes`, `TestTypes`, `Countries`) contain tiny, static datasets. Paginating them introduces client overhead with zero database performance gain.
+- **Description:** Reference tables (`ApplicationTypes`, `TestTypes`, `Countries`) contain tiny, static datasets. Paginating them introduces client overhead with zero database performance gain. *(Note: `ADR-R03` rejected **pagination** on static lookup endpoints; it did **not** implement `IMemoryCache` server-side caching, which currently has 0 occurrences in `API/`, `Application/`, or `Infrastructure/` and remains an unimplemented `PROPOSED` optimization.)*
 - **Status:** `REJECTED / INACTIVE`.
 
 #### [SEC-02] Citizen Photo Access Ownership
@@ -431,11 +427,11 @@ graph TD
 
 #### [TEST-02] Security, Session & Transactional Audit Integration Test Suite
 - **Finding ID:** `TEST-02`
-- **Evidence Classification:** `PROPOSED TEST STRATEGY (NOT IMPLEMENTED / NOT EXECUTED)`
+- **Evidence Classification:** `PARTIALLY SUPERSEDED` (Session tests implemented under `AUTH-01`; SQL transactional audit suite `NOT IMPLEMENTED`)
 - **Priority:** `P2 (Deferred Modernization)`
-- **Affected Components:** `Test/API.IntegrationTests/Controllers/AuthControllerTests.cs`, `Test/Infrastructure.IntegrationTests/Persistence/AuditLogPersistenceTests.cs`.
+- **Affected Components:** `Test/API.IntegrationTests/Controllers/AuthControllerTests.cs`, `Test/API.IntegrationTests/Auth/CrossProcessRefreshTests.cs`, `Test/Infrastructure.IntegrationTests/Auth/AuthSession*.cs`, `Test/Infrastructure.IntegrationTests/Persistence/AuditLogPersistenceTests.cs` (absent).
 - **Description:** Comprehensive integration test harness validating session rotation, token revocation, and transactional audit commits.
-- **Current Status:** **`DEFERRED / STRICTLY UNAUTHORIZED`**.
+- **Current Status:** `PARTIALLY IMPLEMENTED` (Auth session rotation, cross-process reuse, and revocation tests exist under `AUTH-01` — not re-executed in current doc audit — whereas `AuditLogPersistenceTests.cs` for `AUD-01` remains **`NOT IMPLEMENTED`** / **`DEFERRED / NOT AUTHORIZED`**).
 
 ---
 
@@ -476,11 +472,11 @@ The 17 security packages defined in [`docs/archive/security-sources/SECURITY-MAS
 | **Phase A / A.1** | Deep Repository Discovery & Supplementary Review | **Completed** | Concluded and documented in `docs/archive/audits/`. |
 | **Phase B** | Engineering Governance Suite Setup | **Completed** | Approved and documented across governance markdown suite. |
 | **Phases C / D / E** | Decisions, Detention Domain & Concurrency Investigation | **Completed** | `ADR-O01` approved; `ADR-O02` provisionally selected; concurrency review closed. |
-| **Phase 12.2** | P0 & P1 Critical Integrity & Performance (`INT-01`, `INT-02`, `PERF-01`) | **PROPOSED / NOT AUTHORIZED** | Requires explicit human review and approval of Phase 12.2 scope; telemetry verification for `INT-01` (`DEC-APP-01`). |
-| **Phase 12.3** | P2 Observability, Reliability & Transactional Audit Logging (`OBS-01`, `OBS-03`, `SEC-04`, `AUD-01`, `REST-01`, `API-01`, `INT-03`, `TEST-01`) | **PLANNED / NOT AUTHORIZED** | Requires Phase 12.2 completion; NuGet approval for Serilog/HealthChecks; human DBA approval for `AuditLogs` migration; `DEC-POL-01` regulatory confirmation for `INT-03`; empirical validation of `TEST-01`. |
-| **Phase 12.4** | Frontend Alignment, Test Harness Setup & SoD Verification (`SEC-01` Client Guards, Vitest/RTL Setup) | **PLANNED / NOT AUTHORIZED** | Requires Phase 12.3 baseline; Vitest framework setup in `ClientApp/`; explicit human approval for frontend role guard changes. |
-| **Phase 12.5** | P3 Architecture Cleanup, Password Rate Limiting & CI Hardening (`ARCH-01`, `ARCH-02`, `ARCH-03`, `SEC-03`, `OBS-02`) | **PLANNED / NOT AUTHORIZED** | Scheduled following Phase 12.4 completion. |
-| **Deferred Modernization Track** | Full-Stack Session Management (`SEC-05`, `FE-01`, `TEST-02`, `SEC-PKG-17`, `DEC-SEC05-01/02`) | **DEFERRED / STRICTLY UNAUTHORIZED** | Excluded from initial production milestones; requires formal Project Owner authorization and schema review for `UserSessions` and `RefreshTokens`. |
+| **Phase 12.2** | P0 & P1 Critical Integrity & Performance (`INT-01`, `INT-02`, `PERF-01`, `PERF-02`) + `SEC-PKG-03` Pagination Clamping | **CORE P0/P1 IMPLEMENTED; `SEC-PKG-03` NOT AUTHORIZED** | `INT-01`, `INT-02`, `PERF-02`, and `PERF-01` list batching are implemented in source (`RUNTIME UNVERIFIED` in current pass); removing unpaged endpoint fallbacks (`SEC-PKG-03`) remains **NOT AUTHORIZED**. |
+| **Phase 12.3** | P2 Observability, Reliability & Transactional Audit Logging (`OBS-01`, `OBS-03`, `SEC-04`, `AUD-01`, `INT-03`, `TEST-01`) | **PLANNED / NOT AUTHORIZED** | `REST-01`, `TEST-03`, and `API-01` were completed under dedicated authorizations; `OBS-01`, `OBS-03`, `SEC-04`, `AUD-01`, `INT-03`, and `TEST-01` remain unimplemented (`NOT AUTHORIZED` — gated on NuGet approval, DBA Schema Gate 5, and `DEC-POL-01` Gate 3). |
+| **Phase 12.4** | Frontend Alignment, Test Harness Setup & SoD Verification (`SEC-01` Client Guards, Vitest/Playwright CI) | **PARTIALLY CONFIGURED / NOT AUTHORIZED** | Vitest (`9` unit files) and Playwright (`1` E2E spec) are now configured locally in `ClientApp/tests/`, though unexecuted in CI; aligning `Person License History` / `SEC-01` guards remains **NOT AUTHORIZED**. |
+| **Phase 12.5** | P3 Architecture Cleanup, Password Rate Limiting & CI Hardening (`ARCH-01`, `ARCH-02`, `ARCH-03`, `SEC-03`, `OBS-02`) | **PLANNED / NOT AUTHORIZED** | `SEC-03` limiter exists (`ChangePasswordRateLimit`), but 429 test verification (`SEC-03`) and `ARCH-*`/`OBS-02` items remain **NOT AUTHORIZED**. |
+| **Deferred Modernization Track** | Session Lifecycle & Audit Tests (`SEC-05`, `FE-01`, `TEST-02`, `SEC-PKG-17`, `DEC-SEC05-01/02`) | **CORE SESSION IMPLEMENTED VIA `AUTH-01`; REMAINDER UNAUTHORIZED** | `UserSessions`, cookie transport, and single-flight React refresh were delivered via `AUTH-01`; `logoutSession()` UI error feedback, `AuditLogPersistenceTests` (`AUD-01`), and `DEC-SEC05-01/02` revisions remain unimplemented / **NOT AUTHORIZED**. |
 
 > [!NOTE]
 > **Targeted authorization recorded (2026-11-09):** `REST-01` (RFC 7807 ProblemDetails standardization) and its prerequisite `TEST-03` (test-host database isolation and removal of the startup expiration sweep) were explicitly authorized as a dedicated engineering task and are **Verified**. All other Phase 12.3 items and every other phase remain unauthorized exactly as stated above.
@@ -514,14 +510,115 @@ The following findings were identified during the REST-01 review but are **expli
 
 | Candidate ID | Finding | Severity | Prerequisites / Dependencies | Suggested Scope |
 |:---|:---|:---:|:---|:---|
-| `CAND-01` | JWT role/password staleness: role is embedded at issue time for 240 minutes; password changes do not invalidate existing tokens; no `jti`/security stamp. | **P0 (Security)** | ADR for token revocation strategy; possible `Users` security-stamp column (Gate 5 schema review). | `SEC-05` / `SEC-PKG-10` |
-| `CAND-02` | Last-administrator invariant uses check-then-act without a transaction or lock; concurrent demotions can leave zero active administrators. | **P0 (Availability/Security)** | Transactional fix inside `UserService`; no schema change. | `SEC-PKG-04` |
-| `CAND-03` | `GetUserForUpdateAsync`, `GetPersonForUpdateAsync`, and `ApplicationRepository.GetApplicationForUpdateAsync` perform plain reads despite their names; read-modify-write paths have lost-update exposure. | **P1 (Integrity)** | Introduce real `UPDLOCK` reads inside transactions or rename the methods and add optimistic concurrency. | Repository concurrency hardening |
+| `CAND-01` | Reconciled by `AUTH-01` (`ADR-006`): 15-min JWTs, `sst` security stamp, `sid`, `jti`, and `OnTokenValidated` DB validation (`IsPrincipalCurrentAsync`) are implemented; client `logoutSession()` UI error feedback remains an open follow-up. | **RECONCILED (`AUTH-01`)** | Verified in `JwtTokenService.cs`, `Program.cs`, and `AuthService.cs`. | `AUTH-01` / `SEC-PKG-10` |
+| `CAND-02` | Reconciled by `CONCURRENCY-01` (`ADR-007`): Last-administrator mutations serialize via `sp_getapplock('DVLD_AdminMutation')`; hardcoded `id == 2 && "ayhm"` check in `UserService.cs:381-402` still remains to be removed under `SEC-PKG-04`. | **PARTIALLY RECONCILED (`CONCURRENCY-01`)** | SQL `sp_getapplock` verified in `LastAdministratorConcurrencyTests.cs`; hardcoded check cleanup open. | `CONCURRENCY-01` / `SEC-PKG-04` |
+| `CAND-03` | `GetUserForUpdateAsync`, `GetPersonForUpdateAsync`, and `ApplicationRepository.GetApplicationForUpdateAsync` perform plain reads despite their names; read-modify-write paths have lost-update exposure. | **P1 (Integrity)** | Introduce real `UPDLOCK` reads inside transactions or rename the methods and add optimistic concurrency (`Person.RowVersion` added; `UserRepository`/`ApplicationRepository` `UPDLOCK` patterns remain mixed). | Repository concurrency hardening |
 | `CAND-04` | `Result.Failure` is used for persistence anomalies that also occur on legitimate no-op updates; zero-row updates surface as HTTP 500. | **P2 (API Semantics)** | Requires business sign-off on no-op update semantics. | Application service cleanup |
 | `CAND-05` | BCrypt hashing and SkiaSharp image processing are implemented inside the `Application` layer instead of behind infrastructure ports. | **P3 (Architecture)** | Move implementations to `Infrastructure`; introduce `IPasswordHasher`. | `ARCH-01` follow-up |
 | `CAND-06` | Resolved: Created root solution `DVLD.sln` containing all backend projects and updated `azure-pipelines.yml` and scripts. | **RESOLVED** | Root `DVLD.sln` created, `azure-pipelines.yml` updated. | CI/CD & Solution Decoupling |
-| `CAND-07` | No central package management; EF Core, Microsoft.Extensions.*, xunit, and Test SDK versions drift across projects (including 10.x Microsoft.Extensions packages on `net8.0`). | **P2 (Supply Chain)** | `Directory.Packages.props` and framework alignment; NuGet approval. | Package governance |
-| `CAND-08` | `DVLDDbContextFactory` hardcodes `Database=DVLDf`, so design-time migration commands target the protected database. | **P1 (Data Safety)** | Requires human DBA approval and migration tooling review. | Migration safety |
-| `CAND-09` | Unpaged list endpoints (`PeopleController.GetAll` fallback, `ApplicationService.GetAllApplicationsAsync`) bypass the 100-row page clamp. | **P2 (Performance)** | Pagination contract change; client alignment. | `PERF` follow-up |
+| `CAND-07` | No central package management; EF Core (`8.0.18` vs `8.0.0`), `Microsoft.Extensions.*` (`10.0.3` on `net8.0`), `xunit`, and Test SDK versions drift across projects. | **P2 (Supply Chain)** | `Directory.Packages.props` and `.NET 10 LTS` framework alignment; NuGet approval. | Package governance |
+| `CAND-08` | `Infrastructure/DVLDDbContextFactory.cs` hardcodes `Database=DVLDf`, so design-time `dotnet ef` commands target the protected database unless overridden. | **P1 (Data Safety)** | Requires human DBA approval and migration tooling review. | Migration safety |
+| `CAND-09` | Unpaged list endpoints (`PeopleController.GetAll`, `DriversController.GetAll`, `LicensesController.GetAll` fallbacks, plus unpaged `Users`, `DetainedLicenses`, `InternationalLicenses`, `TestAppointments`, `Tests`) bypass the 100-row page clamp. | **P2 (Performance)** | Pagination contract change (`SEC-PKG-03`); client alignment. | `PERF` follow-up |
 | `CAND-10` | The domain model is anemic: entities expose public setters and the appointment state machine is enforceable only in services. | **P3 (Architecture)** | Domain redesign; no schema change required. | `ARCH` follow-up |
-| `CAND-11` | `UnitOfWork` is ~690 lines with a hand-rolled commit-verification tracker and limited focused coverage; `BeginTransactionAsync` overloads bypass the retry execution strategy. | **P3 (Maintainability)** | Remove non-strategy overloads from `IUnitOfWork`; add focused tests. | Transaction hardening |
+| `CAND-11` | `Infrastructure/UnitOfWork.cs` is ~690 lines with a hand-rolled commit-verification tracker; `BeginTransactionAsync` overloads bypass the retry execution strategy. | **P3 (Maintainability)** | Remove non-strategy overloads from `IUnitOfWork`; add focused tests. | Transaction hardening |
+
+---
+
+## 8. Production Readiness Evidence & Exit Criteria
+
+> [!CAUTION]
+> **Non-Authorization & Release Eligibility Governance Banner:**
+> 1. Listing a requirement, gap, target milestone, or exit criterion in Section 8 **does NOT grant implementation authority** (`NOT AUTHORIZED` unless separately approved).
+> 2. **No Invented Quantitative Targets:** Zero fabricated SLA percentages, RPS throughput numbers, millisecond latency limits, or RPO/RTO durations appear here; operational SLAs and backup/recovery budgets remain **`NOT DEFINED`** pending Project Owner, Infrastructure/Ops, and DBA sign-off.
+> 3. **Production Ineligibility:** DVLD is **not eligible for Production release** until every blocker below reaches `IMPLEMENTED` + `Verified` runtime evidence and clears its designated Approval Gate (including Legal Gate 3 `DEC-POL-01`/`DEC-POL-02`, Schema Gate 5 `Users`/`AuditLogs`, Deployment Gate 7 `DEC-DEP-01`/`DEC-DEP-02`, and Risk Acceptance Gate 8 `RSK-11`).
+
+### 8.1 Domain A — Security & Identity Readiness
+
+| ID | Capability / Requirement | Current Repository State | Code / Config Evidence | Runtime / Test Evidence | Gap / Risk | Required Action | Approval / Owner Gate | Target Milestone |
+|---|---|---|---|---|---|---|---|---|
+| **A-01** | Supported LTS runtime & SDK baseline | `NOT IMPLEMENTED` (running on EOL `.NET 8` & `Node 20` docs updated to `22.x`) | `global.json` (`8.0.427`), `*.csproj` (`net8.0`), `azure-pipelines.yml` (`22.x`) | `NEEDS VERIFICATION` (upgrade not started) | `.NET 8` & EF Core 8 ended support `2026-11-10`; unpatched CVE exposure | Controlled upgrade to `.NET 10 LTS` + EF Core 10 + central package alignment (`CAND-07`) | **Project Owner + Engineering Lead** (NuGet & Framework Gate) | Pre-Production Blocker |
+| **A-02** | Plaintext PII minimization / masking (`RSK-11`) | `NOT IMPLEMENTED` | `PersonResponse`, `UserDetailsResponse` expose raw national ID, DOB, address, phone | Static confirmed (`NOT AUTHORIZED` to mask without sign-off) | Regulatory privacy exposure under Jordan PDPL (Law No. 24 of 2023) | Obtain formal Risk Owner assignment & Gate 8 sign-off or approve field masking / redaction design | **Project Owner / DPO (Gate 8)** — Mandatory Release Blocker | Pre-Production Blocker |
+| **A-03** | Frontend vs Backend RBAC alignment (`SEC-01` / `RSK-12`) | `PARTIALLY IMPLEMENTED` (Backend enforced; UI mismatch) | `LicensesController` / `InternationalLicensesController` (`StaffOnly`) vs `permissions.ts` (`'Person License History': ['Staff', 'Admin']`) | `ApplicationsControllerTests` verifies backend policies; UI 403 path reported | `Admin` clicking Person License History in UI triggers HTTP 403 | Align `permissions.ts` & navigation with `ADR-O01` Model B or approve `DEC-RBAC-01` | **Project Owner** (`ADR-O01` / `DEC-RBAC-01`) | Phase 12.4 / Pre-Production |
+| **A-04** | Password-change & Refresh rate limiting verification (`SEC-03`) | `PARTIALLY IMPLEMENTED` | `Program.cs:182-251` (`LoginRateLimit`, `RefreshRateLimit`, `ChangePasswordRateLimit` 5/min fixed window) | `AuthControllerTests.cs` tests 429 only on `Login`; `0` tests on `ChangePassword`/`Refresh` | Regression risk; fixed-window vs originally proposed sliding-window mismatch | Add HTTP 429 integration tests for `ChangePassword` & `Refresh`; confirm window algorithm | **Engineering + Security Lead** | Phase 12.5 |
+| **A-05** | Password policy & breached-password blocklist (`DEC-CRED-01` / `RSK-07`) | `PARTIALLY IMPLEMENTED` | `UserValidator.cs:196-215` checks length `8–100` only | Unit tests cover length only (`ChangePasswordPage.test.tsx`) | Weak or breached passwords accepted without entropy/blocklist check | Approve & implement `DEC-CRED-01` NIST SP 800-63B rules if selected | **Project Owner (Gate 2)** | Post-MVP / Security Hardening |
+| **A-06** | Account-level brute-force lockout (`DEC-CRED-02` / `RSK-05`) | `NOT IMPLEMENTED` | No `AccessFailedCount`/`LockoutEnd`/`LockoutEnabled` columns on `User` | Static confirmed absent | IP-only rate limit can be bypassed across rotating IPs; hard lockout carries DoS hazard | Select lockout model (`DEC-CRED-02`) & approve Schema Gate 5 + Risk Acceptance | **Project Owner + Human DBA (Gate 5)** | Future Security Milestone |
+| **A-07** | Login timing side-channel parity (`SEC-PKG-08` / `RSK-03`) | `NOT IMPLEMENTED` | `AuthService.LoginAsync` (`lines 60-66`) skips `BCrypt.Verify` when `user is null` | Static confirmed absent | Observable response-time delta distinguishes valid vs non-existent usernames | Evaluate approving dummy-hash verification (`TST-AUTH-03`) | **Security Lead / PO (Gate 2)** | Security Hardening |
+| **A-08** | Citizen photo `ImagePath` sanitization & orphan cleanup (`DEC-FILE-01` / `RSK-02`) | `PARTIALLY IMPLEMENTED` | `PhysicalFileStorageService` + SkiaSharp (`ImageProcessingService`) active; `CreatePersonRequest`/`UpdatePersonRequest` still accept `ImagePath` string | `ImageProcessingServiceTests`, `PhysicalFileStorageServiceTests` exist (not run here) | Client-supplied `ImagePath` surface & lack of periodic orphan file scavenger | Approve `DEC-FILE-01` Option 1 (`ImagePath` removal from write DTOs) + background orphan sweep evaluation | **Software Architect + PO (Gate 2)** | Security Hardening |
+| **A-09** | Remove hardcoded primary-admin check (`SEC-PKG-04` / `RSK-09`) | `PARTIALLY IMPLEMENTED` | `CONCURRENCY-01` (`sp_getapplock`) implemented, **but** `UserService.cs:381-402` still checks `id == 2 && "ayhm"` | `LastAdministratorConcurrencyTests` verifies dynamic lock only | Hardcoded username `"ayhm"` / ID `2` assumption breaks across seeded environments | Remove environment-specific ID/username hardcoding under `SEC-PKG-04` | **Project Owner / Engineering Lead** | Phase 12.2/12.5 Cleanup |
+| **A-10** | Administrative MFA / TOTP (`DEC-AUTH-03` / `RSK-08`) | `NOT IMPLEMENTED` (`DEFERRED`) | Single-factor username + password + JWT/refresh session only | Static confirmed absent | Compromised admin credentials grant full account management without second factor | Keep explicitly deferred or approve MFA implementation specification | **Project Owner** | Future Security Phase |
+| **A-11** | Client logout failure visibility & multi-device logout UI (`AUTH-01` / `FE-01`) | `PARTIALLY IMPLEMENTED` | `AuthContext.tsx` & `apiClient.ts` fire `void logoutSession()` without status check; `logoutAll` context helper unused in UI | `apiClientSession.test.ts` & `authContextStaleRefresh.test.tsx` (unexecuted here) | Failed `POST /api/Auth/logout` leaves `dvld_rt` cookie live after browser reload | Surface revocation failures cleanly in UI; decide whether to add "Sign out all devices" action | **Project Owner / Frontend Lead** | Pre-Production Hardening |
+
+### 8.2 Domain B — Civic Licensing Regulatory Gates & Workflow Integrity
+
+| ID | Capability / Requirement | Current Repository State | Code / Config Evidence | Runtime / Test Evidence | Gap / Risk | Required Action | Approval / Owner Gate | Target Milestone |
+|---|---|---|---|---|---|---|---|---|
+| **B-01** | Detained domestic license replacement policy (`DEC-POL-01` / `INT-03` / `ADR-O02`) | `NOT IMPLEMENTED` (Provisional design only) | `LicenseReplacementService.cs` does not inject `IDetainedLicenseRepository` | Confirmed absent in source | Actively detained domestic license can be replaced without release | Obtain written legal ruling (`DEC-POL-01`), then implement & test if Option A confirmed | **Licensing Authority & Legal Counsel (Gate 3)** | Pre-Production Legal Gate |
+| **B-02** | International permit domestic detention rule (`DEC-POL-02` / `SEC-PKG-16`) | `NOT IMPLEMENTED` (Pending legal) | `InternationalService.cs` does not enforce domestic detention ban via `DEC-POL-02` | Confirmed absent in source | Potential statutory violation issuing IDP while domestic license detained | Obtain written legal ruling (`DEC-POL-02`) before any code change | **Licensing Authority & Legal Counsel (Gate 3)** | Pre-Production Legal Gate |
+| **B-03** | Repository lock-naming honesty (`CAND-03`) | `PARTIALLY IMPLEMENTED` | `LicenseRepository.GetForUpdateAsync` uses `WITH (UPDLOCK, HOLDLOCK)`, while `GetUserForUpdateAsync`/`GetPersonForUpdateAsync`/`GetApplicationForUpdateAsync` audit mixed | `Person.RowVersion` added; `UserRepository.cs:147` / `ApplicationRepository.cs:197,224` reviewed partially | Method names implying exclusive update locks may perform plain reads on some paths | Audit and either apply consistent row locks/optimistic concurrency or rename accurately | **Architecture / DB Lead** | Pre-Production Quality |
+| **B-04** | No-op update & transaction strategy cleanup (`CAND-04`, `CAND-11`) | `NOT IMPLEMENTED` | Zero-row `SaveChangesAsync() <= 0` returns `Result.Failure` (500); `IUnitOfWork` retains non-strategy `BeginTransactionAsync` overloads | Unit/UoW tests exist (`UnitOfWorkTests.cs`) | No-op edits risk 500 responses; non-strategy overloads bypass SQL retry safety | Business decision on no-op update semantics; remove unsafe `BeginTransactionAsync` overloads | **Project Owner + Architecture Lead** | Phase 12.5 Cleanup |
+
+### 8.3 Domain C — Hosting, Transport, Proxy & Deployment Hardening
+
+| ID | Capability / Requirement | Current Repository State | Code / Config Evidence | Runtime / Test Evidence | Gap / Risk | Required Action | Approval / Owner Gate | Target Milestone |
+|---|---|---|---|---|---|---|---|---|
+| **C-01** | Production reverse proxy & forwarded headers (`DEC-DEP-01`) | `NOT IMPLEMENTED` | `Program.cs` has zero `UseForwardedHeaders` / `ForwardedHeadersOptions` | Static confirmed absent | Behind Nginx/IIS/ALB, `RemoteIpAddress` resolves to proxy IP—breaking per-client rate limiting | Select hosting topology (`DEC-DEP-01`) and configure `KnownProxies`/`KnownNetworks` | **DevOps / Infrastructure Lead (Gate 7)** | Pre-Production Blocker |
+| **C-02** | SPA host CSP & defensive HTTP security headers (`DEC-DEP-02` / `SEC-PKG-12`) | `NOT IMPLEMENTED` | `Program.cs` serves JSON/CORS only; no `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `HSTS`, or SPA CSP | Static confirmed absent (`TST-OPS-01` unexecuted) | Missing browser defense-in-depth headers on API & SPA host | Configure CSP + headers on SPA web server/proxy & evaluate `UseHsts` / headers in API | **DevOps + Security Lead (Gate 7)** | Pre-Production Blocker |
+| **C-03** | Production HTTPS enforcement & removal of Vite local proxy settings | `CONFIGURED FOR DEV ONLY` | `vite.config.ts` sets `secure: false` & strips `; Secure` from `Set-Cookie`; `Program.cs` CORS allows `http://localhost:5173` only | Static confirmed | Local dev proxy settings break TLS/cookie confidentiality if replicated; CORS origin hardcoded to `:5173` | Parameterize CORS allowed origins for Production; serve SPA & API strictly over HTTPS with valid certs | **DevOps / Infrastructure Lead (Gate 7)** | Pre-Production Blocker |
+| **C-04** | Production secrets, storage path & `appsettings.Production.json` (`SEC-PKG-13`) | `NOT IMPLEMENTED` | Only `appsettings.json` (`Server=.;Database=DVLD;...`, `../DVLD_Storage/People`, no `Jwt:SecretKey`) checked in | Startup `ValidateOnStart` rejects missing `SecretKey` | Accidental fallback to dev defaults or unencrypted config secrets | Provision vault/env injection (`Jwt:SecretKey`, `DVLDConnection`, `Storage:PersonImagesPath`) | **DevOps / Ops Lead (Gate 7)** | Pre-Production Blocker |
+| **C-05** | Design-time EF migration safety (`CAND-08`) | `NOT RESOLVED` | `Infrastructure/DVLDDbContextFactory.cs` hardcodes `Database=DVLDf` | Static confirmed | Running bare `dotnet ef database update` without `-Connection` targets protected `DVLDf` | Require `-Connection` / isolated target in tooling or review `DVLDDbContextFactory` under DBA gate | **Human DBA (Gate 5)** | Pre-Production Operations |
+
+### 8.4 Domain D — Observability, Health Checks & Audit Trail
+
+| ID | Capability / Requirement | Current Repository State | Code / Config Evidence | Runtime / Test Evidence | Gap / Risk | Required Action | Approval / Owner Gate | Target Milestone |
+|---|---|---|---|---|---|---|---|---|
+| **D-01** | Health & Readiness probe endpoints (`OBS-01`) | `NOT IMPLEMENTED` | Zero `AddHealthChecks` / `MapHealthChecks` calls in `API/`, `Application/`, `Infrastructure/` | Static confirmed absent | Load balancers / orchestrators cannot distinguish process liveness from SQL DB readiness | Add `/health/live` & SQL-verified `/health/ready` suppressing internal connection details | **Engineering + Ops Lead** (NuGet check) | Pre-Production Blocker |
+| **D-02** | Structured JSON logging & Correlation IDs (`OBS-03`) | `NOT IMPLEMENTED` | Default ASP.NET console `ILogger<T>` (`appsettings.json`); `traceId` exists in `ApiProblemDetails`, no `X-Correlation-Id` middleware | Static confirmed absent | Plaintext console logs hinder incident search & cross-request tracing | Approve Serilog (`Serilog.AspNetCore`) + `CorrelationIdMiddleware` + PII redaction (`OBS-03`) | **Project Owner + Engineering (NuGet Gate)** | Pre-Production Blocker |
+| **D-03** | Dedicated security event log (`SEC-04` / `SEC-PKG-06`) | `PARTIALLY IMPLEMENTED` (diagnostic `ILogger` warnings only) | `AuthService` logs failed logins via `ILogger`; `ISecurityAuditService` / `DEC-AUD-01`/`02` sink not present | Static confirmed | No tamper-evident security audit stream or sink resilience (`DEC-AUD-02`) | Approve `DEC-AUD-01` storage sink + `DEC-AUD-02` failure policy and implement `ISecurityAuditService` | **Project Owner / Security Lead (Gate 2)** | Pre-Production / Phase 12.3 |
+| **D-04** | Transactional SQL business audit log (`AUD-01` / `SEC-PKG-07`) | `NOT IMPLEMENTED` | No `AuditLog` entity or `AuditLogs` EF migration exists (`Infrastructure/Migrations/`) | Static confirmed absent | Licensing mutations (issue/renew/replace/detain/release) lack immutable before/after audit table | Design `AuditLogs` schema & atomic `UnitOfWork` capture; clear DBA Schema Gate 5 | **Human DBA (Gate 5) + PO** | Phase 12.3 / Compliance |
+| **D-05** | Distributed telemetry / APM (`OpenTelemetry`) | `NOT IMPLEMENTED` | Zero `AddOpenTelemetry` occurrences across solution | Static confirmed absent | No latency histograms or dependency traces for API/SQL diagnostics | Evaluate OpenTelemetry metrics/tracing once hosting topology (`DEC-DEP-01`) is selected | **Architecture + Ops Lead** | Post-Baseline Operations |
+
+### 8.5 Domain E — Performance, Concurrency & Scalability (All 11 Items)
+
+| ID | Capability / Requirement | Current Repository State | Code / Config Evidence | Runtime / Test Evidence | Gap / Risk | Required Action | Approval / Owner Gate | Target Milestone |
+|---|---|---|---|---|---|---|---|---|
+| **E-01** | Mandatory pagination & clamping (`SEC-PKG-03` / `CAND-09` / `RSK-10`) | `PARTIALLY IMPLEMENTED` | `PaginationRequest` clamps `MaxPageSize = 100`; `People`/`Drivers`/`Licenses` fall back to unpaged `GetAll*`; `Users`/`Detained`/`International`/`Appointments`/`Tests` unpaged | Static confirmed (`TST-PAG-01` unimplemented) | Full-table `ToListAsync()` payloads cause unbounded memory/network growth and mass PII fetch (`RSK-20`) | Enforce paged contracts across all list endpoints + align page cap (`50` vs `100`) & client tables | **API Lead + Frontend Lead + PO** | Pre-Production Blocker |
+| **E-02** | In-memory caching for static lookups (`Countries`, `LicenseClasses`, `ApplicationTypes`, `TestTypes`) | `NOT IMPLEMENTED` (`PROPOSED`) | Zero `IMemoryCache` / `AddMemoryCache` occurrences (`ADR-R03` rejected pagination, did not implement cache) | Static confirmed absent | Repeated DB reads for near-static reference catalogs on every dropdown/page view | Evaluate read-through `IMemoryCache` with cache invalidation on Admin `PUT` | **Architecture Lead** | Performance Hardening |
+| **E-03** | License query batching & remaining single-item paths (`PERF-01`) | `PARTIALLY IMPLEMENTED` | `LicenseQueryService.MapToDtosBatchAsync` uses `GetActiveDetainedLicenseIdsAsync` & `GetNewerLicensesBatchAsync`; single-item `EvaluateRenewalEligibilityAsync` still queries individually | Batch integration/unit tests exist (`not executed` in current doc pass) | Unverified query count & execution plan at larger table sizes | Verify single-round-trip SQL counts under `Infrastructure.IntegrationTests` | **Engineering / QA** | Verification Milestone |
+| **E-04** | Multi-instance rate limiter store | `SINGLE-NODE ONLY` | `Program.cs:182-251` uses in-process `FixedWindowRateLimiter` | Static confirmed | Behind an L7 balancer with $N$ instances, effective IP rate limit multiplies by $N$ | Keep single-instance aware or approve distributed store / gateway throttling for scale-out | **Infrastructure + Security Lead** | Horizontal Scale Gate |
+| **E-05** | Shared citizen photo storage (`PhysicalFileStorageService`) | `SINGLE-NODE ONLY` | `PhysicalFileStorageService.cs` writes to local OS directory `_storageRoot` (`Storage:PersonImagesPath` or `LocalAppData/DVLD`) | `PhysicalFileStorageServiceTests` local disk only | Multi-instance API nodes cannot read photos saved on a different host's local disk | Provision shared SMB/NAS or Azure Blob implementation of `IFileStorageService` before multi-node scale-out | **DevOps / Infrastructure Lead** | Horizontal Scale Gate |
+| **E-06** | Multi-instance `BackgroundService` coordination | `SINGLE-NODE ONLY` | `LicenseExpirationBackgroundService` & `NoShowBackgroundService` run polling loops in every API instance | `LicenseExpirationBackgroundServiceTests`, `AppointmentNoShowIntegrationTests` | Multiple API replicas execute redundant concurrent sweeps simultaneously | Add distributed SQL lease/`sp_getapplock` coordination or dedicated singleton worker before multi-node scale-out | **Architecture + DevOps** | Horizontal Scale Gate |
+| **E-07** | Per-request DB hit in `OnTokenValidated` (`IsPrincipalCurrentAsync`) | `IMPLEMENTED (STATEFUL SQL)` | `Program.cs:101-161` invokes `IAuthService.IsPrincipalCurrentAsync` on every authenticated API request | Static & `AUTH-01` tests | Improves instant revocation security, but ties every API request to SQL Server latency/availability | Benchmark DB connection pool under realistic traffic; keep SQL validation unless approved ADR introduces short-TTL revocation cache | **Security + Performance Architect** | Capacity Baseline |
+| **E-08** | EF Core query projections, indexes & split-query tuning | `PARTIALLY IMPLEMENTED` | `AsNoTracking` (92 matches) and `AsSplitQuery` (9 matches) widely used; `EF.CompileQuery` = 0; unique/filtered indexes configured | Some SQL repository tests (`not executed` here) | Missing query-plan verification on large tables (`People`, `Licenses`, `TestAppointments`) | Profile SQL execution plans & missing non-clustered search indexes on synthetic seeded dataset | **DBA + Backend Lead** | Capacity Baseline |
+| **E-09** | Connection pool sizing, retries & locking contention (`UnitOfWork` / `sp_getapplock`) | `IMPLEMENTED — RUNTIME UNVERIFIED UNDER LOAD` | `EnableRetryOnFailure()`, `UnitOfWork.ExecuteInTransactionAsync`, `WITH (UPDLOCK, HOLDLOCK)`, `sp_getapplock`, `Person.RowVersion` | `LastAdministratorConcurrencyTests`, `AppointmentConcurrencyIntegrationTests` exist (`not executed` here) | Lock contention/timeouts under peak concurrent booking or renewal bursts remain unmeasured | Execute concurrent SQL contention tests & review retry timeouts (`Application` & DB) | **DBA + QA** | Capacity Baseline |
+| **E-10** | Load, stress & capacity benchmark baseline | `NOT EXECUTED` | Zero load-testing scripts (`k6`, `JMeter`, `NBomber`) in repository | Zero empirical RPS, p95/p99, or concurrency ceilings measured (`NEEDS VERIFICATION`) | Unknown safe concurrency ceiling for vertical/horizontal sizing | Run repeatable load benchmark against realistic seeded SQL DB and establish empirical baseline | **Performance / Ops Lead** | Pre-Production Gate |
+| **E-11** | Frontend list rendering & Vite bundle optimization | `PARTIALLY IMPLEMENTED` | Route-level `React.lazy` groups implemented in `components/layout/router/`; table search filters loaded arrays client-side for unpaged endpoints | `vite build` configured (`not run` in doc pass) | Unpaged API lists degrade browser responsiveness as table rows grow | Pair server pagination (`E-01`) with server-side filtering across remaining UI pages | **Frontend Lead** | Linked to `E-01` |
+
+### 8.6 Domain F — Frontend Reliability, Type Safety & Accessibility
+
+| ID | Capability / Requirement | Current Repository State | Code / Config Evidence | Runtime / Test Evidence | Gap / Risk | Required Action | Approval / Owner Gate | Target Milestone |
+|---|---|---|---|---|---|---|---|---|
+| **F-01** | TypeScript strict mode (`"strict": true`) | `NOT IMPLEMENTED` | `ClientApp/tsconfig.app.json` enables `noUnusedLocals`, `verbatimModuleSyntax`, `erasableSyntaxOnly`—omits `"strict": true` | `tsc -b` in CI runs non-strict | `strictNullChecks` / implicit `any` gaps can hide runtime null dereferences | Audit & enable `"strict": true` progressively after explicit code authorization | **Frontend Lead** | Phase 12.4+ Hardening |
+| **F-02** | React Error Boundaries & crash recovery (`FE-ERR`) | `NOT IMPLEMENTED` | Zero React `ErrorBoundary` wrappers found around lazy routes in `App.tsx` / `AppRouter.tsx` | Static confirmed | Uncaught render error or lazy-chunk fetch failure crashes entire SPA white-screen | Implement top-level & route-level `ErrorBoundary` with reload recovery (`FE-ERR`) | **Frontend Lead** | Pre-Production UX |
+| **F-03** | Cross-tab session sync & logout revocation UX | `PARTIALLY IMPLEMENTED` | `BroadcastChannel('dvld-auth')` implemented; `logoutSession()` swallows non-OK/network failures without user feedback | Unit specs exist (`apiClientSession.test.ts`, `authContextStaleRefresh.test.tsx` — unexecuted) | Users may believe session ended server-side after offline/500 logout | Inspect `POST /api/Auth/logout` outcome and warn user if server revocation failed (`AUTH-01` follow-up) | **Frontend + Security Lead** | Pre-Production UX |
+| **F-04** | End-to-End & Accessibility test breadth (`@axe-core/playwright`) | `PARTIALLY IMPLEMENTED` | `playwright.config.ts` & `@axe-core/playwright` installed, but only `tests/e2e/login.spec.ts` exists (plus 16 screenshots) | `Not Executed` locally; excluded from CI | Core staff & admin flows (applications, exams, license issue/renew/detain, RBAC 403) lack E2E verification | Expand E2E + accessibility coverage across critical workflows before release | **QA + Frontend Lead** | Pre-Production QA |
+
+### 8.7 Domain G — CI/CD, Testing & Release Supply Chain
+
+| ID | Capability / Requirement | Current Repository State | Code / Config Evidence | Runtime / Test Evidence | Gap / Risk | Required Action | Approval / Owner Gate | Target Milestone |
+|---|---|---|---|---|---|---|---|---|
+| **G-01** | Execute frontend Vitest & Playwright tests in CI (`azure-pipelines.yml`) | `NOT IMPLEMENTED` in CI | `Frontend_CI` runs `npm ci`, `lint`, `tsc -b`, `npm run build` only (`vitest` & `playwright` omitted) | `9` Vitest + `1` Playwright files unverified in CI (`Not Executed`) | Regressions in frontend logic/auth session client pass `Frontend_CI` undetected | Add mandatory `npm run test` (and gated E2E strategy) to `azure-pipelines.yml` | **DevOps + Frontend Lead** | Pre-Production Blocker |
+| **G-02** | Hosted Azure Pipeline execution evidence (`CI-SQL-01` / `Backend_CI`) | `CONFIGURED — NOT EXECUTED` locally | `azure-pipelines.yml` configures `60`m timeout & `Initialize-TestSqlEngine.ps1` / `Cleanup-TestSqlEngine.ps1` | Historical local sample runs noted prior; live Azure Pipeline run proof at `e9e843e` `NEEDS VERIFICATION` | Unconfirmed end-to-end hosted pipeline pass after latest commits | Trigger & archive successful green run of both `Frontend_CI` and `Backend_CI` on Azure DevOps | **DevOps / Engineering Lead** | Release Verification Gate |
+| **G-03** | Full local SQL integration test verification (`API` + `Infrastructure`) | `CONFIGURED — NOT EXECUTED` in current pass | `41` Infra files + `58` API files + `41` Unit files (`e9e843e`) | Current documentation pass performed **zero** test executions (`NEEDS VERIFICATION`) | Functional regressions since last historical run unknown until re-executed | Run full unit + SQL integration suites (isolated DB only, never `DVLDf`) after code freeze | **QA / Engineering Lead (Gate 4)** | Release Verification Gate |
+| **G-04** | Integration DB migration throttling (`TEST-01`) | `NOT IMPLEMENTED` | `SqlServerTestDatabase.cs` has zero `SemaphoreSlim` throttling (unlike `SqlServerApiWebApplicationFactory.cs`) | Historical `1/612` SSL pre-login timeout observed in Phase 12.1 | Transient SSL handshake flakiness under concurrent xUnit fixture startup | Validate multi-run stability and implement/verify `TEST-01` if SSL flakiness recurs | **Engineering Lead** | CI Stability |
+| **G-05** | Automated SCA dependency scanning (`SEC-PKG-14` / `RSK-18`) | `NOT IMPLEMENTED` | Zero `dotnet list package --vulnerable` or `npm audit` steps in `azure-pipelines.yml` | Static confirmed absent | Vulnerable transitive NuGet/npm packages merge silently | Add SCA vulnerability checks & triage policy to CI (`SEC-PKG-14`) | **DevOps + Security Lead** | Pre-Production CI |
+| **G-06** | Fault-injection verification for lost HTTP response / process crash (`AUTH-01`) | `NOT IMPLEMENTED` | `CrossProcessRefreshTests.cs` verifies concurrent race & reuse revocation only | Explicit known limitation in `TESTING-STANDARDS.md` §9 | Client/network interruption right after token rotation DB commit not empirically fault-tested | Design & execute fault-injection test for refresh commit + dropped response behavior | **Security + QA** | Resilience Verification |
+
+### 8.8 Domain H — Backup, Disaster Recovery & Operational Runbooks *(No Invented Numbers)*
+
+| ID | Capability / Requirement | Current Repository State | Code / Config Evidence | Runtime / Test Evidence | Gap / Risk | Required Action | Approval / Owner Gate | Target Milestone |
+|---|---|---|---|---|---|---|---|---|
+| **H-01** | Production SQL Server backup, offsite retention & restore drill (`RPO`/`RTO`) | `NOT IMPLEMENTED` (`RPO`/`RTO` `NOT DEFINED`) | No backup schedule, restore script, or DR runbook exists in repo (`AGENTS.md` forbids agent DB restores) | Zero restore drill evidence | Hardware/DB corruption or accidental data loss cannot be safely recovered within known bounds | Define formal `RPO`/`RTO` targets with stakeholders; implement automated SQL backups & periodic restore drills | **Human DBA + Infrastructure Ops** | Pre-Production Blocker |
+| **H-02** | Citizen photo filesystem backup & orphan reconciliation | `NOT IMPLEMENTED` | Photos live on filesystem (`Storage:PersonImagesPath`); synchronous delete compensation exists on upload failure, no periodic orphan scavenger | Static confirmed | DB backup without synchronized photo storage backup causes broken citizen images on restore | Include photo store in synchronized backup plan & implement audited orphan reconciliation job | **Human DBA + Ops + PO** | Pre-Production Operations |
+| **H-03** | Production EF migration review & rollback runbook | `NOT IMPLEMENTED` | 7 EF Core migrations in `Infrastructure/Migrations/`; `DVLDf` protected (`AGENTS.md` §5 requires `dotnet ef migrations script`) | Static confirmed | Unreviewed schema changes risk downtime or irreversible DDL faults in Production | Author signed idempotent SQL migration script review & rollback checklist per release | **Human DBA (Gate 5)** | Pre-Production Operations |
+| **H-04** | Emergency incident, JWT key rotation & bulk session revocation runbook | `PARTIALLY IMPLEMENTED` (code primitives exist; no runbook) | `UserSessions` supports revocation & `SecurityStamp` invalidates JWTs; `Jwt:SecretKey` single active key only (no kid keyring) | Static confirmed | Rotating compromised `Jwt:SecretKey` currently invalidates all active tokens abruptly with no dual-key grace runbook | Document incident response runbook (`SecretKey` rotation, mass session revocation, rate-limit escalation) | **Security + Ops Lead** | Pre-Production Operations |
+| **H-05** | Formal Production SLA / SLO / Error-Budget definitions | `NOT DEFINED` | Zero SLA/SLO/alerting thresholds defined in repository documentation | `NOT DEFINED` | Missing operational monitoring alert thresholds and uptime/support commitments | Define and ratify operational SLIs/SLOs with Project Owner & IT Operations (no fabricated numbers) | **Project Owner + IT Operations** | Pre-Production Governance |
