@@ -11,7 +11,7 @@
 
 ## 1. Overview and Mission
 
-This repository contains the **Driver & Vehicle Licensing Department (DVLD)** management system. The architecture comprises a .NET 8 Web API backend (`DVLD.Api`), enterprise persistence with SQL Server and Entity Framework Core 8 (`Infrastructure`), business use-case orchestration (`Application`), pure domain models (`Domain`), a shared contract boundary (`DVLD.Contracts`), automated test suites (`Test/`), and a React 19 single-page application (`ClientApp/`).
+This repository contains the **Driver & Vehicle Licensing Department (DVLD)** management system. The architecture comprises a .NET 10 LTS Web API backend (`DVLD.Api`), enterprise persistence with SQL Server and Entity Framework Core 10 (`Infrastructure`), business use-case orchestration (`Application`), pure domain models (`Domain`), a shared contract boundary (`DVLD.Contracts`), automated test suites (`Test/`), and a React 19 single-page application (`ClientApp/`).
 
 This document is the **sole general AI engineering governance and operational workflow document** for the repository (consolidating the former `AI-ENGINEERING-INSTRUCTIONS.md` and operational rules from the continuity charter). Frontend-specific rules live separately in [`ClientApp/AGENTS.md`](./ClientApp/AGENTS.md) without duplicating these repository-wide rules.
 
@@ -50,7 +50,7 @@ graph TD
     subgraph Active Scope
         API["DVLD.Api (ASP.NET Core 8)"]
         APP["Application (Orchestration & Use Cases)"]
-        INFRA["Infrastructure (EF Core 8 & SQL Server)"]
+        INFRA["Infrastructure (EF Core 10 & SQL Server)"]
         DOMAIN["Domain (Entities & Core Rules)"]
         CONTRACTS["DVLD.Contracts (Shared DTOs)"]
         TESTS["Test Projects (Unit & Integration)"]

@@ -7,12 +7,18 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
-  reporter: 'list',
+  outputDir: 'test-results',
+  reporter: process.env.CI
+    ? [
+        ['list'],
+        ['junit', { outputFile: 'test-results/playwright-junit.xml' }],
+        ['html', { open: 'never', outputFolder: 'playwright-report' }],
+      ]
+    : 'list',
   snapshotPathTemplate: '{testDir}/../screenshots/{projectName}/{arg}-{ext}',
   use: {
     baseURL: `http://127.0.0.1:${port}`,
     browserName: 'chromium',
-    channel: process.env.CI ? undefined : 'chrome',
     trace: 'retain-on-failure',
     ...devices['Desktop Chrome'],
   },

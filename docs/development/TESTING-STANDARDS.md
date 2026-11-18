@@ -100,31 +100,31 @@ For historical traceability, the Phase 12.1 discovery execution metrics are pres
 > [!IMPORTANT]
 > **Crucial Evidence Distinction:** Historical Phase 12.1 metrics (`1,967` cataloged backend tests) reflect an earlier snapshot, **NOT** the current repository count or current execution results. Static source counts (`[Fact]`/`[Theory]` attributes or `.test.ts(x)` files) must **never** be presented as executed or passing test runs.
 
-| Test Project | Historical Discovered (Phase 12.1) | Historical Executed | Historical Passed | Historical Failed | Current Static Source Inventory (`e9e843e`) |
+| Test Project | Historical Discovered (Phase 12.1) | Historical Executed | Historical Passed | Historical Failed | Current `.NET 10` / `Node 26` Local Verification |
 |---|---:|---:|---:|---:|---|
-| **`Application.UnitTests`** | 919 | 919 | **919** | 0 | 41 C# files (`842 [Fact]`, `51 [Theory]` / `141 [InlineData]`). *(Not executed in current doc-only audit.)* |
-| **`API.IntegrationTests`** | 436 | 1 | **1** | 0 | 58 C# files (`466 [Fact]`, `56 [Theory]` / `161 [InlineData]`). Historical Phase 12.1 executed 1 smoke test only; later targeted passes ran under `REST-01`/`AUTH-01`, **not executed** in current doc-only pass. |
-| **`Infrastructure.IntegrationTests`** | 612 | 612 | **611** | **1** | 41 C# files (`652 [Fact]`, `38 [Theory]` / `87 [InlineData]`). Phase 12.1 had 1 transient SSL timeout; **not executed** in current doc-only pass. |
-| **`ClientApp/` (Frontend)** | 0 | 0 | **0** | **0** | **9** Vitest unit/component files (`ClientApp/tests/unit/`) + **1** Playwright E2E spec (`ClientApp/tests/e2e/login.spec.ts`) + 16 screenshot baselines. **Not executed** in current doc-only pass and **not invoked in `azure-pipelines.yml`**. |
-| **Phase 12.1 Total** | **1,967** | **1,532** | **1,531** | **1** | See [`ENGINEERING-ROADMAP.md`](../../ENGINEERING-ROADMAP.md) §6.2 & §8 for post-Phase 12.1 execution vs. unexecuted gaps. |
+| **`Application.UnitTests`** | 919 | 919 | **919** | 0 | **983 passed, 0 failed, 0 skipped** (`.NET 10.0.404`, `net10.0`, `11 s`). |
+| **`API.IntegrationTests`** | 436 | 1 | **1** | 0 | **627 passed, 0 failed, 0 skipped** (`.NET 10.0.404`, `net10.0`, `Ayhm\|MSSQLSERVER`, `3 m 6 s`). |
+| **`Infrastructure.IntegrationTests`** | 612 | 612 | **611** | **1** | **739 passed, 0 failed, 0 skipped** unfiltered (`.NET 10.0.404`, `net10.0`, `Ayhm\|MSSQLSERVER`, `4 m 4 s`; `Boundary5` deadlock fixed and verified `3/3` isolated + `14/14` `AuthSessionRefreshSqlConcurrencyTests`). |
+| **`ClientApp/` (Frontend)** | 0 | 0 | **0** | **0** | On `Node v26.13.1`: **Vitest 46/46 passed** (`9/9` files); **Playwright 8/8 passed** in both local and `CI=true` modes (updated locator + `login-current-*.png` baselines). Both are wired into `Frontend_CI` in `azure-pipelines.yml`. |
+| **Phase 12.1 Total** | **1,967** | **1,532** | **1,531** | **1** | See [`ENGINEERING-ROADMAP.md`](../../ENGINEERING-ROADMAP.md) §6.2 & §8 for hosted Azure DevOps & remaining gate status. |
 
 ### 5.1 Frontend Test Inventory & 6-Dimension Verification (`ClientApp/tests/`)
 
 | Tier / File | Packages Installed | Runner Configured | Discovered File Path | Executed in Current Audit | Runtime Pass Proof | Included in `azure-pipelines.yml` |
 |---|:---:|:---:|---|---:|---|:---:|
-| **Vitest Unit (`npm run test`)** | `IMPLEMENTED` (`vitest ^5.1.0`, RTL, `jsdom`) | `IMPLEMENTED` ([`vitest.config.ts`](../../ClientApp/vitest.config.ts)) | [`tests/unit/apiClientSession.test.ts`](../../ClientApp/tests/unit/apiClientSession.test.ts) | `Not Executed` | `NEEDS VERIFICATION` | **No** (`Frontend_CI` runs lint, `tsc -b`, build only) |
-| **Vitest Unit (`npm run test`)** | `IMPLEMENTED` | `IMPLEMENTED` | [`tests/unit/authContextStaleRefresh.test.tsx`](../../ClientApp/tests/unit/authContextStaleRefresh.test.tsx) | `Not Executed` | `NEEDS VERIFICATION` | **No** |
-| **Vitest Unit (`npm run test`)** | `IMPLEMENTED` | `IMPLEMENTED` | [`tests/unit/ChangePasswordPage.test.tsx`](../../ClientApp/tests/unit/ChangePasswordPage.test.tsx) | `Not Executed` | `NEEDS VERIFICATION` | **No** |
-| **Vitest Unit (`npm run test`)** | `IMPLEMENTED` | `IMPLEMENTED` | [`tests/unit/DashboardPage.test.tsx`](../../ClientApp/tests/unit/DashboardPage.test.tsx) | `Not Executed` | `NEEDS VERIFICATION` | **No** |
-| **Vitest Unit (`npm run test`)** | `IMPLEMENTED` | `IMPLEMENTED` | [`tests/unit/designTokens.test.ts`](../../ClientApp/tests/unit/designTokens.test.ts) | `Not Executed` | `NEEDS VERIFICATION` | **No** |
-| **Vitest Unit (`npm run test`)** | `IMPLEMENTED` | `IMPLEMENTED` | [`tests/unit/LicenseDetentionPage.test.tsx`](../../ClientApp/tests/unit/LicenseDetentionPage.test.tsx) | `Not Executed` | `NEEDS VERIFICATION` | **No** |
-| **Vitest Unit (`npm run test`)** | `IMPLEMENTED` | `IMPLEMENTED` | [`tests/unit/LocalApplicationsPage.test.tsx`](../../ClientApp/tests/unit/LocalApplicationsPage.test.tsx) | `Not Executed` | `NEEDS VERIFICATION` | **No** |
-| **Vitest Unit (`npm run test`)** | `IMPLEMENTED` | `IMPLEMENTED` | [`tests/unit/TestAppointmentsBookingFlow.test.tsx`](../../ClientApp/tests/unit/TestAppointmentsBookingFlow.test.tsx) | `Not Executed` | `NEEDS VERIFICATION` | **No** |
-| **Vitest Unit (`npm run test`)** | `IMPLEMENTED` | `IMPLEMENTED` | [`tests/unit/TestAppointmentsNavigation.test.tsx`](../../ClientApp/tests/unit/TestAppointmentsNavigation.test.tsx) | `Not Executed` | `NEEDS VERIFICATION` | **No** |
-| **Playwright E2E (`npm run test:e2e`)** | `IMPLEMENTED` (`@playwright/test`, `@axe-core/playwright`) | `IMPLEMENTED` ([`playwright.config.ts`](../../ClientApp/playwright.config.ts)) | [`tests/e2e/login.spec.ts`](../../ClientApp/tests/e2e/login.spec.ts) (+ 16 PNGs under `tests/screenshots/`) | `Not Executed` | `NEEDS VERIFICATION` | **No** |
+| **Vitest Unit (`npm run test`)** | `IMPLEMENTED` (`vitest ^5.1.0`, RTL, `jsdom`) | `IMPLEMENTED` ([`vitest.config.ts`](../../ClientApp/vitest.config.ts)) | [`tests/unit/apiClientSession.test.ts`](../../ClientApp/tests/unit/apiClientSession.test.ts) | `Passed` (`19` tests on Node `26.13.1`) | `VERIFIED` | **Yes** (`Frontend_CI` + JUnit) |
+| **Vitest Unit (`npm run test`)** | `IMPLEMENTED` | `IMPLEMENTED` | [`tests/unit/authContextStaleRefresh.test.tsx`](../../ClientApp/tests/unit/authContextStaleRefresh.test.tsx) | `Passed` (`1` test on Node `26.13.1`) | `VERIFIED` | **Yes** |
+| **Vitest Unit (`npm run test`)** | `IMPLEMENTED` | `IMPLEMENTED` | [`tests/unit/ChangePasswordPage.test.tsx`](../../ClientApp/tests/unit/ChangePasswordPage.test.tsx) | `Passed` (`4` tests on Node `26.13.1`) | `VERIFIED` | **Yes** |
+| **Vitest Unit (`npm run test`)** | `IMPLEMENTED` | `IMPLEMENTED` | [`tests/unit/DashboardPage.test.tsx`](../../ClientApp/tests/unit/DashboardPage.test.tsx) | `Passed` (`3` tests on Node `26.13.1`) | `VERIFIED` | **Yes** |
+| **Vitest Unit (`npm run test`)** | `IMPLEMENTED` | `IMPLEMENTED` | [`tests/unit/designTokens.test.ts`](../../ClientApp/tests/unit/designTokens.test.ts) | `Passed` (`1` test on Node `26.13.1`) | `VERIFIED` | **Yes** |
+| **Vitest Unit (`npm run test`)** | `IMPLEMENTED` | `IMPLEMENTED` | [`tests/unit/LicenseDetentionPage.test.tsx`](../../ClientApp/tests/unit/LicenseDetentionPage.test.tsx) | `Passed` (`4` tests on Node `26.13.1`) | `VERIFIED` | **Yes** |
+| **Vitest Unit (`npm run test`)** | `IMPLEMENTED` | `IMPLEMENTED` | [`tests/unit/LocalApplicationsPage.test.tsx`](../../ClientApp/tests/unit/LocalApplicationsPage.test.tsx) | `Passed` (`5` tests on Node `26.13.1`) | `VERIFIED` | **Yes** |
+| **Vitest Unit (`npm run test`)** | `IMPLEMENTED` | `IMPLEMENTED` | [`tests/unit/TestAppointmentsBookingFlow.test.tsx`](../../ClientApp/tests/unit/TestAppointmentsBookingFlow.test.tsx) | `Passed` (`3` tests on Node `26.13.1`) | `VERIFIED` | **Yes** |
+| **Vitest Unit (`npm run test`)** | `IMPLEMENTED` | `IMPLEMENTED` | [`tests/unit/TestAppointmentsNavigation.test.tsx`](../../ClientApp/tests/unit/TestAppointmentsNavigation.test.tsx) | `Passed` (`6` tests on Node `26.13.1`) | `VERIFIED` | **Yes** |
+| **Playwright E2E (`npm run test:e2e`)** | `IMPLEMENTED` (`@playwright/test`, `@axe-core/playwright`) | `IMPLEMENTED` ([`playwright.config.ts`](../../ClientApp/playwright.config.ts)) | [`tests/e2e/login.spec.ts`](../../ClientApp/tests/e2e/login.spec.ts) (+ 16 PNGs under `tests/screenshots/`) | `Passed` (`8/8` tests in local & `CI=true` modes) | `VERIFIED` | **Yes** (`Frontend_CI` + Chromium + JUnit) |
 
 > [!NOTE]
-> Frontend tests (`ClientApp/tests/setup.ts` + 9 unit files + 1 E2E spec) are configured locally (`npm run test`, `npm run test:e2e`), **not** invoked as a stage or step in [`azure-pipelines.yml`](../../azure-pipelines.yml). Integrating unit/E2E checks into CI remains an open Production Readiness item (`ENGINEERING-ROADMAP.md` §8).
+> Frontend tests (`ClientApp/tests/setup.ts` + 9 unit files + 1 E2E spec) are executed locally and wired into `Frontend_CI` in [`azure-pipelines.yml`](../../azure-pipelines.yml) (`Node.js 26.x`, JUnit test reporting, and Playwright Chromium report/trace staging). Locally on `Node v26.13.1`, Vitest passed `46/46` tests across all `9/9` files and Playwright passed `8/8` tests across all 4 viewports, accessibility, identity, and reduced-motion checks (expanding E2E workflow breadth across authenticated flows remains tracked under `F-04`).
 
 ---
 
@@ -480,7 +480,7 @@ This section documents the local SQL Server integration-testing architecture, en
 2. **Windows Authentication** enabled for the current Windows user account (`Integrated Security=True`).
 3. **`sqlcmd`** CLI available on `PATH` (for environment verification and diagnostics).
 4. **Database Permissions:** The Windows login must have permission to create and drop databases on the target instance (for example, `CREATE ANY DATABASE`, `dbcreator`, or `sysadmin`) because integration tests create and drop ephemeral databases per test fixture.
-5. **.NET 8 SDK** (`dotnet` CLI) matching the solution target framework (`net8.0`).
+5. **.NET 10 SDK** (`dotnet` CLI, `10.0.404` pinned in `global.json`) matching the solution target framework (`net10.0`).
 
 ### 10.2 SQL Server Verification (B)
 
@@ -594,7 +594,7 @@ dotnet test .\Test\API.IntegrationTests\API.IntegrationTests.csproj -c Release -
 dotnet test .\Test\API.IntegrationTests\API.IntegrationTests.csproj -c Release --no-restore
 ```
 
-> **Note on `Debug` vs `Release`:** If `DVLD.Api` is running locally in `Debug` mode, `API\DVLD.Api\bin\Debug\net8.0\*.dll` may be locked by the running process. Building and running tests with `-c Release` avoids this file lock without stopping your dev server.
+> **Note on `Debug` vs `Release`:** If `DVLD.Api` is running locally in `Debug` mode, `API\DVLD.Api\bin\Debug\net10.0\*.dll` may be locked by the running process. Building and running tests with `-c Release` avoids this file lock without stopping your dev server.
 
 ### 10.6 Troubleshooting (F)
 
@@ -629,4 +629,4 @@ dotnet test .\Test\API.IntegrationTests\API.IntegrationTests.csproj -c Release -
 - **SQL Server Instance:** `Ayhm|MSSQLSERVER`
 - **Authentication:** Windows Authentication
 
-> [!WARNING] **Runtime lifecycle:** this repository currently targets `net8.0` and pins SDK `8.0.427`, but Microsoft ended .NET 8 support on `2026-11-10`. These commands describe the repository's current manifest state, not a supported production runtime. Prioritize a controlled upgrade to a supported LTS release (currently .NET 10 LTS) after validating EF Core provider compatibility, migrations, build, all test suites and CI. Do not change target frameworks/packages as part of a test-environment setup.
+> [!NOTE] **Runtime lifecycle:** All backend and test projects target `net10.0` (`.NET 10 LTS`, EF Core `10.0.15`, ASP.NET Core `10.0.15`) and pin SDK `10.0.404` in `global.json`. Always verify environment isolation (`DVLD_TEST_CONNECTION`, `DVLD_TEST_EXPECTED_INSTANCE`) before running SQL integration tests and never change target frameworks/packages without explicit authorization.

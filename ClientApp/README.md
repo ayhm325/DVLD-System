@@ -2,7 +2,7 @@
 
 > - **Baseline Commit:** `e9e843e974af86a86003bcc364f0e7686c3faa87`
 > - **Directory:** `D:\DVLD-System\ClientApp`
-> - **Backend API:** ASP.NET Core 8 Web API (`DVLD.Api`)
+> - **Backend API:** ASP.NET Core 10 LTS Web API (`DVLD.Api`)
 
 ---
 
@@ -22,13 +22,13 @@ Exact declared versions live in [`ClientApp/package.json`](./package.json) and a
 - **Language:** `typescript` `~6.0.3` (`tsconfig.app.json`: target `ES2023`, alias `@/*`, `verbatimModuleSyntax: true`, `noUnusedLocals`, `noUnusedParameters`, `erasableSyntaxOnly`; `"strict": true` is **not** set)
 - **Bundler & CSS:** `vite` `^8.3.4`, `tailwindcss` `^4.3.3`, `@tailwindcss/vite` `^4.3.3`
 - **UI Primitives & Animation:** `@radix-ui/react-*`, `lucide-react` `^1.65.0`, `motion` `^14.9.0`, `@fontsource-variable/{fraunces,inter,jetbrains-mono}`
-- **Testing & Linting (Dev):** `vitest` `^5.1.0`, `@testing-library/react` `^16.3.3`, `@playwright/test` `^1.65.0`, `@axe-core/playwright` `^4.14.0`, `eslint` `^10.13.0`
+- **Testing & Linting (Dev):** `vitest` `^5.1.0`, `@testing-library/react` `^16.3.3`, `@playwright/test` `^1.65.0`, `@axe-core/playwright` `^4.14.0`, `eslint` `^10.15.0`
 
 ---
 
 ## 3. Prerequisites
 
-1. **Node.js & `npm`:** **Node.js `22.x` LTS** (configured in [`azure-pipelines.yml`](../azure-pipelines.yml); Active LTS `24.x`/`26.x` are also supported; Node.js `20.x` reached EOL `2026-04-30`). On Windows PowerShell, use `npm.cmd` if execution policy restricts `npm.ps1`.
+1. **Node.js & `npm`:** **Node.js `26.x` Active LTS** (configured in [`azure-pipelines.yml`](../azure-pipelines.yml); verified locally on `v26.13.1` / `npm 11.20.0`). On Windows PowerShell, use `npm.cmd` if execution policy restricts `npm.ps1`.
 2. **Running `DVLD.Api` Backend:** Start `DVLD.Api` from the repository root (`D:\DVLD-System`) using `--launch-profile https` so it matches the default Vite `/api` proxy (`https://localhost:7125`):
    ```powershell
    dotnet run --project ".\API\DVLD.Api\DVLD.Api.csproj" --launch-profile https
@@ -147,18 +147,18 @@ ClientApp/
 
 | Test File | Suite Type | Packages & Config | Executed in Current Audit | Included in CI (`azure-pipelines.yml`) |
 |---|---|---|:---:|:---:|
-| `tests/unit/apiClientSession.test.ts` | Vitest Unit (`tests/unit/`) | `IMPLEMENTED` (`vitest.config.ts`) | `Not Executed` (`NEEDS VERIFICATION`) | **No** |
-| `tests/unit/authContextStaleRefresh.test.tsx` | Vitest Unit | `IMPLEMENTED` | `Not Executed` (`NEEDS VERIFICATION`) | **No** |
-| `tests/unit/ChangePasswordPage.test.tsx` | Vitest Component | `IMPLEMENTED` | `Not Executed` (`NEEDS VERIFICATION`) | **No** |
-| `tests/unit/DashboardPage.test.tsx` | Vitest Component | `IMPLEMENTED` | `Not Executed` (`NEEDS VERIFICATION`) | **No** |
-| `tests/unit/designTokens.test.ts` | Vitest Unit | `IMPLEMENTED` | `Not Executed` (`NEEDS VERIFICATION`) | **No** |
-| `tests/unit/LicenseDetentionPage.test.tsx` | Vitest Component | `IMPLEMENTED` | `Not Executed` (`NEEDS VERIFICATION`) | **No** |
-| `tests/unit/LocalApplicationsPage.test.tsx` | Vitest Component | `IMPLEMENTED` | `Not Executed` (`NEEDS VERIFICATION`) | **No** |
-| `tests/unit/TestAppointmentsBookingFlow.test.tsx` | Vitest Component | `IMPLEMENTED` | `Not Executed` (`NEEDS VERIFICATION`) | **No** |
-| `tests/unit/TestAppointmentsNavigation.test.tsx` | Vitest Component | `IMPLEMENTED` | `Not Executed` (`NEEDS VERIFICATION`) | **No** |
-| `tests/e2e/login.spec.ts` | Playwright E2E (`tests/e2e/`) | `IMPLEMENTED` (`playwright.config.ts`) | `Not Executed` (`NEEDS VERIFICATION`) | **No** |
+| `tests/unit/apiClientSession.test.ts` | Vitest Unit (`tests/unit/`) | `IMPLEMENTED` (`vitest.config.ts`) | `Passed` (`19` tests on Node `26.13.1`) | **Yes** (`Frontend_CI` + JUnit) |
+| `tests/unit/authContextStaleRefresh.test.tsx` | Vitest Unit | `IMPLEMENTED` | `Passed` (`1` test on Node `26.13.1`) | **Yes** |
+| `tests/unit/ChangePasswordPage.test.tsx` | Vitest Component | `IMPLEMENTED` | `Passed` (`4` tests on Node `26.13.1`) | **Yes** |
+| `tests/unit/DashboardPage.test.tsx` | Vitest Component | `IMPLEMENTED` | `Passed` (`3` tests on Node `26.13.1`) | **Yes** |
+| `tests/unit/designTokens.test.ts` | Vitest Unit | `IMPLEMENTED` | `Passed` (`1` test on Node `26.13.1`) | **Yes** |
+| `tests/unit/LicenseDetentionPage.test.tsx` | Vitest Component | `IMPLEMENTED` | `Passed` (`4` tests on Node `26.13.1`) | **Yes** |
+| `tests/unit/LocalApplicationsPage.test.tsx` | Vitest Component | `IMPLEMENTED` | `Passed` (`5` tests on Node `26.13.1`) | **Yes** |
+| `tests/unit/TestAppointmentsBookingFlow.test.tsx` | Vitest Component | `IMPLEMENTED` | `Passed` (`3` tests on Node `26.13.1`) | **Yes** |
+| `tests/unit/TestAppointmentsNavigation.test.tsx` | Vitest Component | `IMPLEMENTED` | `Passed` (`6` tests on Node `26.13.1`) | **Yes** |
+| `tests/e2e/login.spec.ts` | Playwright E2E (`tests/e2e/`) | `IMPLEMENTED` (`playwright.config.ts`) | `Passed` (`8/8` tests in local & `CI=true` modes) | **Yes** (`Frontend_CI` + Chromium + JUnit) |
 
-*(In [`azure-pipelines.yml`](../azure-pipelines.yml), stage `Frontend_CI` runs `npm ci`, `npm run lint`, `tsc -b --pretty false`, and `npm run build` only.)*
+*(In [`azure-pipelines.yml`](../azure-pipelines.yml), stage `Frontend_CI` runs `npm ci`, two-tier `npm audit` [blocking `--omit=dev` gate + full report artifact], `npm run lint`, `tsc -b --pretty false`, Vitest + JUnit reporting, Playwright Chromium install + `npm run test:e2e` with `CI=true`, and `npx --no-install vite build`.)*
 
 ---
 

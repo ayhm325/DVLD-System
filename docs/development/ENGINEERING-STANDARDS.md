@@ -531,7 +531,7 @@ As a centralized single-database enterprise application, the CAP theorem does no
 > [!IMPORTANT]
 > **Single Source of Truth:** [`TECHNOLOGY-STACK.md`](./TECHNOLOGY-STACK.md) is the **sole authoritative inventory** for `.NET` SDK, target frameworks, NuGet packages, `ClientApp/package.json` versions, `typescript` configuration, frontend test tooling (`9` Vitest unit test files + `1` Playwright E2E spec), and `azure-pipelines.yml` CI stages. Do **not** duplicate version or test-tool status tables here.
 
-Key baseline reminders verified against checked-in manifests at `e9e843e`:
-- **Runtime Lifecycle Warning:** Projects target `net8.0` and pin SDK `8.0.427` (`.NET 8` EOS occurred `2026-11-10`); upgrading to `.NET 10 LTS` is `PLANNED` / `NOT AUTHORIZED`.
-- **Pipeline Scope:** [`azure-pipelines.yml`](../../azure-pipelines.yml) runs `Frontend_CI` (`npm ci`, `lint`, `tsc -b`, `build` on Node.js `22.x` LTS—without Vitest or Playwright) and `Backend_CI` (Release build + unit + LocalDB SQL integration tests).
+Key baseline reminders verified against checked-in manifests:
+- **Runtime Lifecycle Baseline:** Backend projects target `net10.0` (EF Core `10.0.15`, ASP.NET Core `10.0.15`) and pin `.NET 10 LTS` SDK `10.0.404` in [`global.json`](../../global.json); CI frontend uses `Node.js 26.x` Active LTS.
+- **Pipeline Scope:** [`azure-pipelines.yml`](../../azure-pipelines.yml) runs `Frontend_CI` (`npm ci`, `npm audit --json`, `lint`, `tsc -b`, Vitest, Playwright E2E, `vite build` on Node.js `26.x`) and `Backend_CI` (vulnerable package scan, Release build, unit + isolated SQL Server integration tests, fail-closed test staging).
 - **No Unauthorized Packages:** Introducing Serilog (`OBS-03`), OpenTelemetry, HealthChecks packages (`OBS-01`), Redis, MediatR, or Dapper requires explicit approval and ADR updates.

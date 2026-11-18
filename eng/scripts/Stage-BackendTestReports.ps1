@@ -10,9 +10,9 @@ $ErrorActionPreference = 'Stop'
 
 $rawResultsRoot = $env:TEST_RESULTS_DIRECTORY
 $publishedRoot = $env:PUBLISHED_REPORTS_DIRECTORY
-$expectUnit = ($env:SOLUTION_BUILT -eq 'true')
-$expectApi = (($env:SOLUTION_BUILT -eq 'true') -and ($env:SQL_SERVER_READY -eq 'true') -and ($env:API_PREREQUISITES_READY -eq 'true'))
-$expectInfra = (($env:SOLUTION_BUILT -eq 'true') -and ($env:SQL_SERVER_READY -eq 'true'))
+$expectUnit = $true
+$expectApi = $true
+$expectInfra = $true
 
 if ([string]::IsNullOrWhiteSpace($rawResultsRoot) -or [string]::IsNullOrWhiteSpace($publishedRoot)) {
     Write-Host '##vso[task.logissue type=error]TEST_RESULTS_DIRECTORY and PUBLISHED_REPORTS_DIRECTORY must be provided.'
@@ -33,6 +33,21 @@ $suites = @(
 
 $stagedCoverageCount = 0
 $missingExpectedReport = $false
+
+if ($env:SOLUTION_BUILT -ne 'true') {
+    Write-Host '##vso[task.logissue type=error]Mandatory backend build did not complete (SOLUTION_BUILT != true).'
+    $missingExpectedReport = $true
+}
+
+if ($env:SQL_SERVER_READY -ne 'true') {
+    Write-Host '##vso[task.logissue type=error]Mandatory SQL Server test prerequisite was not satisfied (SQL_SERVER_READY != true).'
+    $missingExpectedReport = $true
+}
+
+if ($env:API_PREREQUISITES_READY -ne 'true') {
+    Write-Host '##vso[task.logissue type=error]Mandatory API integration test secrets prerequisite was not satisfied (API_PREREQUISITES_READY != true).'
+    $missingExpectedReport = $true
+}
 
 foreach ($suite in $suites) {
     $suiteName = $suite.Name

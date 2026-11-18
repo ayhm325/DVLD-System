@@ -32,16 +32,27 @@ for (const viewport of viewports) {
 
     await expect(page.getByLabel('Username')).toBeVisible()
     await expect(page.getByLabel('Password', { exact: true })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Sign in to Workspace' }))
-      .toBeDisabled()
+    const submitButton = page.getByRole('button', { name: 'Sign in to Workspace' })
+    await expect(submitButton).toBeVisible()
+    await expect(submitButton).toHaveAttribute('type', 'submit')
+    await expect(submitButton).toBeDisabled()
 
+    const primaryButtonRect = await submitButton.evaluate((button) => {
+      const rect = button.getBoundingClientRect()
+      return {
+        top: rect.top,
+        bottom: rect.bottom,
+        left: rect.left,
+        right: rect.right,
+        width: rect.width,
+        height: rect.height,
+      }
+    })
     const dimensions = await page.evaluate(() => ({
       viewport: window.innerWidth,
       viewportHeight: window.innerHeight,
       document: document.documentElement.scrollWidth,
       body: document.body.scrollWidth,
-      primaryButtonBottom: document.querySelector('.dvld-submit-btn')!
-        .getBoundingClientRect().bottom,
       inputTextSize: Number.parseFloat(
         getComputedStyle(document.querySelector('.dvld-input')!).fontSize,
       ),
@@ -49,8 +60,12 @@ for (const viewport of viewports) {
     expect(dimensions.document).toBeLessThanOrEqual(dimensions.viewport)
     expect(dimensions.body).toBeLessThanOrEqual(dimensions.viewport)
     expect(dimensions.inputTextSize).toBeGreaterThanOrEqual(14)
+    expect(primaryButtonRect.width).toBeGreaterThan(0)
+    expect(primaryButtonRect.height).toBeGreaterThan(0)
+    expect(primaryButtonRect.left).toBeGreaterThanOrEqual(0)
+    expect(primaryButtonRect.right).toBeLessThanOrEqual(dimensions.viewport)
     if (viewport.width === 390) {
-      expect(dimensions.primaryButtonBottom).toBeLessThanOrEqual(
+      expect(primaryButtonRect.bottom).toBeLessThanOrEqual(
         dimensions.viewportHeight,
       )
     }

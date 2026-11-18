@@ -134,7 +134,7 @@ flowchart LR
 - **Decision:** Enforce Onion Architecture with explicit directional dependency rules:
   - `Domain` has zero external dependencies.
   - `Application` depends exclusively on `Domain`.
-  - `Infrastructure` implements `Application` abstractions and maps persistence via EF Core 8.
+  - `Infrastructure` implements `Application` abstractions and maps persistence via EF Core 10.
   - `DVLD.Api` serves as composition root.
   - `Application` must **never** depend on `Infrastructure`.
   - Transactional persistence is encapsulated in repositories governed by a Scoped `UnitOfWork` with execution strategy retries and ambiguous commit detection.

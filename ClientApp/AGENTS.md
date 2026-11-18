@@ -57,5 +57,6 @@ This file defines **frontend-specific** architecture conventions and quality gat
   npm.cmd --prefix ClientApp run build
   npm.cmd --prefix ClientApp run lint
   npm.cmd --prefix ClientApp run test
+  npm.cmd --prefix ClientApp run test:e2e
   git diff --check
   ```

@@ -1,10 +1,12 @@
 # =============================================================================
 # DVLD — Continuous Integration Pipeline (Azure Pipelines)
 # Architecture:
-#   Stage 1 (Frontend_CI): Node.js 22 LTS, npm cache, npm ci, ESLint, tsc -b,
-#                          Vite production build, and frontend artifact upload.
-#   Stage 2 (Backend_CI):  .NET 8 SDK (from global.json), NuGet cache, Release
-#                          solution restore & build,
+#   Stage 1 (Frontend_CI): Node.js 26 Active LTS, npm cache, npm ci, npm audit
+#                          report, ESLint, tsc -b, Vitest unit/component tests,
+#                          Playwright Chromium installation & E2E tests, Vite
+#                          production build, and frontend artifacts.
+#   Stage 2 (Backend_CI):  .NET 10 SDK (from global.json), NuGet cache, Release
+#                          solution restore, NuGet vulnerability audit & build,
 #                          Application Unit Tests, dedicated run-specific SQL
 #                          Server LocalDB readiness & ownership verification,
 #                          API Integration Tests, Infrastructure Integration
@@ -12,8 +14,8 @@
 #                          publishing, ownership-verified test-DB cleanup, and
 #                          API release artifact packaging.
 # Quality Gate:
-#   Both stages are mandatory on every triggered CI / PR run. No mandatory step
-#   uses continueOnError or conditional path-bypassing.
+#   Both stages and all automated test suites are mandatory on every triggered
+#   CI / PR run. No mandatory step uses continueOnError or silent skipping.
 # =============================================================================
 
 name: $(Date:yyyyMMdd)$(Rev:.r)
@@ -33,6 +35,9 @@ trigger:
       - Infrastructure/**
       - Test/**
       - eng/**
+      - scripts/**
+      - '*.csproj'
+      - '**/*.csproj'
       - azure-pipelines.yml
       - global.json
       - Directory.Build.props
@@ -62,10 +67,11 @@ trigger:
     exclude:
       - docs/**
       - README.md
-      - ClientApp/docs/**
+      - AGENTS.md
+      - ENGINEERING-ROADMAP.md
+      - ENGINEERING-DECISIONS.md
       - ClientApp/README.md
       - ClientApp/AGENTS.md
-      - ClientApp/SECURITY.md
 
 pr:
   autoCancel: true
@@ -82,6 +88,9 @@ pr:
       - Infrastructure/**
       - Test/**
       - eng/**
+      - scripts/**
+      - '*.csproj'
+      - '**/*.csproj'
       - azure-pipelines.yml
       - global.json
       - Directory.Build.props
@@ -111,10 +120,11 @@ pr:
     exclude:
       - docs/**
       - README.md
-      - ClientApp/docs/**
+      - AGENTS.md
+      - ENGINEERING-ROADMAP.md
+      - ENGINEERING-DECISIONS.md
       - ClientApp/README.md
       - ClientApp/AGENTS.md
-      - ClientApp/SECURITY.md
 
 variables:
   vmImageName: 'windows-latest'
@@ -124,7 +134,7 @@ variables:
   unitTestProject: 'Test/Application.UnitTests/Application.UnitTests.csproj'
   apiIntegrationTestProject: 'Test/API.IntegrationTests/API.IntegrationTests.csproj'
   infraIntegrationTestProject: 'Test/Infrastructure.IntegrationTests/Infrastructure.IntegrationTests.csproj'
-  nodeVersionSpec: '22.x'
+  nodeVersionSpec: '26.x'
 
 stages:
   # ===========================================================================
@@ -135,20 +145,21 @@ stages:
     dependsOn: []
     jobs:
       - job: Validate_ClientApp
-        displayName: 'Lint, Type-Check & Build ClientApp'
-        timeoutInMinutes: 15
+        displayName: 'Lint, Test (Vitest & Playwright), Type-Check & Build ClientApp'
+        timeoutInMinutes: 25
         cancelTimeoutInMinutes: 2
         pool:
           vmImage: $(vmImageName)
         variables:
           npm_config_cache: '$(Pipeline.Workspace)/.npm'
+          frontendTestResultsDir: '$(Agent.TempDirectory)/FrontendTestResults'
         steps:
           - checkout: self
             clean: true
             fetchDepth: 1
 
           - task: UseNode@1
-            displayName: 'Install Node.js $(nodeVersionSpec) LTS'
+            displayName: 'Install Node.js $(nodeVersionSpec) Active LTS'
             inputs:
               version: '$(nodeVersionSpec)'
 
@@ -183,6 +194,91 @@ stages:
                 }
 
           - task: PowerShell@2
+            displayName: 'Audit Frontend npm Dependencies'
+            condition: succeeded()
+            inputs:
+              targetType: 'inline'
+              workingDirectory: 'ClientApp'
+              failOnStderr: false
+              script: |
+                $ErrorActionPreference = 'Continue'
+                $auditDir = Join-Path '$(Build.ArtifactStagingDirectory)' 'clientapp-npm-audit'
+                New-Item -ItemType Directory -Path $auditDir -Force | Out-Null
+
+                # Tier 1: Mandatory blocking production dependency check (--omit=dev)
+                $prodAuditJsonPath = Join-Path $auditDir 'npm-audit-prod.json'
+                npm.cmd audit --omit=dev --json > $prodAuditJsonPath
+                $prodAuditExit = $LASTEXITCODE
+                Write-Host "Production npm audit (--omit=dev) exited with code $prodAuditExit."
+
+                $prodHighOrCrit = $false
+                if (Test-Path $prodAuditJsonPath) {
+                  try {
+                    $prodParsed = Get-Content $prodAuditJsonPath -Raw | ConvertFrom-Json
+                    if ($null -ne $prodParsed.metadata -and $null -ne $prodParsed.metadata.vulnerabilities) {
+                      $pv = $prodParsed.metadata.vulnerabilities
+                      Write-Host "Production npm vulnerability summary — critical=$($pv.critical), high=$($pv.high), moderate=$($pv.moderate), low=$($pv.low), info=$($pv.info)"
+                      if ($pv.critical -gt 0 -or $pv.high -gt 0) {
+                        $prodHighOrCrit = $true
+                        Write-Host "##vso[task.logissue type=error]Production npm dependencies contain high/critical vulnerabilities (critical=$($pv.critical), high=$($pv.high))."
+                      }
+                    }
+                    else {
+                      $prodHighOrCrit = $true
+                      Write-Host "##vso[task.logissue type=error]Production npm audit JSON lacked metadata.vulnerabilities."
+                    }
+                  }
+                  catch {
+                    $prodHighOrCrit = $true
+                    Write-Host "##vso[task.logissue type=error]Unable to parse production npm audit JSON summary: $($_.Exception.Message)"
+                  }
+                }
+                else {
+                  $prodHighOrCrit = $true
+                  Write-Host "##vso[task.logissue type=error]Production npm audit report was not generated at '$prodAuditJsonPath'."
+                }
+
+                # Tier 2: Full dependency audit report (all dependencies)
+                $fullAuditJsonPath = Join-Path $auditDir 'npm-audit-full.json'
+                npm.cmd audit --json > $fullAuditJsonPath
+                $fullAuditExit = $LASTEXITCODE
+                Write-Host "Full npm audit exited with code $fullAuditExit. Reports staged to clientapp-npm-audit."
+
+                $fullCritical = $false
+                if (Test-Path $fullAuditJsonPath) {
+                  try {
+                    $fullParsed = Get-Content $fullAuditJsonPath -Raw | ConvertFrom-Json
+                    if ($null -ne $fullParsed.metadata -and $null -ne $fullParsed.metadata.vulnerabilities) {
+                      $fv = $fullParsed.metadata.vulnerabilities
+                      Write-Host "Full npm vulnerability summary — critical=$($fv.critical), high=$($fv.high), moderate=$($fv.moderate), low=$($fv.low), info=$($fv.info)"
+                      if ($fv.critical -gt 0) {
+                        $fullCritical = $true
+                        Write-Host "##vso[task.logissue type=error]npm dependency graph contains critical vulnerabilities (critical=$($fv.critical))."
+                      }
+                      elseif ($fv.high -gt 0 -or $fv.moderate -gt 0) {
+                        Write-Host "##vso[task.logissue type=warning]Dev/tooling npm dependencies contain advisories (high=$($fv.high), moderate=$($fv.moderate)). Review clientapp-npm-audit artifact."
+                      }
+                    }
+                  }
+                  catch {
+                    Write-Host "##vso[task.logissue type=warning]Unable to parse full npm audit JSON summary: $($_.Exception.Message)"
+                  }
+                }
+
+                if ($prodAuditExit -ne 0 -or $prodHighOrCrit -or $fullCritical) {
+                  exit 1
+                }
+                exit 0
+
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish Frontend npm Audit Report'
+            condition: succeededOrFailed()
+            inputs:
+              targetPath: '$(Build.ArtifactStagingDirectory)/clientapp-npm-audit'
+              artifact: 'clientapp-npm-audit'
+              publishLocation: 'pipeline'
+
+          - task: PowerShell@2
             displayName: 'Run ESLint (npm run lint)'
             inputs:
               targetType: 'inline'
@@ -211,16 +307,115 @@ stages:
                 }
 
           - task: PowerShell@2
-            displayName: 'Build Production Bundle (npm run build)'
+            displayName: 'Run Frontend Unit Tests (Vitest)'
             inputs:
               targetType: 'inline'
               workingDirectory: 'ClientApp'
               failOnStderr: false
               script: |
                 $ErrorActionPreference = 'Stop'
-                npm.cmd run build
+                New-Item -ItemType Directory -Path '$(frontendTestResultsDir)' -Force | Out-Null
+                Write-Host '##vso[task.setvariable variable=VitestExecuted]true'
+                npm.cmd run test -- --reporter=default --reporter=junit --outputFile="$(frontendTestResultsDir)/vitest-junit.xml"
                 if ($LASTEXITCODE -ne 0) {
-                  Write-Host "##vso[task.logissue type=error]ClientApp production build failed with exit code $LASTEXITCODE."
+                  Write-Host "##vso[task.logissue type=error]Vitest unit tests failed with exit code $LASTEXITCODE."
+                  exit $LASTEXITCODE
+                }
+
+          - task: PublishTestResults@2
+            displayName: 'Publish Vitest Unit Test Results'
+            condition: and(succeededOrFailed(), eq(variables['VitestExecuted'], 'true'))
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: 'vitest-junit.xml'
+              searchFolder: '$(frontendTestResultsDir)'
+              testRunTitle: 'DVLD — ClientApp Vitest Unit Tests'
+              failTaskOnFailedTests: true
+              failTaskOnMissingResultsFile: true
+              publishRunAttachments: false
+
+          - task: PowerShell@2
+            displayName: 'Install Playwright Chromium Browser'
+            inputs:
+              targetType: 'inline'
+              workingDirectory: 'ClientApp'
+              failOnStderr: false
+              script: |
+                $ErrorActionPreference = 'Stop'
+                npx.cmd --no-install playwright install chromium
+                if ($LASTEXITCODE -ne 0) {
+                  Write-Host "##vso[task.logissue type=error]Playwright Chromium browser installation failed with exit code $LASTEXITCODE."
+                  exit $LASTEXITCODE
+                }
+
+          - task: PowerShell@2
+            displayName: 'Run Playwright E2E Tests (npm run test:e2e)'
+            env:
+              CI: 'true'
+            inputs:
+              targetType: 'inline'
+              workingDirectory: 'ClientApp'
+              failOnStderr: false
+              script: |
+                $ErrorActionPreference = 'Stop'
+                Write-Host '##vso[task.setvariable variable=PlaywrightExecuted]true'
+                npm.cmd run test:e2e
+                if ($LASTEXITCODE -ne 0) {
+                  Write-Host "##vso[task.logissue type=error]Playwright E2E tests failed with exit code $LASTEXITCODE."
+                  exit $LASTEXITCODE
+                }
+
+          - task: PublishTestResults@2
+            displayName: 'Publish Playwright E2E Test Results'
+            condition: and(succeededOrFailed(), eq(variables['PlaywrightExecuted'], 'true'))
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: 'test-results/playwright-junit.xml'
+              searchFolder: 'ClientApp'
+              testRunTitle: 'DVLD — ClientApp Playwright E2E Tests'
+              failTaskOnFailedTests: true
+              failTaskOnMissingResultsFile: true
+              publishRunAttachments: true
+
+          - task: PowerShell@2
+            displayName: 'Stage Playwright Reports & Failure Diagnostics'
+            condition: and(succeededOrFailed(), eq(variables['PlaywrightExecuted'], 'true'))
+            inputs:
+              targetType: 'inline'
+              workingDirectory: 'ClientApp'
+              failOnStderr: false
+              script: |
+                $pwOut = Join-Path '$(Build.ArtifactStagingDirectory)' 'playwright-artifacts'
+                New-Item -ItemType Directory -Path $pwOut -Force | Out-Null
+                if (Test-Path 'playwright-report') {
+                  Copy-Item -Path 'playwright-report' -Destination (Join-Path $pwOut 'playwright-report') -Recurse -Force
+                }
+                if (Test-Path 'test-results') {
+                  Copy-Item -Path 'test-results' -Destination (Join-Path $pwOut 'test-results') -Recurse -Force
+                }
+                Write-Host "##vso[task.setvariable variable=PlaywrightArtifactsStaged]true"
+
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish Playwright Reports & Failure Diagnostics'
+            condition: and(succeededOrFailed(), eq(variables['PlaywrightArtifactsStaged'], 'true'))
+            inputs:
+              targetPath: '$(Build.ArtifactStagingDirectory)/playwright-artifacts'
+              artifact: 'clientapp-playwright-reports'
+              publishLocation: 'pipeline'
+
+          - task: PowerShell@2
+            displayName: 'Build Production Bundle (vite build)'
+            inputs:
+              targetType: 'inline'
+              workingDirectory: 'ClientApp'
+              failOnStderr: false
+              script: |
+                $ErrorActionPreference = 'Stop'
+                # TypeScript validation (tsc -b) already ran in the preceding step;
+                # run Vite bundling directly here to avoid running tsc -b twice in CI.
+                npx.cmd --no-install vite build
+                if ($LASTEXITCODE -ne 0) {
+                  Write-Host "##vso[task.logissue type=error]ClientApp production bundle build failed with exit code $LASTEXITCODE."
                   exit $LASTEXITCODE
                 }
 
@@ -267,10 +462,10 @@ stages:
               publishLocation: 'pipeline'
 
   # ===========================================================================
-  # STAGE 2: BACKEND & SOLUTION VALIDATION — .NET 8 + SQL Server Integration
+  # STAGE 2: BACKEND & SOLUTION VALIDATION — .NET 10 + SQL Server Integration
   # ===========================================================================
   - stage: Backend_CI
-    displayName: 'Backend & Solution CI — .NET 8'
+    displayName: 'Backend & Solution CI — .NET 10'
     dependsOn: []
     jobs:
       - job: Build_And_Test_Backend
@@ -310,21 +505,27 @@ stages:
             fetchDepth: 1
 
           - task: UseDotNet@2
-            displayName: 'Install .NET 8 SDK (from global.json)'
+            displayName: 'Install .NET 10 SDK (from global.json)'
             inputs:
               packageType: 'sdk'
               useGlobalJson: true
               workingDirectory: '$(Build.SourcesDirectory)'
 
-          # Makes the SDK/NuGet version actually used by restore visible in the log.
-          # The historical "NET 5 / older NuGet" message is informational on the
-          # hosted image; this step proves the selected SDK is the pinned .NET 8 one.
+          # Verifies the active SDK matches the pinned .NET 10 LTS baseline from
+          # global.json rather than falling back to an unrelated installed SDK.
           - task: PowerShell@2
-            displayName: 'Report .NET SDK Environment'
+            displayName: 'Report and Verify .NET 10 SDK Environment'
             inputs:
               targetType: 'inline'
               script: |
+                $ErrorActionPreference = 'Stop'
                 dotnet --info
+                $sdkVer = (dotnet --version).Trim()
+                Write-Host "Active dotnet --version: $sdkVer"
+                if ($sdkVer -notmatch '^10\.') {
+                  Write-Host "##vso[task.logissue type=error]Expected .NET 10 SDK per global.json, but resolved '$sdkVer'."
+                  exit 1
+                }
               failOnStderr: false
 
           - task: Cache@2
@@ -342,6 +543,36 @@ stages:
               command: 'restore'
               projects: '$(solutionPath)'
               verbosityRestore: 'Minimal'
+
+          - task: PowerShell@2
+            displayName: 'Audit NuGet Package Vulnerabilities'
+            condition: succeeded()
+            inputs:
+              targetType: 'inline'
+              failOnStderr: false
+              script: |
+                $ErrorActionPreference = 'Continue'
+                $nugetAuditDir = Join-Path '$(Build.ArtifactStagingDirectory)' 'backend-nuget-audit'
+                New-Item -ItemType Directory -Path $nugetAuditDir -Force | Out-Null
+                $reportPath = Join-Path $nugetAuditDir 'nuget-vulnerable.txt'
+                dotnet list '$(solutionPath)' package --vulnerable --include-transitive | Tee-Object -FilePath $reportPath
+                $nugetAuditExit = $LASTEXITCODE
+                Write-Host "NuGet vulnerability report staged to backend-nuget-audit/nuget-vulnerable.txt."
+                $reportText = if (Test-Path $reportPath) { Get-Content $reportPath -Raw } else { '' }
+                if ($nugetAuditExit -ne 0 -or $reportText -match 'has the following vulnerable packages') {
+                  Write-Host '##vso[task.logissue type=error]Vulnerable NuGet packages detected or vulnerability audit command failed. Review backend-nuget-audit/nuget-vulnerable.txt.'
+                  exit 1
+                }
+                Write-Host 'Zero vulnerable NuGet packages detected across solution.'
+                exit 0
+
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish NuGet Vulnerability Audit Report'
+            condition: succeededOrFailed()
+            inputs:
+              targetPath: '$(Build.ArtifactStagingDirectory)/backend-nuget-audit'
+              artifact: 'backend-nuget-audit'
+              publishLocation: 'pipeline'
 
           - task: DotNetCoreCLI@2
             displayName: 'Build Solution ($(buildConfiguration))'
@@ -403,17 +634,23 @@ stages:
               failOnStderr: false
 
           # Fail fast if the initialization did not publish the identity contract.
-          # Without this, hundreds of tests fail with an unhelpful configuration
-          # error instead of one clear provisioning diagnostic.
+          # Without this, integration suites cannot run against a verified isolated
+          # engine and must never silently skip.
           - task: PowerShell@2
             displayName: 'Validate SQL Test Environment Contract'
-            condition: and(succeeded(), eq(variables['SqlServerReady'], 'true'))
+            condition: and(succeededOrFailed(), eq(variables['SolutionBuilt'], 'true'))
             env:
+              SQL_SERVER_READY: '$(SqlServerReady)'
               SQL_EXPECTED_INSTANCE: '$(SqlExpectedInstance)'
             inputs:
               targetType: 'inline'
               script: |
                 $ErrorActionPreference = 'Stop'
+
+                if ($env:SQL_SERVER_READY -ne 'true') {
+                  Write-Host "##vso[task.logissue type=error]SQL Server test initialization did not succeed (SqlServerReady != true). Failing integration prerequisite gate."
+                  exit 1
+                }
 
                 if ([string]::IsNullOrWhiteSpace($env:SQL_EXPECTED_INSTANCE) -or
                     $env:SQL_EXPECTED_INSTANCE -match '^\$' -or

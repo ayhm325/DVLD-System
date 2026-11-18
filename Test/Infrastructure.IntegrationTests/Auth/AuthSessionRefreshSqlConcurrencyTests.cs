@@ -1070,8 +1070,11 @@ public sealed class AuthSessionRefreshSqlConcurrencyTests
                 logoutAllTask = Task.Run(() => logoutService.LogoutAllAsync(userId, testCts.Token), testCts.Token);
                 await logoutAttemptingLock.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-                // Await tasks
-                await Task.WhenAll(refreshTask, logoutAllTask);
+                // Wait for the faulted background task to terminate while Refresh is still holding the lock gate
+                var firstCompleted = await Task.WhenAny(refreshTask, logoutAllTask).WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.Same(logoutAllTask, firstCompleted);
+                Assert.True(logoutAllTask.IsFaulted, "LogoutAllTask should have faulted with the injected exception.");
+                Assert.False(refreshTask.IsCompleted, "RefreshTask must remain gated until cleanup releases allowRefreshToCommit.");
             }
             finally
             {
@@ -1087,9 +1090,32 @@ public sealed class AuthSessionRefreshSqlConcurrencyTests
 
                 if (tasksToAwait.Count > 0)
                 {
+                    var combinedTasks = Task.WhenAll(tasksToAwait.Select(t => t.Task));
+
                     try
                     {
-                        await Task.WhenAll(tasksToAwait.Select(t => t.Task)).WaitAsync(TimeSpan.FromSeconds(10));
+                        await combinedTasks.WaitAsync(TimeSpan.FromSeconds(10));
+                    }
+                    catch (TimeoutException)
+                    {
+                        testCts.Cancel();
+                        allowRefreshToCommit.TrySetResult(true);
+                        refreshHoldingLock.TrySetResult(true);
+                        logoutAttemptingLock.TrySetResult(true);
+
+                        try
+                        {
+                            await combinedTasks.WaitAsync(TimeSpan.FromSeconds(5));
+                        }
+                        catch (TimeoutException)
+                        {
+                            var unresponsive = tasksToAwait.Where(t => !t.Task.IsCompleted).Select(t => t.Name).ToList();
+                            cleanupErrors.Add(new TimeoutException(
+                                $"Boundary5 cleanup critical failure: The following background tasks failed to terminate even after cancellation request: {string.Join(", ", unresponsive)}. Resource disposal was aborted to avoid corrupting active connections."));
+                        }
+                        catch
+                        {
+                        }
                     }
                     catch
                     {
@@ -1106,6 +1132,10 @@ public sealed class AuthSessionRefreshSqlConcurrencyTests
 
                                 cleanupErrors.Add(new InvalidOperationException($"Background task '{name}' faulted: {inner.Message}", inner));
                             }
+                        }
+                        else if (task.IsCanceled && !testCts.IsCancellationRequested)
+                        {
+                            cleanupErrors.Add(new InvalidOperationException($"Background task '{name}' was canceled unexpectedly before cleanup was requested."));
                         }
                     }
                 }
@@ -1129,8 +1159,9 @@ public sealed class AuthSessionRefreshSqlConcurrencyTests
         Assert.Contains(ex.Flatten().InnerExceptions, inner =>
             inner.Message.Contains("LogoutAllTask") && inner.Message.Contains("Injected unexpected failure"));
 
-        Assert.True(refreshTask?.IsCompleted ?? false);
-        Assert.True(logoutAllTask?.IsCompleted ?? false);
+        Assert.True(refreshTask?.IsCompletedSuccessfully ?? false);
+        Assert.True((await refreshTask!).IsSuccess);
+        Assert.True(logoutAllTask?.IsFaulted ?? false);
     }
 
     private static async Task WaitForApplicationLockWaitAsync(

@@ -1,9 +1,9 @@
 # DVLD — Driver & Vehicle Licensing Department System
 
 > - **Baseline Commit:** `e9e843e974af86a86003bcc364f0e7686c3faa87`
-> - **Architecture:** ASP.NET Core 8 Web API (`DVLD.Api`) + SQL Server / EF Core 8 (`Infrastructure`) + React 19 SPA (`ClientApp`)
+> - **Architecture:** ASP.NET Core 10 LTS Web API (`DVLD.Api`) + SQL Server / EF Core 10 (`Infrastructure`) + React 19 SPA (`ClientApp`)
 
-DVLD is a departmental driving-license management system implementing clean Onion Architecture on .NET 8 (`Domain`, `Application`, `Infrastructure`, `DVLD.Contracts`, `DVLD.Api`), automated test suites (`Test/`), and an independent TypeScript/Vite React single-page application (`ClientApp/`). This documentation reflects verified source code, configuration manifests, and scripts in the local repository.
+DVLD is a departmental driving-license management system implementing clean Onion Architecture on .NET 10 LTS (`Domain`, `Application`, `Infrastructure`, `DVLD.Contracts`, `DVLD.Api`), automated test suites (`Test/`), and an independent TypeScript/Vite React single-page application (`ClientApp/`). This documentation reflects verified source code, configuration manifests, scripts, and local verification runs in the local repository.
 
 ---
 
@@ -21,13 +21,13 @@ The repository comprises a modular monolith backend serving an internal browser 
               │ Vite /api proxy -> https://localhost:7125 (dev)
               │ HTTP + JSON + Bearer JWT (in-memory) + HttpOnly Cookie (dvld_rt @ /api/Auth)
               v
-          DVLD.Api (ASP.NET Core 8 — Controllers, RateLimiter, OnTokenValidated, RFC 7807)
+          DVLD.Api (ASP.NET Core 10 — Controllers, RateLimiter, OnTokenValidated, RFC 7807)
               │
               v
          Application (Use-Case Services, Validators, Mappers, Result<T>, Abstractions)
               │
               v
-       Infrastructure (EF Core 8, SQL Server Repositories, UnitOfWork, sp_getapplock, File Storage)
+       Infrastructure (EF Core 10, SQL Server Repositories, UnitOfWork, sp_getapplock, File Storage)
               │
               v
            Domain (Pure C# Entities & Enums — Zero External Dependencies)
@@ -39,11 +39,11 @@ The repository comprises a modular monolith backend serving an internal browser 
 
 For exact SDK, `.csproj` NuGet versions, `ClientApp/package.json` dependencies, and CI manifests, consult the **sole authoritative inventory** in [`TECHNOLOGY-STACK.md`](./docs/development/TECHNOLOGY-STACK.md).
 
-- **Backend Runtime:** `.NET 8` (`net8.0`, SDK `8.0.427` in [`global.json`](./global.json)), C# 12, EF Core `8.0.x`, SQL Server, `Swashbuckle.AspNetCore` `6.6.2`, `BCrypt.Net-Next` `4.2.0`, `SkiaSharp` `4.154.0`.
-- **Frontend Runtime:** Node.js `22.x` LTS (CI baseline), React `^19.3.1`, TypeScript `~6.0.3`, Vite `^8.3.4`, Tailwind CSS `^4.3.3`, Radix UI primitives, Vitest `^5.1.0`, Playwright `^1.65.0`.
+- **Backend Runtime:** `.NET 10 LTS` (`net10.0`, SDK `10.0.404` in [`global.json`](./global.json)), C# 14, EF Core `10.0.15`, ASP.NET Core `10.0.15`, SQL Server (`Microsoft.Data.SqlClient` `6.1.7`), `Swashbuckle.AspNetCore` `6.6.2`, `BCrypt.Net-Next` `4.2.0`, `SkiaSharp` `4.154.0`.
+- **Frontend Runtime:** Node.js `26.x` Active LTS (`azure-pipelines.yml` CI baseline; locally verified on `v26.13.1` / `npm 11.20.0`), React `^19.3.1`, TypeScript `~6.0.3`, Vite `^8.3.4`, Tailwind CSS `^4.3.3`, Radix UI primitives, Vitest `^5.1.0`, Playwright `^1.65.0`.
 
-> [!WARNING]
-> **Support Lifecycle Notice:** Microsoft ended official support for **.NET 8** and **EF Core 8** on `2026-11-10`, and Node.js `20.x` reached EOL on `2026-04-30`. Upgrading to `.NET 10 LTS` is a tracked priority in [`ENGINEERING-ROADMAP.md`](./ENGINEERING-ROADMAP.md), **not** yet implemented.
+> [!NOTE]
+> **Runtime Support Lifecycle:** All backend projects target `.NET 10 LTS` (`net10.0`, supported through `2028-11-14`) with EF Core `10.0.15`, paired with `Node.js 26.x` Active LTS. Install SDK `10.0.404` via [`global.json`](./global.json) rather than `.NET 11 STS`.
 
 ---
 
@@ -52,12 +52,12 @@ For exact SDK, `.csproj` NuGet versions, `ClientApp/package.json` dependencies, 
 ```text
 D:\DVLD-System\
 ├─ DVLD.sln                              # Backend .NET solution (8 projects)
-├─ global.json                           # Pinned .NET SDK (8.0.427)
+├─ global.json                           # Pinned .NET 10 SDK (10.0.404)
 ├─ azure-pipelines.yml                   # Azure Pipelines (Frontend_CI & Backend_CI)
 ├─ API/DVLD.Api/                         # Web API composition root, controllers, security, background services
 ├─ Application/                          # Business services, DTOs, validators, options, Result<T>
 ├─ Domain/                               # Pure domain entities & enums
-├─ Infrastructure/                       # EF Core 8 DbContext, migrations, repositories, UnitOfWork, file storage
+├─ Infrastructure/                       # EF Core 10 DbContext, migrations, repositories, UnitOfWork, file storage
 ├─ DVLD.Contracts/                       # Shared HTTP request/response contract DTOs
 ├─ ClientApp/                            # React 19 + TypeScript 6 + Vite 8 SPA & Vitest/Playwright tests
 ├─ Test/
@@ -74,9 +74,9 @@ D:\DVLD-System\
 
 ## 5. Prerequisites
 
-1. **.NET 8 SDK (`8.0.427`):** Pinned in [`global.json`](./global.json) (`rollForward: latestFeature`).
+1. **.NET 10 SDK (`10.0.404`):** Pinned in [`global.json`](./global.json) (`rollForward: latestFeature`).
 2. **SQL Server:** Local SQL Server (`MSSQLSERVER`) or LocalDB with Windows Authentication (`Integrated Security=True`) and `sqlcmd` on `PATH`.
-3. **Node.js & `npm`:** Node.js **`22.x` LTS** (matching [`azure-pipelines.yml`](./azure-pipelines.yml); Active LTS `24.x`/`26.x` also supported). On Windows PowerShell, use `npm.cmd` if script execution policy restricts `npm.ps1`.
+3. **Node.js & `npm`:** Node.js **`26.x` Active LTS** (matching [`azure-pipelines.yml`](./azure-pipelines.yml); verified locally on `v26.13.1`). On Windows PowerShell, use `npm.cmd` if script execution policy restricts `npm.ps1`.
 4. **ASP.NET Core Dev Certificate (one-time per workstation):** Run `dotnet dev-certs https --trust` so the local HTTPS profile (`https://localhost:7125`) operates cleanly.
 
 ---
@@ -134,7 +134,7 @@ npm run dev
 
 ## 10. Automated Tests Inventory & Commands
 
-*(Static discovery counts verified at `e9e843e`; automated suites were **not executed** during the documentation audit pass.)*
+*(Local verification on `.NET 10.0.404` / `Node v26.13.1`: `Application.UnitTests` passed `983/983`, `API.IntegrationTests` passed `627/627`, `Infrastructure.IntegrationTests` passed `739/739` unfiltered with `Boundary5` passing `3/3` repeated isolated runs, Vitest passed `46/46` across `9` files, and Playwright passed `8/8` in both local and `CI=true` modes.)*
 
 - **`Application.UnitTests`** (41 files; 842 `[Fact]`, 51 `[Theory]`):
   ```powershell
@@ -159,16 +159,16 @@ npm run dev
 
 ## 11. Continuous Integration (`azure-pipelines.yml`)
 
-[`azure-pipelines.yml`](./azure-pipelines.yml) configures two mandatory stages on `windows-latest` (`CONFIGURED — NOT EXECUTED` locally):
-1. **`Frontend_CI`** (Node.js `22.x`): runs `npm ci`, `npm run lint`, `tsc -b --pretty false`, and `npm run build`, publishing `clientapp-dist`. **Note:** Vitest (`npm run test`) and Playwright (`npm run test:e2e`) are **not** executed in CI.
-2. **`Backend_CI`** (.NET `8.0.427`): restores/builds `DVLD.sln` (`Release`), runs `Application.UnitTests`, provisions an isolated LocalDB instance (`DVLD_CI_$(Build.BuildId)_$(System.JobAttempt)`), validates `SqlExpectedInstance` and `Jwt__SecretKey`, runs `API.IntegrationTests` and `Infrastructure.IntegrationTests`, cleans up owned DBs, publishes Cobertura coverage + TRX reports, and packages `dvld-api-release`.
+[`azure-pipelines.yml`](./azure-pipelines.yml) configures two mandatory stages on `windows-latest` (`CONFIGURED` locally; live Azure DevOps execution requires a hosted pipeline run):
+1. **`Frontend_CI`** (Node.js `26.x`, `timeoutInMinutes: 25`): runs `npm ci`, two-tier `npm audit` (blocking production `--omit=dev` gate + full advisory report artifact `clientapp-npm-audit`), `npm run lint`, `npx --no-install tsc -b --pretty false`, Vitest (`npm run test` with JUnit reporting), Chromium installation + Playwright E2E (`npm run test:e2e` with `CI=true`, JUnit reporting, and `clientapp-playwright-reports`), and `npx --no-install vite build`, publishing `clientapp-dist`.
+2. **`Backend_CI`** (.NET `10.0.404`): enforces a `10.x` SDK, fail-closed NuGet vulnerability scan (`dotnet list DVLD.sln package --vulnerable --include-transitive`, artifact `backend-nuget-audit`), restores/builds `DVLD.sln` (`Release`), runs `Application.UnitTests`, provisions an isolated LocalDB instance (`DVLD_CI_$(Build.BuildId)_$(System.JobAttempt)`), validates `SqlExpectedInstance` and `Jwt__SecretKey`, runs `API.IntegrationTests` and `Infrastructure.IntegrationTests`, cleans up owned DBs, enforces non-empty fail-closed report staging (`Stage-BackendTestReports.ps1`), publishes Cobertura coverage + TRX reports, and packages `dvld-api-release`.
 
 ---
 
 ## 12. Production Readiness Status & Governance Disclaimer
 
 > [!IMPORTANT]
-> **Not Yet Production-Ready:** Although core security (`AUTH-01`, `REST-01`, `TEST-03`, `CONCURRENCY-01`, `API-01`) and key domain workflows are implemented in source, the system is **strictly ineligible for Production release** until mandatory readiness gaps and approval gates are closed—including `.NET 8` EOS upgrade, ASP.NET Core Health Checks (`OBS-01`), structured logging (`OBS-03` / `SEC-04`), reverse-proxy & security header hardening (`DEC-DEP-01` / `DEC-DEP-02`), HTTP 429 test verification for `ChangePassword` (`SEC-03`), CI frontend test enforcement, formal risk acceptance for plaintext PII (`RSK-11` / Gate 8), and regulatory rulings (`DEC-POL-01` / `DEC-POL-02` / Gate 3). See [`ENGINEERING-ROADMAP.md`](./ENGINEERING-ROADMAP.md) §8.
+> **Not Yet Production-Ready:** Although `.NET 10 LTS` (`net10.0` / `10.0.404`), core security (`AUTH-01`, `REST-01`, `TEST-03`, `CONCURRENCY-01`, `API-01`), full local unit/integration/E2E verification, and key domain workflows are implemented in source, the system is **strictly ineligible for Production release** until mandatory readiness gaps and approval gates are closed—including hosted Azure DevOps verification (`G-02`), ASP.NET Core Health Checks (`OBS-01`), structured logging (`OBS-03` / `SEC-04`), reverse-proxy & security header hardening (`DEC-DEP-01` / `DEC-DEP-02`), HTTP 429 test verification for `ChangePassword` (`SEC-03`), dev-dependency `picomatch` advisory tracking (`G-05`), formal risk acceptance for plaintext PII (`RSK-11` / Gate 8), and regulatory rulings (`DEC-POL-01` / `DEC-POL-02` / Gate 3). See [`ENGINEERING-ROADMAP.md`](./ENGINEERING-ROADMAP.md) §8.
 
 ---
 

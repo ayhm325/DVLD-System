@@ -10,11 +10,11 @@
 
 Ensure the following tools are installed on your development machine:
 
-1. **.NET 8 SDK (`8.0.427`):** Pinned in [`global.json`](../../global.json) (`rollForward: latestFeature`).
-   > [!WARNING]
-   > Microsoft ended official support for **.NET 8** and **EF Core 8** on **2026-11-10**. The commands below reflect the current checked-in manifests (`net8.0`). Upgrading to `.NET 10 LTS` is a planned priority; do not change target frameworks or packages without explicit approval.
+1. **.NET 10 SDK (`10.0.404`):** Pinned in [`global.json`](../../global.json) (`rollForward: latestFeature`).
+   > [!NOTE]
+   > All backend and test projects target `net10.0` (`.NET 10 LTS`, EF Core `10.0.15`, ASP.NET Core `10.0.15`). Use SDK `10.0.404` rather than `.NET 11 STS`.
 2. **SQL Server:** Local SQL Server (`MSSQLSERVER` service) or SQL Server LocalDB with Windows Authentication (`Integrated Security=True`) and `sqlcmd` on `PATH`.
-3. **Node.js & npm:** **Node.js `22.x` LTS** (configured in [`azure-pipelines.yml`](../../azure-pipelines.yml); Active LTS `24.x`/`26.x` are also supported; Node.js `20.x` reached EOL on `2026-04-30`). On Windows PowerShell, use `npm.cmd` if execution policy restricts `npm.ps1`.
+3. **Node.js & npm:** **Node.js `26.x` Active LTS** (configured in [`azure-pipelines.yml`](../../azure-pipelines.yml)). On Windows PowerShell, use `npm.cmd` if execution policy restricts `npm.ps1`.
 
 ---
 
@@ -23,11 +23,11 @@ Ensure the following tools are installed on your development machine:
 ```text
 D:\DVLD-System\
 ├─ DVLD.sln                       # Backend .NET solution
-├─ global.json                    # Pinned .NET SDK (8.0.427)
+├─ global.json                    # Pinned .NET 10 SDK (10.0.404)
 ├─ azure-pipelines.yml            # Frontend_CI & Backend_CI Azure Pipeline definition
 ├─ Domain/                        # Pure domain entities & enums (no external dependencies)
 ├─ Application/                   # Business use-case services, DTOs, validators, interfaces
-├─ Infrastructure/                # EF Core 8, SQL Server repositories, UnitOfWork, file storage
+├─ Infrastructure/                # EF Core 10, SQL Server repositories, UnitOfWork, file storage
 ├─ DVLD.Contracts/                # Shared HTTP request/response DTOs
 ├─ API/DVLD.Api/                  # ASP.NET Core Web API composition root & controllers
 ├─ ClientApp/                     # React 19 + TypeScript + Vite SPA
@@ -85,8 +85,8 @@ Additional frontend scripts in [`ClientApp/package.json`](../../ClientApp/packag
 - `npm run build` — Runs `tsc -b && vite build` into `ClientApp/dist/`.
 - `npm run lint` — Runs ESLint across TypeScript/React source files.
 - `npm run preview` — Serves the production build locally.
-- `npm run test` — Runs Vitest unit/component tests (**9** test files in `ClientApp/tests/unit/`; not currently invoked in `azure-pipelines.yml`).
-- `npm run test:e2e` — Runs Playwright E2E tests (**1** spec `ClientApp/tests/e2e/login.spec.ts` + 16 screenshots under `ClientApp/tests/screenshots/`; not currently invoked in `azure-pipelines.yml`).
+- `npm run test` — Runs Vitest unit/component tests (**9** test files in `ClientApp/tests/unit/`; executed in `Frontend_CI` in `azure-pipelines.yml`).
+- `npm run test:e2e` — Runs Playwright E2E tests (**1** spec `ClientApp/tests/e2e/login.spec.ts` + 16 screenshots under `ClientApp/tests/screenshots/`; executed in `Frontend_CI` in `azure-pipelines.yml`).
 
 See [`ClientApp/README.md`](../../ClientApp/README.md) and [`ClientApp/AGENTS.md`](../../ClientApp/AGENTS.md) for frontend-specific guidelines.
 
@@ -125,8 +125,8 @@ For complete test standards, ownership verification, and SQL Server troubleshoot
 ## 6. Continuous Integration (`azure-pipelines.yml`)
 
 The Azure DevOps pipeline ([`azure-pipelines.yml`](../../azure-pipelines.yml)) defines two mandatory stages on `windows-latest`:
-1. **`Frontend_CI`** (`timeoutInMinutes: 15`, Node.js `22.x`): runs `npm ci`, `npm run lint`, `npx --no-install tsc -b --pretty false`, and `npm run build`, then publishes `clientapp-dist`. *(Note: `npm run test` and `npm run test:e2e` are not currently invoked in `azure-pipelines.yml`.)*
-2. **`Backend_CI`** (`timeoutInMinutes: 60`, .NET 8 SDK from `global.json`): restores and builds `DVLD.sln` (`Release`), executes `Application.UnitTests`, provisions an isolated LocalDB instance (`eng/scripts/Initialize-TestSqlEngine.ps1`), executes `API.IntegrationTests` and `Infrastructure.IntegrationTests`, runs ownership-verified cleanup (`eng/scripts/Cleanup-TestSqlEngine.ps1`), stages TRX/Cobertura reports (`eng/scripts/Stage-BackendTestReports.ps1`), and publishes `dvld-api-release`.
+1. **`Frontend_CI`** (`timeoutInMinutes: 25`, Node.js `26.x`): runs `npm ci`, two-tier `npm audit` (blocking `--omit=dev` production gate + critical gate, publishing `clientapp-npm-audit`), `npm run lint`, `npx --no-install tsc -b --pretty false`, Vitest (`npm run test` with JUnit reporting), Chromium install + Playwright E2E (`npm run test:e2e` with `CI=true`, JUnit reporting, and `clientapp-playwright-reports` artifacts), and `npx --no-install vite build`, then publishes `clientapp-dist`.
+2. **`Backend_CI`** (`timeoutInMinutes: 60`, .NET 10 SDK `10.0.404` from `global.json`): verifies a `10.x` SDK, runs fail-closed NuGet audit (`dotnet list DVLD.sln package --vulnerable --include-transitive`, publishing `backend-nuget-audit`), restores and builds `DVLD.sln` (`Release`), executes `Application.UnitTests`, provisions an isolated LocalDB instance (`eng/scripts/Initialize-TestSqlEngine.ps1`), executes `API.IntegrationTests` and `Infrastructure.IntegrationTests`, runs ownership-verified cleanup (`eng/scripts/Cleanup-TestSqlEngine.ps1`), stages TRX/Cobertura reports with fail-closed suite/prerequisite enforcement (`eng/scripts/Stage-BackendTestReports.ps1`), and publishes `dvld-api-release`.
 
 ---
 
