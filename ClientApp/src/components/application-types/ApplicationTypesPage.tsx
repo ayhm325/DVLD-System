@@ -14,6 +14,7 @@ import ApplicationTypeRow from "./ApplicationTypeRow";
 import { FileText as ApplicationsIcon } from "lucide-react";
 import { canManageReferenceData } from "../../utils/permissions";
 import { useAuth } from "../../context/useAuth";
+import { Card } from "../ui/card";
 
 type ApplicationTypesPageProps = {
   accessToken: string;
@@ -165,7 +166,7 @@ export default function ApplicationTypesPage({
     <section className="page-content">
       <PageHero pageId="Application Types" />
 
-      <section className="panel">
+      <Card className="panel border-[#1b2f52] bg-[#0c192e]">
         <div className="panel-header">
           <div>
             <h2>Application Types Directory</h2>
@@ -283,7 +284,7 @@ export default function ApplicationTypesPage({
             Showing {filteredItems.length} of {items.length} application types
           </div>
         )}
-      </section>
+      </Card>
     </section>
   );
 }

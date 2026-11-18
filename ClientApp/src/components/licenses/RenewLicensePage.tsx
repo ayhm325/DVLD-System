@@ -306,38 +306,33 @@ export default function RenewLicensePage({
         />
       </StatsGrid>
 
-      {afterStatsSlot}
-
-      <div
-        id="panel-renew-license"
-        role={afterStatsSlot ? 'tabpanel' : undefined}
-        aria-labelledby={afterStatsSlot ? 'tab-renew-license' : undefined}
-        hidden={hideRenewPanel}
-        className={hideRenewPanel ? 'hidden' : 'space-y-6'}
-      >
-        {/* Actions Bar below the KPI cards */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {!embedded && onBack ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onBack}
-              className="h-9 gap-2 text-xs font-semibold text-white bg-[#0e1b33] hover:bg-[#142647] border border-[#263750] hover:border-blue-500/40 rounded-xl shadow-xs transition-all cursor-pointer"
-            >
-              <ArrowLeft className="size-4 text-cyan-400" />
-              <span>Back to Licenses</span>
-            </Button>
-          ) : (
-            <div />
+      {/* Unified Row below KPI cards: Tabs / Navigation on the left, Find by License ID on the right */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          {afterStatsSlot ?? (
+            !embedded &&
+            onBack && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onBack}
+                className="h-9 gap-2 text-xs font-semibold text-white bg-[#0e1b33] hover:bg-[#142647] border border-[#263750] hover:border-blue-500/40 rounded-xl shadow-xs transition-all cursor-pointer"
+              >
+                <ArrowLeft className="size-4 text-cyan-400" />
+                <span>Back to Licenses</span>
+              </Button>
+            )
           )}
+        </div>
 
+        {!hideRenewPanel && (
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={() => setIsManualSearchOpen((prev) => !prev)}
-            className="h-9 gap-2 text-xs font-semibold text-cyan-300 bg-[#0e1b33] hover:bg-[#142647] border border-[#263750] hover:border-cyan-500/40 rounded-xl shadow-xs transition-all cursor-pointer"
+            className="h-10 gap-2 text-xs font-semibold text-cyan-300 bg-[#0e1b33] hover:bg-[#142647] border border-[#263750] hover:border-cyan-500/40 rounded-xl shadow-xs transition-all cursor-pointer"
           >
             <Search className="size-3.5 text-cyan-400" />
             <span>
@@ -349,7 +344,16 @@ export default function RenewLicensePage({
               <ChevronDown className="size-3.5 text-slate-400" />
             )}
           </Button>
-        </div>
+        )}
+      </div>
+
+      <div
+        id="panel-renew-license"
+        role={afterStatsSlot ? 'tabpanel' : undefined}
+        aria-labelledby={afterStatsSlot ? 'tab-renew-license' : undefined}
+        hidden={hideRenewPanel}
+        className={hideRenewPanel ? 'hidden' : 'space-y-6'}
+      >
 
         {error && <ErrorAlert title="Renewal Notice" message={error} />}
         {licensesError && (

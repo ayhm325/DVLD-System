@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from '../ui/select'
 import { Button } from '../ui/button'
+import { Card } from '../ui/card'
 import {
   getLocalDrivingLicenseApplications,
   getLocalDrivingLicenseApplicationsSummary,
@@ -354,7 +355,7 @@ export default function LocalApplicationsPage({
         />
       </StatsGrid>
 
-      <section className="panel">
+      <Card className="panel border-[#1b2f52] bg-[#0c192e]">
         <header className="panel-header">
           <div>
             <h2>Driving License Applications</h2>
@@ -502,7 +503,7 @@ export default function LocalApplicationsPage({
             itemName="applications"
           />
         )}
-      </section>
+      </Card>
 
       {/* Application Details Modal */}
       <ApplicationDetailsModal

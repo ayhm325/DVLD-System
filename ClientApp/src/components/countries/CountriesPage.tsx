@@ -8,6 +8,7 @@ import ErrorAlert from "../common/ErrorAlert";
 import EmptyState from "../common/EmptyState";
 import DataTable, { type DataTableColumn } from "../common/DataTable";
 import { Globe as GlobeIcon } from "lucide-react";
+import { Card } from "../ui/card";
 
 type CountriesPageProps = {
   accessToken: string;
@@ -104,7 +105,7 @@ export default function CountriesPage({ accessToken }: CountriesPageProps) {
     <section className="page-content">
       <PageHero pageId="Countries" />
 
-      <section className="panel">
+      <Card className="panel border-[#1b2f52] bg-[#0c192e]">
         <div className="panel-header">
           <div>
             <h2>Countries Directory</h2>
@@ -173,7 +174,7 @@ export default function CountriesPage({ accessToken }: CountriesPageProps) {
             Showing {filteredCountries.length} of {countries.length} countries
           </div>
         )}
-      </section>
+      </Card>
     </section>
   );
 }

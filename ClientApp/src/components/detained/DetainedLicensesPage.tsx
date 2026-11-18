@@ -31,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
-import { Button } from "../ui";
+import { Button, Card } from "../ui";
 
 type Props = {
   accessToken: string;
@@ -300,7 +300,7 @@ export default function DetainedLicensesPage({
         )}
 
         {/* Content Panel with TableToolbar & DataTable */}
-        <div className="rounded-2xl border border-[#1b2f52] bg-[#0c192e] p-6 shadow-xl space-y-4">
+        <Card className="rounded-2xl border border-[#1b2f52] bg-[#0c192e] p-6 shadow-xl space-y-4">
           <TableToolbar<SearchBy>
             searchValue={search}
             onSearchChange={setSearch}
@@ -357,7 +357,7 @@ export default function DetainedLicensesPage({
               />
             }
           />
-        </div>
+        </Card>
 
         {/* Release Confirmation Modal */}
         {selectedDetentionForRelease && (

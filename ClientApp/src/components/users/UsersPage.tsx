@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { UserPlus, CheckCircle2, X } from "lucide-react";
 import PageHero from "../common/PageHero";
 import { Button } from "../ui/button";
+import { Card } from "../ui/card";
 import ErrorAlert from "../common/ErrorAlert";
 import ConfirmModal from "../common/ConfirmModal";
 import AccessDenied from "../common/AccessDenied";
@@ -351,7 +352,7 @@ export default function UsersPage({ accessToken, onNavigate }: UsersPageProps) {
       />
 
       {/* 4. Main Users Directory Panel */}
-      <section className="panel">
+      <Card className="panel border-[#1b2f52] bg-[#0c192e]">
         <div className="panel-header">
           <div>
             <h2>System Users Directory</h2>
@@ -429,7 +430,7 @@ export default function UsersPage({ accessToken, onNavigate }: UsersPageProps) {
             endRecord,
           }}
         />
-      </section>
+      </Card>
 
       {/* Modals */}
       <AddUserModal

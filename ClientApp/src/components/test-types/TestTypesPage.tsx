@@ -11,6 +11,7 @@ import TestTypeRow from "./TestTypeRow";
 import { ClipboardList as TestTypeIcon } from "lucide-react";
 import { canManageReferenceData } from "../../utils/permissions";
 import { useAuth } from "../../context/useAuth";
+import { Card } from "../ui/card";
 
 type Props = {
   accessToken: string;
@@ -162,7 +163,7 @@ export default function TestTypesPage({ accessToken, userRole }: Props) {
     <section className="page-content">
       <PageHero pageId="Test Types" />
 
-      <section className="panel">
+      <Card className="panel border-[#1b2f52] bg-[#0c192e]">
         <div className="panel-header">
           <div>
             <h2>Test Types Directory</h2>
@@ -281,7 +282,7 @@ export default function TestTypesPage({ accessToken, userRole }: Props) {
             Showing {filteredItems.length} of {items.length} test types
           </div>
         )}
-      </section>
+      </Card>
     </section>
   );
 }

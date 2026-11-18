@@ -16,6 +16,7 @@ import {
 import { computeTabStats, type TabType, type TabStats } from './appointmentStats'
 import AppointmentSummary from './AppointmentSummary'
 import TestAppointmentsTable from './TestAppointmentsTable'
+import { Card } from '../ui/card'
 
 export interface TestAppointmentsPageProps {
   accessToken: string
@@ -196,7 +197,7 @@ export default function TestAppointmentsPage({
       />
 
       {/* 3. Standard Panel Surface */}
-      <div className="panel">
+      <Card className="panel border-[#1b2f52] bg-[#0c192e]">
         <div className="panel-header">
           <div>
             <h2>Test Appointments Directory</h2>
@@ -341,7 +342,7 @@ export default function TestAppointmentsPage({
           onTakeExamination={onTakeExamination}
           onCancelAppointment={handleCancelAppointment}
         />
-      </div>
+      </Card>
 
       {/* 5. Cancellation Confirmation Dialog */}
       <ConfirmModal

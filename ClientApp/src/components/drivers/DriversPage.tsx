@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
+import { Card } from "../ui/card";
 import {
   Car as DriversIcon,
   IdCard as LicenseIcon,
@@ -344,7 +345,7 @@ export default function DriversPage({
         />
       </StatsGrid>
 
-      <div className="panel">
+      <Card className="panel border-[#1b2f52] bg-[#0c192e]">
         <div className="panel-header">
           <div>
             <h2>Driver Directory</h2>
@@ -449,7 +450,7 @@ export default function DriversPage({
             itemName="drivers"
           />
         )}
-      </div>
+      </Card>
     </section>
   );
 }

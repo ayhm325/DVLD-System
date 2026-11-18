@@ -24,6 +24,7 @@ import LoadingSpinner from '../common/LoadingSpinner'
 import ErrorAlert from '../common/ErrorAlert'
 import EmptyState from '../common/EmptyState'
 import { Button } from '../ui/button'
+import { Card } from '../ui/card'
 import { Input } from '../ui/input'
 import LocalLicenseCard from './LocalLicenseCard'
 import InternationalLicenseCard from './InternationalLicenseCard'
@@ -263,7 +264,7 @@ export default function LicenseHistoryPage({
       ) : person ? (
         <>
           {/* Person Profile Banner */}
-          <div className="rounded-2xl border border-[#1e3458] bg-[#0c1930] p-6 sm:p-7 shadow-xl">
+          <Card className="rounded-2xl border border-[#1e3458] bg-[#0c1930] p-6 sm:p-7 shadow-xl">
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
               <PersonPhoto
                 personId={person.personId}
@@ -324,7 +325,7 @@ export default function LicenseHistoryPage({
                 </div>
               </div>
             </div>
-          </div>
+          </Card>
 
           {/* Summary Statistics Grid */}
           <StatsGrid columns={4}>
@@ -362,7 +363,7 @@ export default function LicenseHistoryPage({
           </StatsGrid>
 
           {/* License Categories Panel */}
-          <div className="panel space-y-6 p-6 rounded-2xl bg-[#0a1528] border border-[#1b3154]">
+          <Card className="panel space-y-6 p-6 rounded-2xl bg-[#0c192e] border border-[#1b2f52]">
             {/* Header controls: Tabs and Search */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 border-b border-[#1b3154] pb-4">
               {/* Category tabs */}
@@ -492,7 +493,7 @@ export default function LicenseHistoryPage({
                 )}
               </div>
             )}
-          </div>
+          </Card>
         </>
       ) : null}
     </section>

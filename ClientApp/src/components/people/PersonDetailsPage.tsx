@@ -153,7 +153,7 @@ export default function PersonDetailsPage({
       ) : person ? (
         <div className="space-y-6">
           {/* Phase 2: Premium Profile Header Card */}
-          <div className="relative overflow-hidden rounded-2xl border border-[#1e3458] bg-gradient-to-br from-[#0c1a33] via-[#09152b] to-[#060e1e] p-6 shadow-xl sm:p-8">
+          <Card className="relative overflow-hidden rounded-2xl border border-[#1e3458] bg-gradient-to-br from-[#0c1a33] via-[#09152b] to-[#060e1e] p-6 shadow-xl sm:p-8">
             {/* Ambient background glows */}
             <div className="pointer-events-none absolute -left-12 -top-12 size-64 rounded-full bg-cyan-500/10 blur-3xl" />
             <div className="pointer-events-none absolute right-0 top-0 size-72 rounded-full bg-blue-500/5 blur-3xl" />
@@ -264,7 +264,7 @@ export default function PersonDetailsPage({
                 </div>
               </div>
             </div>
-          </div>
+          </Card>
 
           {/* Phase 3: Detailed Information Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

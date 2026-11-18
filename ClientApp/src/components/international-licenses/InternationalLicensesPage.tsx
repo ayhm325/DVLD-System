@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "../ui/select";
 import { Button } from "../ui/button";
+import { Card } from "../ui/card";
 import {
   Plus as PlusIcon,
   Globe as GlobeIcon,
@@ -172,7 +173,7 @@ export default function InternationalLicensesPage({
         />
       </StatsGrid>
 
-      <section className="panel">
+      <Card className="panel border-[#1b2f52] bg-[#0c192e]">
         <div className="panel-header">
           <div>
             <h2>International Licenses Directory</h2>
@@ -277,7 +278,7 @@ export default function InternationalLicensesPage({
             </span>
           </footer>
         )}
-      </section>
+      </Card>
 
       {/* International License Details Modal */}
       <LicenseDetailsModal

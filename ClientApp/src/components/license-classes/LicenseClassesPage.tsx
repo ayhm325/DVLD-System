@@ -23,6 +23,7 @@ import {
 import { IdCard as LicenseIcon } from "lucide-react";
 import { canManageReferenceData } from "../../utils/permissions";
 import { useAuth } from "../../context/useAuth";
+import { Card } from "../ui/card";
 
 type Props = {
   accessToken: string;
@@ -238,7 +239,7 @@ export default function LicenseClassesPage({ accessToken, userRole }: Props) {
     <section className="page-content">
       <PageHero pageId="License Classes" />
 
-      <section className="panel">
+      <Card className="panel border-[#1b2f52] bg-[#0c192e]">
         <div className="panel-header">
           <div>
             <h2>License Classes Directory</h2>
@@ -383,7 +384,7 @@ export default function LicenseClassesPage({ accessToken, userRole }: Props) {
             Showing {filteredItems.length} of {items.length} license classes
           </div>
         )}
-      </section>
+      </Card>
     </section>
   );
 }

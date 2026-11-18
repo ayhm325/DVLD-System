@@ -29,7 +29,7 @@ import {
   Copy,
   Lock,
 } from "lucide-react";
-import { Button } from "../ui";
+import { Button, Card } from "../ui";
 
 type LicensesPageProps = {
   accessToken: string;
@@ -233,7 +233,7 @@ export default function LicensesPage({
         />
       </StatsGrid>
 
-      <div className="panel">
+      <Card className="panel border-[#1b2f52] bg-[#0c192e]">
         <div className="panel-header">
           <div>
             <h2>License Directory</h2>
@@ -376,7 +376,7 @@ export default function LicensesPage({
             itemName="licenses"
           />
         )}
-      </div>
+      </Card>
 
       {/* License Details Modal */}
       <LicenseDetailsModal

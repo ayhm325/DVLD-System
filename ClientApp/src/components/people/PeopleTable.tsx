@@ -34,6 +34,7 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { Button } from "../ui/button";
+import { Card } from "../ui/card";
 
 export type SearchBy = "all" | "name" | "nationalNo" | "id" | "phone";
 
@@ -509,7 +510,7 @@ export default function PeopleTable({
   );
 
   return (
-    <section className="panel">
+    <Card className="panel border-[#1b2f52] bg-[#0c192e]">
       <div className="panel-header">
         <div>
           <h2>People Directory</h2>
@@ -607,6 +608,6 @@ export default function PeopleTable({
           itemName="people"
         />
       )}
-    </section>
+    </Card>
   );
 }
