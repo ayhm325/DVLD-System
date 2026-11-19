@@ -50,7 +50,8 @@ public sealed class LocalDrivingLicenseApplicationRepository : ILocalDrivingLice
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var query = Query();
+        IQueryable<LocalDrivingLicenseApplication> query =
+            _context.LocalDrivingLicenseApplications.AsNoTracking();
 
         if (!string.IsNullOrWhiteSpace(request.StatusFilter) &&
             !string.Equals(request.StatusFilter, "All", StringComparison.OrdinalIgnoreCase) &&
@@ -126,11 +127,69 @@ public sealed class LocalDrivingLicenseApplicationRepository : ILocalDrivingLice
 
         var totalCount = await query.CountAsync(cancellationToken);
 
-        var items = await query
+        var projectedItems = await query
             .OrderBy(x => x.LocalDrivingLicenseApplicationID)
             .Skip(request.Skip)
             .Take(request.PageSize)
+            .Select(x => new
+            {
+                x.LocalDrivingLicenseApplicationID,
+                x.ApplicationID,
+                x.LicenseClassID,
+                HasLicenseClass = x.LicenseClass != null,
+                ClassName = x.LicenseClass != null ? x.LicenseClass.ClassName : null,
+                ClassFees = x.LicenseClass != null ? x.LicenseClass.ClassFees : 0m,
+                HasApplication = x.Application != null,
+                PaidFees = x.Application != null ? x.Application.PaidFees : 0m,
+                ApplicationDate = x.Application != null ? x.Application.ApplicationDate : DateTime.MinValue,
+                ApplicationStatus = x.Application != null ? x.Application.ApplicationStatus : AppStatus.Cancelled,
+                HasPerson = x.Application != null && x.Application.Person != null,
+                PersonId = x.Application != null && x.Application.Person != null ? x.Application.Person.PersonId : 0,
+                NationalNo = x.Application != null && x.Application.Person != null ? x.Application.Person.NationalNo : null,
+                FirstName = x.Application != null && x.Application.Person != null ? x.Application.Person.FirstName : null,
+                SecondName = x.Application != null && x.Application.Person != null ? x.Application.Person.SecondName : null,
+                ThirdName = x.Application != null && x.Application.Person != null ? x.Application.Person.ThirdName : null,
+                LastName = x.Application != null && x.Application.Person != null ? x.Application.Person.LastName : null
+            })
             .ToListAsync(cancellationToken);
+
+        var items = projectedItems
+            .Select(p => new LocalDrivingLicenseApplication
+            {
+                LocalDrivingLicenseApplicationID = p.LocalDrivingLicenseApplicationID,
+                ApplicationID = p.ApplicationID,
+                LicenseClassID = p.LicenseClassID,
+                LicenseClass = p.HasLicenseClass
+                    ? new LicenseClass
+                    {
+                        LicenseClassID = p.LicenseClassID,
+                        ClassName = p.ClassName ?? string.Empty,
+                        ClassFees = p.ClassFees
+                    }
+                    : null!,
+                Application = p.HasApplication
+                    ? new ApplicationD
+                    {
+                        ApplicationID = p.ApplicationID,
+                        PaidFees = p.PaidFees,
+                        ApplicationDate = p.ApplicationDate,
+                        ApplicationStatus = p.ApplicationStatus,
+                        ApplicantPersonID = p.PersonId,
+                        Person = p.HasPerson
+                            ? new Person
+                            {
+                                PersonId = p.PersonId,
+                                NationalNo = p.NationalNo ?? string.Empty,
+                                FirstName = p.FirstName ?? string.Empty,
+                                SecondName = p.SecondName ?? string.Empty,
+                                ThirdName = p.ThirdName,
+                                LastName = p.LastName ?? string.Empty
+                            }
+                            : null!
+                    }
+                    : null!
+            })
+            .ToList();
 
         return new PagedResult<LocalDrivingLicenseApplication>
         {

@@ -697,4 +697,58 @@ public sealed partial class LocalDrivingLicenseApplicationRepositoryTests
         Assert.Null(result);
     }
 
+    [Fact]
+    public async Task GetAllAsync_ProjectsOnlyRequiredColumns_AndMatchesFullEntityListDtoFields()
+    {
+        var seed = await SeedLocalApplicationAsync();
+
+        var sqlCommands = new List<string>();
+        var options = new DbContextOptionsBuilder<Infrastructure.DVLDDbContext>()
+            .UseSqlServer(_database.ConnectionString)
+            .LogTo(
+                msg => sqlCommands.Add(msg),
+                [Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.CommandExecuted])
+            .Options;
+
+        await using var context = new Infrastructure.DVLDDbContext(options);
+        var repository = new LocalDrivingLicenseApplicationRepository(context);
+
+        var page = await repository.GetAllAsync(new LocalDrivingLicenseApplicationQueryRequest
+        {
+            PageNumber = 1,
+            PageSize = 10,
+            SearchQuery = seed.LocalApplicationId.ToString(),
+            SearchBy = "appid"
+        });
+
+        var fullEntity = await repository.GetByIdAsync(seed.LocalApplicationId);
+
+        Assert.NotNull(fullEntity);
+        var projected = Assert.Single(page.Items);
+        Assert.Equal(fullEntity.LocalDrivingLicenseApplicationID, projected.LocalDrivingLicenseApplicationID);
+        Assert.Equal(fullEntity.ApplicationID, projected.ApplicationID);
+        Assert.Equal(fullEntity.LicenseClassID, projected.LicenseClassID);
+        Assert.Equal(fullEntity.LicenseClass.ClassName, projected.LicenseClass.ClassName);
+        Assert.Equal(fullEntity.LicenseClass.ClassFees, projected.LicenseClass.ClassFees);
+        Assert.Equal(fullEntity.Application.PaidFees, projected.Application.PaidFees);
+        Assert.Equal(fullEntity.Application.ApplicationDate, projected.Application.ApplicationDate);
+        Assert.Equal(fullEntity.Application.ApplicationStatus, projected.Application.ApplicationStatus);
+        Assert.Equal(fullEntity.Application.Person.PersonId, projected.Application.Person.PersonId);
+        Assert.Equal(fullEntity.Application.Person.NationalNo, projected.Application.Person.NationalNo);
+        Assert.Equal(fullEntity.Application.Person.FirstName, projected.Application.Person.FirstName);
+        Assert.Equal(fullEntity.Application.Person.SecondName, projected.Application.Person.SecondName);
+        Assert.Equal(fullEntity.Application.Person.ThirdName, projected.Application.Person.ThirdName);
+        Assert.Equal(fullEntity.Application.Person.LastName, projected.Application.Person.LastName);
+
+        // Verify the GetAllAsync paged SELECT excludes unused heavy columns (first 2 commands are Count + Paged Select)
+        Assert.True(sqlCommands.Count >= 2);
+        var pagedSelectSql = sqlCommands[1];
+        Assert.DoesNotContain("[Address]", pagedSelectSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("[Phone]", pagedSelectSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("[Email]", pagedSelectSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("[ImagePath]", pagedSelectSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("[RowVersion]", pagedSelectSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("[ClassDescription]", pagedSelectSql, StringComparison.OrdinalIgnoreCase);
+    }
+
 }
