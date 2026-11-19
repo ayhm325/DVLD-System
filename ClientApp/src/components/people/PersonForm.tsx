@@ -1,19 +1,23 @@
-import { useState, useMemo } from 'react'
-import type { FormEvent, ChangeEvent } from 'react'
+import { useState, useMemo, type FormEvent, type ChangeEvent } from 'react'
 import {
   UserCheck,
   Save,
-  Upload,
-  Trash2,
   Phone as PhoneIcon,
   MapPin,
   Mail,
   ShieldCheck,
 } from 'lucide-react'
 import type { Country } from '../../types/Country'
-import { sanitizePersonName, validatePersonName } from '../../utils/nameValidation'
+import { sanitizePersonName } from '../../utils/nameValidation'
 import ErrorAlert from '../common/ErrorAlert'
-import PersonPhoto from '../common/PersonPhoto'
+import PersonPhotoField from './PersonPhotoField'
+import {
+  calculateEighteenYearsAgo,
+  calculateMinDateOfBirth,
+  resolveDefaultCountryId,
+  validatePersonForm,
+  validatePersonPhotoFile,
+} from './personFormValidation'
 import {
   Button,
   Card,
@@ -79,36 +83,6 @@ export interface PersonFormProps {
   cancelLabel?: string
 }
 
-/**
- * Calculates the maximum selectable Date of Birth, which is exactly 18 years
- * before the local current date. This also serves as the default form value.
- * Safely handles leap years (e.g. Feb 29 rolls back to Feb 28 on non-leap years)
- * and avoids UTC timezone conversion shifts.
- */
-function calculateEighteenYearsAgo(currentDate: Date = new Date()): string {
-  const targetYear = currentDate.getFullYear() - 18
-  const targetMonth = currentDate.getMonth()
-  const targetDay = currentDate.getDate()
-
-  const cutoffDate = new Date(targetYear, targetMonth, targetDay)
-  if (cutoffDate.getMonth() !== targetMonth) {
-    cutoffDate.setDate(0)
-  }
-
-  const y = cutoffDate.getFullYear()
-  const m = String(cutoffDate.getMonth() + 1).padStart(2, '0')
-  const d = String(cutoffDate.getDate()).padStart(2, '0')
-
-  return `${y}-${m}-${d}`
-}
-
-function calculateMinDateOfBirth(currentDate: Date = new Date()): string {
-  const minYear = currentDate.getFullYear() - 120
-  const m = String(currentDate.getMonth() + 1).padStart(2, '0')
-  const d = String(currentDate.getDate()).padStart(2, '0')
-  return `${minYear}-${m}-${d}`
-}
-
 export default function PersonForm({
   mode,
   initialValues,
@@ -139,16 +113,10 @@ export default function PersonForm({
   const [isPhotoRemoved, setIsPhotoRemoved] = useState(false)
 
   // Default country resolution
-  const defaultCountryId = useMemo(() => {
-    if (initialValues?.nationalityCountryID) {
-      return String(initialValues.nationalityCountryID)
-    }
-    if (countries.length > 0) {
-      const jordan = countries.find((c) => c.countryName.toLowerCase() === 'jordan')
-      return String(jordan ? jordan.countryId : countries[0].countryId)
-    }
-    return ''
-  }, [initialValues?.nationalityCountryID, countries])
+  const defaultCountryId = useMemo(
+    () => resolveDefaultCountryId(countries, initialValues?.nationalityCountryID),
+    [initialValues?.nationalityCountryID, countries],
+  )
 
   // Form field state
   const [nationalNo, setNationalNo] = useState(initialValues?.nationalNo ?? '')
@@ -186,14 +154,9 @@ export default function PersonForm({
     const file = event.target.files?.[0]
     if (!file) return
 
-    if (!file.type.startsWith('image/')) {
-      setFieldError('image', 'Please select a valid image file (JPEG, PNG, WebP).')
-      event.target.value = ''
-      return
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      setFieldError('image', 'Image size must not exceed 5 MB.')
+    const photoError = validatePersonPhotoFile(file)
+    if (photoError) {
+      setFieldError('image', photoError)
       event.target.value = ''
       return
     }
@@ -221,11 +184,6 @@ export default function PersonForm({
     setLocalPhotoPreview(null)
     setIsPhotoRemoved(true)
     clearFieldError('image')
-
-    const input = document.getElementById('person-photo-input') as HTMLInputElement | null
-    if (input) {
-      input.value = ''
-    }
   }
 
   // Field-level validation and form submission
@@ -236,140 +194,36 @@ export default function PersonForm({
     setValidationError('')
     setErrorField(null)
 
-    const trimmedNationalNo = nationalNo.trim()
-    const trimmedFirstName = firstName.trim()
-    const trimmedSecondName = secondName.trim()
-    const trimmedThirdName = thirdName.trim()
-    const trimmedLastName = lastName.trim()
-    const trimmedPhone = phone.trim()
-    const trimmedAddress = address.trim()
-    const trimmedEmail = email.trim()
+    const validation = validatePersonForm(
+      {
+        nationalNo,
+        firstName,
+        secondName,
+        thirdName,
+        lastName,
+        dateOfBirth,
+        gender,
+        nationalityCountryID: effectiveNationalityCountryID,
+        phone,
+        email,
+        address,
+      },
+      maxDateOfBirth,
+    )
 
-    // 1. National Number validation: exactly 10 numeric digits
-    if (!trimmedNationalNo) {
-      setFieldError('nationalNo', 'National Number is required.')
-      return
-    }
-    if (trimmedNationalNo.length !== 10 || !/^\d{10}$/.test(trimmedNationalNo)) {
-      setFieldError('nationalNo', 'National Number must contain exactly 10 numeric digits.')
-      return
-    }
-
-    // 2. Names validation (First, Second, Last Name required; Third Name optional)
-    const firstNameValidation = validatePersonName(firstName, 'First Name', true)
-    if (!firstNameValidation.valid) {
-      setFieldError('firstName', firstNameValidation.error!)
-      return
-    }
-
-    const secondNameValidation = validatePersonName(secondName, 'Second Name', true)
-    if (!secondNameValidation.valid) {
-      setFieldError('secondName', secondNameValidation.error!)
-      return
-    }
-
-    const thirdNameValidation = validatePersonName(thirdName, 'Third Name', false)
-    if (!thirdNameValidation.valid) {
-      setFieldError('thirdName', thirdNameValidation.error!)
-      return
-    }
-
-    const lastNameValidation = validatePersonName(lastName, 'Last Name', true)
-    if (!lastNameValidation.valid) {
-      setFieldError('lastName', lastNameValidation.error!)
-      return
-    }
-
-    // 3. Date of Birth validation: minimum 18 years, not in future
-    if (!dateOfBirth) {
-      setFieldError('dateOfBirth', 'Please select a valid Date of Birth.')
-      return
-    }
-
-    const birthDate = new Date(`${dateOfBirth}T00:00:00`)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-
-    if (birthDate > today) {
-      setFieldError('dateOfBirth', 'Date of Birth cannot be in the future.')
-      return
-    }
-
-    let age = today.getFullYear() - birthDate.getFullYear()
-    const monthDifference = today.getMonth() - birthDate.getMonth()
-    if (
-      monthDifference < 0 ||
-      (monthDifference === 0 && today.getDate() < birthDate.getDate())
-    ) {
-      age--
-    }
-
-    if (!Number.isFinite(birthDate.getTime()) || dateOfBirth > maxDateOfBirth || age < 18) {
-      setFieldError('dateOfBirth', 'The citizen must be at least 18 years old to be registered.')
-      return
-    }
-
-    // 4. Gender validation: 0 (Male) or 1 (Female)
-    if (gender !== '0' && gender !== '1') {
-      setFieldError('gender', 'Please select a valid gender.')
-      return
-    }
-
-    // 5. Nationality validation
-    const targetCountryId = effectiveNationalityCountryID
-    const countryIdNum = Number(targetCountryId)
-    if (!targetCountryId || !Number.isInteger(countryIdNum) || countryIdNum <= 0) {
-      setFieldError('nationalityCountryID', 'Please select a valid nationality country.')
-      return
-    }
-
-    // 6. Phone validation: Jordanian mobile (077/078/079 + 7 digits)
-    if (!trimmedPhone) {
-      setFieldError('phone', 'Phone number is required.')
-      return
-    }
-    if (!/^(077|078|079)\d{7}$/.test(trimmedPhone)) {
-      setFieldError(
-        'phone',
-        'Phone number must be a 10-digit Jordanian mobile number starting with 077, 078, or 079.',
-      )
-      return
-    }
-
-    // 7. Email validation (Optional, but if provided must match standard format)
-    if (trimmedEmail) {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      if (!emailRegex.test(trimmedEmail)) {
-        setFieldError('email', 'Please enter a valid email address (e.g. citizen@example.com).')
-        return
-      }
-    }
-
-    // 8. Residential Address validation
-    if (!trimmedAddress) {
-      setFieldError('address', 'Residential Address is required.')
+    if (!validation.ok) {
+      setFieldError(validation.field, validation.message)
       return
     }
 
     await onSubmit({
-      nationalNo: trimmedNationalNo,
-      firstName: trimmedFirstName,
-      secondName: trimmedSecondName,
-      thirdName: trimmedThirdName || null,
-      lastName: trimmedLastName,
-      dateOfBirth,
-      gender: Number(gender || 0),
-      nationalityCountryID: countryIdNum,
-      phone: trimmedPhone,
-      email: trimmedEmail || null,
-      address: trimmedAddress,
+      ...validation.values,
       photoFile: selectedPhotoFile,
       isPhotoRemoved,
     })
   }
 
   const activeErrorMessage = error || validationError
-  const hasPhotoToShow = Boolean(localPhotoPreview || (hasStoredPhoto && !isPhotoRemoved))
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-6">
@@ -402,68 +256,18 @@ export default function PersonForm({
           </div>
         </CardHeader>
 
-        {/* Unified Photo Upload & Preview Section */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 p-4 rounded-xl bg-[#091326] border border-[#1b2f52] mb-6">
-          <div className="shrink-0">
-            <PersonPhoto
-              personId={personId}
-              hasPhoto={hasStoredPhoto && !isPhotoRemoved}
-              photoKey={storedPhotoKey}
-              localPreviewUrl={localPhotoPreview}
-              fullName={`${firstName} ${lastName}`.trim() || 'Person'}
-              size="xl"
-              accessToken={accessToken}
-            />
-          </div>
-
-          <div className="flex-1 space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-300">Personal Photo</span>
-              <span className="text-[11px] text-slate-500 font-normal">(Optional)</span>
-            </div>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Upload an official passport-style portrait. Format: JPEG, PNG, or WebP. Maximum size: 5 MB.
-            </p>
-
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <input
-                id="person-photo-input"
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                onChange={handlePhotoChange}
-                disabled={saving}
-                className="hidden"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={saving}
-                onClick={() => {
-                  document.getElementById('person-photo-input')?.click()
-                }}
-                className="gap-2 text-xs font-semibold text-white bg-[#0e1a33] hover:bg-[#16274a] border border-[#263e68] hover:border-cyan-400/50 rounded-lg cursor-pointer"
-              >
-                <Upload className="size-3.5 text-cyan-400" />
-                <span>{hasPhotoToShow ? 'Change Photo' : 'Upload Photo'}</span>
-              </Button>
-
-              {hasPhotoToShow && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleRemovePhoto}
-                  disabled={saving}
-                  className="gap-1.5 text-xs text-rose-300 hover:text-white hover:bg-rose-950/40 cursor-pointer"
-                >
-                  <Trash2 className="size-3.5 text-rose-400" />
-                  <span>Remove</span>
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
+        <PersonPhotoField
+          personId={personId}
+          hasStoredPhoto={hasStoredPhoto}
+          storedPhotoKey={storedPhotoKey}
+          localPhotoPreview={localPhotoPreview}
+          isPhotoRemoved={isPhotoRemoved}
+          fullName={`${firstName} ${lastName}`.trim() || 'Person'}
+          accessToken={accessToken}
+          saving={saving}
+          onPhotoChange={handlePhotoChange}
+          onRemovePhoto={handleRemovePhoto}
+        />
 
         {/* Identity Grid: National No + 4 Legal Names + DOB + Gender */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
