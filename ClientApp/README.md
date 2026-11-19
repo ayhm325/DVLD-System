@@ -103,10 +103,11 @@ ClientApp/
 - **Authoritative Client Map ([`src/utils/permissions.ts`](./src/utils/permissions.ts)):** `isPagePermitted(page, role)` fails closed for unknown roles/pages; [`AppRouter.tsx`](./src/components/layout/AppRouter.tsx) renders `<AccessDenied />` for unauthorized destinations.
 - **Role Split (`Admin` vs `Staff`):**
   - `User Management` (`/users`) -> `Admin` only.
-  - `Drivers`, `Local Applications`, `Test Appointments` & sub-workflows, `Licenses`, `Renew & Replace License`, `License Detention`, `International Licenses` -> `Staff` only.
+  - `Drivers`, `Person License History`, `Local Applications`, `Test Appointments` & sub-workflows, `Licenses`, `Renew & Replace License`, `License Detention`, `International Licenses` -> `Staff` only.
+  - `People`, `Add Person`, `Edit Person`, `Person Details` -> shared `StaffOrAdmin` (no license-history navigation actions exposed on shared People views).
   - `Application Types`, `License Classes`, `Test Types` -> viewable by both, inline editing (`PUT`) restricted to `Admin` via `canManageReferenceData`.
   - `Countries` -> permanently read-only for all roles (`canManageReferenceData` returns `false`).
-- **Known RBAC Mismatch (`SEC-01` / `RSK-12`):** `PAGE_PERMISSIONS['Person License History']` permits `['Staff', 'Admin']`, whereas backend `LicensesController` and `InternationalLicensesController` enforce `[Authorize(Policy = "StaffOnly")]` (returning HTTP 403 for `Admin`). Backend `[Authorize(...)]` policies remain the sole security boundary.
+- **RBAC Alignment (`A-03` / `SEC-01` / `RSK-12`):** `PAGE_PERMISSIONS['Person License History']` is aligned to `['Staff']` (matching backend `LicensesController` and `InternationalLicensesController` `[Authorize(Policy = "StaffOnly")]`). Direct navigation to `/licenses/history` by `Admin` renders `<AccessDenied />` before `LicenseHistoryPage` mounts; `DEC-RBAC-01` (Admin read-only operational license access) remains unapproved, and backend `[Authorize(...)]` policies remain the sole security boundary.
 
 ---
 

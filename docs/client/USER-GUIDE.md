@@ -12,7 +12,7 @@
 | الدور | المهام والصفحات المتاحة في البوابة | القيود والتنبيهات المعتمدة |
 |---|---|---|
 | **موظف الكاونتر (`Staff`)** | لوحة المؤشرات (`Dashboard`)، إدارة الأشخاص (`People`)، السائقون (`Drivers`)، تاريخ رخص الشخص (`Person License History`)، طلبات الرخص المحلية (`Local Applications`)، مواعيد ونتائج الفحوصات (`Test Appointments`)، الرخص المحلية (`Licenses`)، تجديد واستبدال الرخص (`Renew & Replace License`)، حجز وتحرير الرخص (`License Detention`)، الرخص الدولية (`International Licenses`)، وعرض الإعدادات المرجعية للقراءة فقط، إضافة إلى الملف الشخصي وتغيير كلمة المرور. | لا يمكنه فتح شاشة إدارة المستخدمين (`User Management`) ولا تعديل رسوم أو إعدادات أنواع الطلبات وفئات الرخص وأنواع الفحوصات. |
-| **مسؤول النظام (`Admin`)** | لوحة المؤشرات (`Dashboard`)، إدارة المستخدمين (`User Management`)، إدارة الأشخاص (`People`)، عرض وتعديل الإعدادات (`Application Types`، `License Classes`، `Test Types`)، عرض الدول (`Countries`)، والملف الشخصي وتغيير كلمة المرور. | وفق سياسة فصل المهام (`ADR-O01` Model B)، لا ينفذ مسؤول النظام معاملات الكاونتر التشغيلية. **تنبيه تعارض صلاحيات (`SEC-01` / `RSK-12`):** تتيح قائمة الواجهة (`PAGE_PERMISSIONS`) صفحة `Person License History` لدور `Admin` أيضًا، لكن نقاط API الخلفية (`LicensesController` و`InternationalLicensesController`) مقيدة بـ `StaffOnly` وتعيد `HTTP 403 Forbidden` لمسؤول النظام. |
+| **مسؤول النظام (`Admin`)** | لوحة المؤشرات (`Dashboard`)، إدارة المستخدمين (`User Management`)، إدارة الأشخاص (`People`)، عرض وتعديل الإعدادات (`Application Types`، `License Classes`، `Test Types`)، عرض الدول (`Countries`)، والملف الشخصي وتغيير كلمة المرور. | وفق سياسة فصل المهام المعتمدة (`ADR-O01` Model B)، لا يمكن لمسؤول النظام تنفيذ معاملات الكاونتر التشغيلية أو فتح صفحات `Drivers` و`Licenses` و`Person License History`؛ وتعرض البوابة شاشة `Access Denied` عند أي محاولة انتقال مباشر إلى مسارات الكاونتر. |
 
 > **ملاحظة:** إذا حاول مستخدم فتح صفحة غير مصرح له بها، تعرض الواجهة شاشة **عدم توفر الصلاحية (`Access Denied`)** مع زر للعودة إلى لوحة المؤشرات.
 
@@ -53,7 +53,7 @@
 | `Edit Person` | `/people/edit` | مسار مرتبط (`?personId=...`) | `Admin`, `Staff` | `StaffOrAdmin` | صفحة مستقلة لتعديل بيانات الشخص وصورته |
 | `Person Details` | `/people/details` | مسار مرتبط (`?personId=...`) | `Admin`, `Staff` | `StaffOrAdmin` | صفحة تفاصيل الشخص (مع معاينة الصورة) |
 | `Drivers` | `/drivers` | Sidebar + `Ctrl+K` | `Staff` | `StaffOnly` | صفحة جدول السائقين + روابط إلى تفاصيل الشخص وتاريخ الرخص |
-| `Person License History` | `/licenses/history` | مسار مرتبط (`?personId=...` / `?driverId=...`) | `Staff`, `Admin` *(واجهة فقط)* | `StaffOnly` *(يعيد 403 لـ `Admin`)* | صفحة مستقلة تعرض الرخص المحلية والدولية للشخص |
+| `Person License History` | `/licenses/history` | مسار مرتبط (`?personId=...` / `?driverId=...`) | `Staff` | `StaffOnly` | صفحة مستقلة تعرض الرخص المحلية والدولية للشخص (مقيدة لدور `Staff` في الواجهة والخادم؛ وتعرض `Access Denied` لدور `Admin`) |
 | `Local Applications` | `/local-applications` | Sidebar + `Ctrl+K` | `Staff` | `StaffOnly` | صفحة جدول + تبديل داخلي لوضع الإنشاء (`view.mode='create'`) + نوافذ `ApplicationDetailsModal` و`IssueDrivingLicenseModal` و`LicenseDetailsModal` و`ConfirmModal` |
 | `Test Appointments` | `/test-appointments` | Sidebar + `Ctrl+K` | `Staff` | `StaffOnly` | صفحة جدول بتبويبات (`All` / `Today` / `History`) + تأكيد الإلغاء بـ `ConfirmModal` |
 | `Manage Test Appointments` | `/test-appointments/manage` | مسار مرتبط (`?localAppId=...`) | `Staff` | `StaffOnly` | صفحة مستقلة لإدارة مواعيد فحوصات طلب محلي محدد + `ConfirmModal` للإلغاء |
@@ -89,7 +89,7 @@
 
 ### 4.3 السائقون (`Drivers`) وتاريخ الرخص (`Person License History`)
 - تتيح صفحة **السائقين (`Drivers`)** لموظفي الكاونتر (`Staff`) استعراض السائقين المسجلين والانتقال إلى تفاصيل الشخص أو تاريخ الرخص.
-- تعرض صفحة **تاريخ رخص الشخص (`Person License History`)** سجل الرخص المحلية والدولية المرتبطة بالشخص، علمًا أن استدعاءاتها الخلفية مقيدة بدور `Staff` (`LicensesController` / `InternationalLicensesController`) وتعود برفض `403` إذا فتحها `Admin` عبر الواجهة.
+- تعرض صفحة **تاريخ رخص الشخص (`Person License History`)** سجل الرخص المحلية والدولية المرتبطة بالشخص لموظفي الكاونتر (`Staff`) فقط في كل من الواجهة (`PAGE_PERMISSIONS`) والخادم (`LicensesController` / `InternationalLicensesController` — `StaffOnly`)، وتُظهر شاشة `Access Denied` في حال فتح المسار مباشرة من حساب `Admin`.
 
 ### 4.4 طلبات رخص القيادة المحلية (`Local Applications`)
 - استعراض الطلبات المحلية مع الفلترة حسب الحالة والبحث.

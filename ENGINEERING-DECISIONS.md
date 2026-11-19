@@ -425,7 +425,7 @@ flowchart LR
 2. **Schema Gate 5 (`Users` Table Lockout Columns):**
    - Adding `AccessFailedCount`, `LockoutEnd`, and `LockoutEnabled` requires separate human DBA/schema approval. Zero database schema modifications or migrations are authorized.
 3. **Segregation of Duties Enforcement (`ADR-O01` / `SEC-01`):**
-   - Model B is an approved policy record. Code changes in backend controllers or frontend navigation guards remain strictly unauthorized.
+   - Model B (`ADR-O01`) remains **APPROVED POLICY**. Narrowly scoped **A-03** frontend-only route-guard and navigation alignment in `ClientApp` (`'Person License History': ['Staff']` matching existing backend `StaffOnly` policies) was explicitly authorized on `2026-11-19` and verified without altering backend authorization. Backend controller authorization changes (`StaffOnly` relaxation) and `DEC-RBAC-01` (Admin read-only inspection access to operational license records) remain `PROPOSAL (UNAPPROVED)` / **STRICTLY UNAUTHORIZED**.
 4. **Detained License Replacement Preconditions (`ADR-O02` / `DEC-POL-01`):**
    - Option A is provisionally selected for internal architecture. Code changes in `LicenseReplacementService.cs` remain strictly blocked on written confirmation from the Licensing Authority.
 5. **International Permit Domestic Detention Preconditions (`DEC-POL-02`):**
