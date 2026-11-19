@@ -14,6 +14,8 @@ public static class MiddlewareExtensions
             app.UseSwaggerUI();
         }
 
+        app.UseDvldRequestLogging();
+
         app.UseExceptionHandler();
 
         // Responses produced outside MVC (401 challenge, 403 forbidden, unmatched-route 404,

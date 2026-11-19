@@ -1,7 +1,9 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 using Application.Common.Exceptions;
 
+using DVLD.Api.Configuration;
 using DVLD.Api.Results;
 
 using Microsoft.AspNetCore.Diagnostics;
@@ -34,9 +36,10 @@ public sealed class GlobalExceptionHandler(
             context.RequestAborted.IsCancellationRequested)
         {
             _logger.LogInformation(
-                "Request {Method} {Path} was canceled by the client.",
+                "Request {Method} {Route} was canceled by the client (RequestId: {RequestId}).",
                 context.Request.Method,
-                context.Request.Path);
+                LoggingExtensions.GetSafeRoute(context),
+                context.TraceIdentifier);
 
             if (!context.Response.HasStarted)
             {
@@ -58,30 +61,34 @@ public sealed class GlobalExceptionHandler(
         {
             _logger.LogWarning(
                 exception,
-                "The client disconnected before an error response could be written for {Method} {Path}; the response was suppressed.",
+                "The client disconnected before an error response could be written for {Method} {Route} (RequestId: {RequestId}); the response was suppressed.",
                 context.Request.Method,
-                context.Request.Path);
+                LoggingExtensions.GetSafeRoute(context),
+                context.TraceIdentifier);
 
             return true;
         }
 
         var failure = Classify(exception);
+        var safeException = SanitizeExceptionForLogging(exception);
 
         if (failure.LogAsError)
         {
             _logger.LogError(
-                exception,
-                "Unhandled exception occurred while processing {Method} {Path}.",
+                safeException,
+                "Unhandled exception occurred while processing {Method} {Route} (RequestId: {RequestId}).",
                 context.Request.Method,
-                context.Request.Path);
+                LoggingExtensions.GetSafeRoute(context),
+                context.TraceIdentifier);
         }
         else
         {
             _logger.LogWarning(
-                exception,
-                "Rejected request while processing {Method} {Path}.",
+                safeException,
+                "Rejected request while processing {Method} {Route} (RequestId: {RequestId}).",
                 context.Request.Method,
-                context.Request.Path);
+                LoggingExtensions.GetSafeRoute(context),
+                context.TraceIdentifier);
         }
 
         var problemDetails = ApiProblemDetails.Create(
@@ -187,4 +194,57 @@ public sealed class GlobalExceptionHandler(
         string Detail,
         string Type,
         bool LogAsError);
+
+    private static readonly Regex KeyValueSecretRegex = new(
+        @"(?i)\b(Password|Pwd|Secret|SecretKey|ApiKey|AccessToken|RefreshToken|Token)\s*=\s*[^;\s]+",
+        RegexOptions.Compiled);
+
+    private static readonly Regex BearerTokenRegex = new(
+        @"(?i)\bBearer\s+[A-Za-z0-9\-_\.=]+",
+        RegexOptions.Compiled);
+
+    public static Exception SanitizeExceptionForLogging(Exception exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+
+        if (!ContainsSensitiveText(exception))
+        {
+            return exception;
+        }
+
+        var sanitizedMessage = ScrubText(exception.Message);
+        var innerSummary = exception.InnerException is not null
+            ? $" | Inner({exception.InnerException.GetType().Name}): {ScrubText(exception.InnerException.Message)}"
+            : string.Empty;
+
+        return new SanitizedDiagnosticException(
+            $"[{exception.GetType().Name}] {sanitizedMessage}{innerSummary}",
+            exception.StackTrace);
+    }
+
+    private static bool ContainsSensitiveText(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            if (KeyValueSecretRegex.IsMatch(current.Message) ||
+                BearerTokenRegex.IsMatch(current.Message))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string ScrubText(string text)
+    {
+        var scrubbed = KeyValueSecretRegex.Replace(text, "$1=[REDACTED]");
+        return BearerTokenRegex.Replace(scrubbed, "Bearer [REDACTED]");
+    }
+
+    private sealed class SanitizedDiagnosticException(string message, string? originalStackTrace)
+        : Exception(message)
+    {
+        public override string? StackTrace => originalStackTrace;
+    }
 }

@@ -217,6 +217,13 @@ public sealed class LicenseRenewalService(
 
                 await transaction.CommitAsync(cancellationToken);
 
+                _logger.LogInformation(
+                    "License renewal succeeded: OldLicenseId {OldLicenseId} -> NewLicenseId {NewLicenseId} (ApplicationId: {ApplicationId}, Result: {Result}).",
+                    oldLicenseId,
+                    newLicense.LicenseID,
+                    applicationId,
+                    "Succeeded");
+
                 return Result<int>.Success(newLicense.LicenseID);
             },
             IsolationLevel.Serializable,

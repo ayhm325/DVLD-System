@@ -122,11 +122,25 @@ public sealed class TestService(
                 appointment.IsLocked = true;
 
                 if (await _unitOfWork.SaveChangesAsync(cancellationToken) <= 0 || entity.TestID <= 0)
+                {
+                    _logger.LogWarning(
+                        "Test result persistence failed for appointment {AppointmentId} (Result: {Result}).",
+                        dto.TestAppointmentID,
+                        "PersistenceFailed");
+
                     return await RollbackAsync(
                         transaction,
                         Result<int>.FromFailure("Failed to save test result."));
+                }
 
                 await transaction.CommitAsync(cancellationToken);
+
+                _logger.LogInformation(
+                    "Test result {TestId} recorded for appointment {AppointmentId} (Passed: {TestResult}, Result: {Result}).",
+                    entity.TestID,
+                    dto.TestAppointmentID,
+                    dto.TestResult,
+                    "Succeeded");
 
                 return Result<int>.Success(entity.TestID);
             },

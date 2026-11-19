@@ -66,9 +66,9 @@ public sealed class AuthService(
         {
             // Deliberately identical for unknown user, inactive user, and wrong
             // password: no account enumeration, no credential material in the log.
-            _logger.LogWarning(
-                "Failed login attempt for user name {UserName}.",
-                username);
+            _logger.LogInformation(
+                "Authentication rejected during login attempt (Result: {Result}).",
+                "Unauthorized");
 
             return Result<LoginResponseDto>.FromUnauthorized(
                 "Invalid username or password.");
@@ -174,6 +174,11 @@ public sealed class AuthService(
                         await _unitOfWork.SaveChangesAsync(cancellationToken);
                         await transaction.CommitAsync(cancellationToken);
 
+                        _logger.LogWarning(
+                            "Refresh rejected and all sessions revoked because account {AccountId} is inactive or missing (Result: {Result}).",
+                            currentSession.UserId,
+                            "AccountDisabled");
+
                         return Unauthorized();
                     }
 
@@ -197,6 +202,12 @@ public sealed class AuthService(
 
                         await _unitOfWork.SaveChangesAsync(cancellationToken);
                         await transaction.CommitAsync(cancellationToken);
+
+                        _logger.LogInformation(
+                            "Refresh rejected because token family {TokenFamilyId} for account {AccountId} expired (Result: {Result}).",
+                            currentSession.TokenFamilyId,
+                            currentSession.UserId,
+                            "Expired");
 
                         return Unauthorized();
                     }
@@ -223,6 +234,12 @@ public sealed class AuthService(
                     }
 
                     await transaction.CommitAsync(cancellationToken);
+
+                    _logger.LogInformation(
+                        "Refresh-token rotation succeeded for account {AccountId} (TokenFamilyId: {TokenFamilyId}, Result: {Result}).",
+                        currentUser.UserId,
+                        newSession.TokenFamilyId,
+                        "Succeeded");
 
                     return Result<LoginResponseDto>.Success(
                         BuildResponse(currentUser, newRawToken, newSession.ExpiresAtUtc, newSession.TokenFamilyId));
@@ -399,6 +416,12 @@ public sealed class AuthService(
 
                 await _unitOfWork.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
+
+                _logger.LogInformation(
+                    "All sessions revoked and security stamp rotated for account {AccountId} (Result: {Result}).",
+                    userId,
+                    "LogoutAll");
+
                 return Result.Success();
             },
             IsolationLevel.ReadCommitted,
@@ -538,6 +561,12 @@ public sealed class AuthService(
             return Result<LoginResponseDto>.FromFailure(
                 "Failed to create the authentication session.");
         }
+
+        _logger.LogInformation(
+            "Authentication session created for account {AccountId} (TokenFamilyId: {TokenFamilyId}, Result: {Result}).",
+            user.UserId,
+            session.TokenFamilyId,
+            "Succeeded");
 
         return Result<LoginResponseDto>.Success(
             BuildResponse(user, rawToken, session.ExpiresAtUtc, session.TokenFamilyId));
