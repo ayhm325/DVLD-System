@@ -1,6 +1,11 @@
+import type {
+  KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent,
+} from 'react'
 import type { ApplicationType } from '../../types/ApplicationType'
 import { formatCurrency } from '../../utils/formatters'
 import { Input, Button } from '../ui'
+import { cn } from '@/lib/utils'
 import { Loader2 } from 'lucide-react'
 
 interface ApplicationTypeRowProps {
@@ -16,6 +21,18 @@ interface ApplicationTypeRowProps {
   onFormChange: (form: { applicationTypeTitle: string; applicationTypeFees: string }) => void
   onSave: () => void
   onCancel: () => void
+  hasContextMenu?: boolean
+  isContextMenuOpen?: boolean
+  onContextMenu?: (
+    e: ReactMouseEvent<HTMLTableRowElement>,
+    item: ApplicationType,
+    disabled?: boolean,
+  ) => void
+  onContextMenuKeyDown?: (
+    e: ReactKeyboardEvent<HTMLTableRowElement>,
+    item: ApplicationType,
+    disabled?: boolean,
+  ) => void
 }
 
 export default function ApplicationTypeRow({
@@ -28,9 +45,34 @@ export default function ApplicationTypeRow({
   onFormChange,
   onSave,
   onCancel,
+  hasContextMenu = false,
+  isContextMenuOpen = false,
+  onContextMenu,
+  onContextMenuKeyDown,
 }: ApplicationTypeRowProps) {
   return (
-    <tr className="align-top">
+    <tr
+      data-context-menu-open={isContextMenuOpen ? 'true' : undefined}
+      className={cn(
+        'align-top',
+        isContextMenuOpen && 'bg-[#1d3150]/80 ring-1 ring-inset ring-blue-400/50',
+        hasContextMenu &&
+          !isEditing &&
+          'focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-blue-300',
+      )}
+      tabIndex={hasContextMenu && !isEditing ? 0 : undefined}
+      aria-keyshortcuts={
+        hasContextMenu && !isEditing ? 'Shift+F10 ContextMenu' : undefined
+      }
+      onContextMenu={
+        onContextMenu ? (e) => onContextMenu(e, item, isEditing) : undefined
+      }
+      onKeyDown={
+        onContextMenuKeyDown
+          ? (e) => onContextMenuKeyDown(e, item, isEditing)
+          : undefined
+      }
+    >
       <td className="col-compact py-3">
         <span style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--dvld-muted)' }}>
           #{item.applicationTypeId}

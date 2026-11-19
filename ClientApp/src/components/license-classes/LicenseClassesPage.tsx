@@ -10,6 +10,13 @@ import TableToolbar from "../common/TableToolbar";
 import ErrorAlert from "../common/ErrorAlert";
 import EmptyState from "../common/EmptyState";
 import DataTableContainer from "../common/DataTableContainer";
+import DataTableRowContextMenu, {
+  type DataTableRowAction,
+} from "../common/DataTableRowContextMenu";
+import {
+  copyToClipboard,
+  useRowContextMenu,
+} from "../common/useRowContextMenu";
 import LicenseClassRow, {
   type LicenseClassEditForm,
 } from "./LicenseClassRow";
@@ -20,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
-import { IdCard as LicenseIcon } from "lucide-react";
+import { Copy, IdCard as LicenseIcon, Pencil } from "lucide-react";
 import { canManageReferenceData } from "../../utils/permissions";
 import { useAuth } from "../../context/useAuth";
 import { Card } from "../ui/card";
@@ -235,6 +242,71 @@ export default function LicenseClassesPage({ accessToken, userRole }: Props) {
     }
   }
 
+  const rowContextMenu = (): DataTableRowAction<LicenseClass>[] => {
+    const actions: DataTableRowAction<LicenseClass>[] = [];
+
+    if (canEdit) {
+      actions.push({
+        key: "edit",
+        label: "Edit License Class",
+        icon: <Pencil className="size-4" />,
+        separatorAfter: true,
+        onClick: (row) => startEditing(row),
+      });
+    }
+
+    actions.push(
+      {
+        key: "copy-name",
+        label: "Copy Class Name",
+        icon: <Copy className="size-4" />,
+        onClick: (row) => {
+          void copyToClipboard(row.licenseClassName).then((copied) => {
+            if (copied) {
+              setError("");
+              setSuccess(`Copied "${row.licenseClassName}" to clipboard.`);
+            }
+          });
+        },
+      },
+      {
+        key: "copy-fees",
+        label: "Copy Class Fee",
+        icon: <Copy className="size-4" />,
+        onClick: (row) => {
+          void copyToClipboard(String(row.licenseClassFees)).then((copied) => {
+            if (copied) {
+              setError("");
+              setSuccess(`Copied fee "${row.licenseClassFees}" to clipboard.`);
+            }
+          });
+        },
+      },
+      {
+        key: "copy-id",
+        label: "Copy Class ID",
+        icon: <Copy className="size-4" />,
+        onClick: (row) => {
+          void copyToClipboard(String(row.licenseClassId)).then((copied) => {
+            if (copied) {
+              setError("");
+              setSuccess(`Copied ID #${row.licenseClassId} to clipboard.`);
+            }
+          });
+        },
+      },
+    );
+
+    return actions;
+  };
+
+  const {
+    contextMenuState,
+    handleRowContextMenu,
+    handleRowContextMenuKeyDown,
+    handleOpenChange,
+  } = useRowContextMenu<LicenseClass>(rowContextMenu);
+
   return (
     <section className="page-content">
       <PageHero pageId="License Classes" />
@@ -357,6 +429,14 @@ export default function LicenseClassesPage({ accessToken, userRole }: Props) {
                       setEditingId(null);
                       setError("");
                     }}
+                    hasContextMenu
+                    isContextMenuOpen={
+                      contextMenuState.open &&
+                      contextMenuState.row?.licenseClassId ===
+                        item.licenseClassId
+                    }
+                    onContextMenu={handleRowContextMenu}
+                    onContextMenuKeyDown={handleRowContextMenuKeyDown}
                   />
                 ))}
 
@@ -385,6 +465,16 @@ export default function LicenseClassesPage({ accessToken, userRole }: Props) {
           </div>
         )}
       </Card>
+
+      <DataTableRowContextMenu<LicenseClass>
+        open={contextMenuState.open}
+        menuKey={contextMenuState.openKey}
+        onOpenChange={handleOpenChange}
+        position={{ x: contextMenuState.x, y: contextMenuState.y }}
+        row={contextMenuState.row}
+        actions={contextMenuState.actions}
+        restoreFocusElement={contextMenuState.restoreElement}
+      />
     </section>
   );
 }

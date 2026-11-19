@@ -7,8 +7,19 @@ import TableToolbar from "../common/TableToolbar";
 import ErrorAlert from "../common/ErrorAlert";
 import EmptyState from "../common/EmptyState";
 import DataTableContainer from "../common/DataTableContainer";
+import DataTableRowContextMenu, {
+  type DataTableRowAction,
+} from "../common/DataTableRowContextMenu";
+import {
+  copyToClipboard,
+  useRowContextMenu,
+} from "../common/useRowContextMenu";
 import TestTypeRow from "./TestTypeRow";
-import { ClipboardList as TestTypeIcon } from "lucide-react";
+import {
+  ClipboardList as TestTypeIcon,
+  Copy,
+  Pencil,
+} from "lucide-react";
 import { canManageReferenceData } from "../../utils/permissions";
 import { useAuth } from "../../context/useAuth";
 import { Card } from "../ui/card";
@@ -159,6 +170,71 @@ export default function TestTypesPage({ accessToken, userRole }: Props) {
     }
   }
 
+  const rowContextMenu = (): DataTableRowAction<TestType>[] => {
+    const actions: DataTableRowAction<TestType>[] = [];
+
+    if (canEdit) {
+      actions.push({
+        key: "edit",
+        label: "Edit Test Type",
+        icon: <Pencil className="size-4" />,
+        separatorAfter: true,
+        onClick: (row) => startEditing(row),
+      });
+    }
+
+    actions.push(
+      {
+        key: "copy-title",
+        label: "Copy Test Title",
+        icon: <Copy className="size-4" />,
+        onClick: (row) => {
+          void copyToClipboard(row.testTypeTitle).then((copied) => {
+            if (copied) {
+              setError("");
+              setSuccess(`Copied "${row.testTypeTitle}" to clipboard.`);
+            }
+          });
+        },
+      },
+      {
+        key: "copy-fees",
+        label: "Copy Test Fee",
+        icon: <Copy className="size-4" />,
+        onClick: (row) => {
+          void copyToClipboard(String(row.testTypeFees)).then((copied) => {
+            if (copied) {
+              setError("");
+              setSuccess(`Copied fee "${row.testTypeFees}" to clipboard.`);
+            }
+          });
+        },
+      },
+      {
+        key: "copy-id",
+        label: "Copy Test ID",
+        icon: <Copy className="size-4" />,
+        onClick: (row) => {
+          void copyToClipboard(String(row.testTypeId)).then((copied) => {
+            if (copied) {
+              setError("");
+              setSuccess(`Copied ID #${row.testTypeId} to clipboard.`);
+            }
+          });
+        },
+      },
+    );
+
+    return actions;
+  };
+
+  const {
+    contextMenuState,
+    handleRowContextMenu,
+    handleRowContextMenuKeyDown,
+    handleOpenChange,
+  } = useRowContextMenu<TestType>(rowContextMenu);
+
   return (
     <section className="page-content">
       <PageHero pageId="Test Types" />
@@ -255,6 +331,13 @@ export default function TestTypesPage({ accessToken, userRole }: Props) {
                       setEditingId(null);
                       setError("");
                     }}
+                    hasContextMenu
+                    isContextMenuOpen={
+                      contextMenuState.open &&
+                      contextMenuState.row?.testTypeId === item.testTypeId
+                    }
+                    onContextMenu={handleRowContextMenu}
+                    onContextMenuKeyDown={handleRowContextMenuKeyDown}
                   />
                 ))}
 
@@ -283,6 +366,16 @@ export default function TestTypesPage({ accessToken, userRole }: Props) {
           </div>
         )}
       </Card>
+
+      <DataTableRowContextMenu<TestType>
+        open={contextMenuState.open}
+        menuKey={contextMenuState.openKey}
+        onOpenChange={handleOpenChange}
+        position={{ x: contextMenuState.x, y: contextMenuState.y }}
+        row={contextMenuState.row}
+        actions={contextMenuState.actions}
+        restoreFocusElement={contextMenuState.restoreElement}
+      />
     </section>
   );
 }

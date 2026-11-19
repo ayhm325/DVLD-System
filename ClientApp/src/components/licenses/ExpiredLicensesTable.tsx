@@ -1,12 +1,16 @@
-import { useMemo } from 'react'
-import { Clock, RotateCcw, CheckCircle2, IdCard } from 'lucide-react'
+import { useCallback, useMemo } from 'react'
+import { Clock, RotateCcw, CheckCircle2, IdCard, Copy } from 'lucide-react'
 import type { License } from '../../types/License'
 import { formatDate } from '../../utils/formatters'
 import { getActiveStatusProps } from '../../utils/status'
 import { cn } from '@/lib/utils'
 import StatusBadge from '../common/StatusBadge'
 import TableToolbar, { type SearchFieldOption } from '../common/TableToolbar'
-import DataTable, { type DataTableColumn } from '../common/DataTable'
+import DataTable, {
+  type DataTableColumn,
+  type DataTableRowAction,
+} from '../common/DataTable'
+import { copyToClipboard } from '../common/useRowContextMenu'
 import PaginationControls from '../common/PaginationControls'
 import { Button, Card, CardHeader, CardTitle, CardDescription } from '../ui'
 
@@ -178,6 +182,39 @@ export default function ExpiredLicensesTable({
     [selectedLicenseId, loadingDetails, onSelectLicense],
   )
 
+  const rowContextMenu = useCallback(
+    (lic: License): DataTableRowAction<License>[] => {
+      const isSelected = selectedLicenseId === lic.licenseId
+      return [
+        {
+          key: 'select-for-renewal',
+          label: isSelected
+            ? 'Selected for Renewal'
+            : lic.isEligibleForRenewal
+              ? 'Select for Renewal'
+              : 'Not Eligible for Renewal',
+          icon: isSelected ? (
+            <CheckCircle2 className="size-4" />
+          ) : (
+            <RotateCcw className="size-4" />
+          ),
+          disabled: loadingDetails || !lic.isEligibleForRenewal,
+          separatorAfter: true,
+          onClick: (row) => onSelectLicense(row.licenseId),
+        },
+        {
+          key: 'copy-license-id',
+          label: 'Copy License ID',
+          icon: <Copy className="size-4" />,
+          onClick: (row) => {
+            void copyToClipboard(String(row.licenseId))
+          },
+        },
+      ]
+    },
+    [selectedLicenseId, loadingDetails, onSelectLicense],
+  )
+
   return (
     <Card className="border-[#1b2f52] bg-[#0c192e] text-white shadow-xl rounded-2xl overflow-hidden space-y-4">
       <CardHeader className="border-b border-[#1b2f52]/60 p-5 pb-4">
@@ -217,6 +254,7 @@ export default function ExpiredLicensesTable({
           data={expiredLicenses}
           columns={columns}
           getRowKey={(lic) => lic.licenseId}
+          rowContextMenu={rowContextMenu}
           loading={loading}
           loadingMessage="Loading expired driving licenses from DVLD server..."
           emptyMessage="No expired driving licenses found matching the selected filter."

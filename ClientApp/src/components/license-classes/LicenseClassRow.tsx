@@ -1,6 +1,11 @@
+import type {
+  KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent,
+} from 'react'
 import type { LicenseClass } from '../../types/LicenseClass'
 import { formatCurrency } from '../../utils/formatters'
 import { Input, Textarea, Button } from '../ui'
+import { cn } from '@/lib/utils'
 import { Loader2 } from 'lucide-react'
 
 export interface LicenseClassEditForm {
@@ -21,6 +26,18 @@ interface LicenseClassRowProps {
   onFormChange: (form: LicenseClassEditForm) => void
   onSave: () => void
   onCancel: () => void
+  hasContextMenu?: boolean
+  isContextMenuOpen?: boolean
+  onContextMenu?: (
+    e: ReactMouseEvent<HTMLTableRowElement>,
+    item: LicenseClass,
+    disabled?: boolean,
+  ) => void
+  onContextMenuKeyDown?: (
+    e: ReactKeyboardEvent<HTMLTableRowElement>,
+    item: LicenseClass,
+    disabled?: boolean,
+  ) => void
 }
 
 export default function LicenseClassRow({
@@ -33,9 +50,34 @@ export default function LicenseClassRow({
   onFormChange,
   onSave,
   onCancel,
+  hasContextMenu = false,
+  isContextMenuOpen = false,
+  onContextMenu,
+  onContextMenuKeyDown,
 }: LicenseClassRowProps) {
   return (
-    <tr className="align-top">
+    <tr
+      data-context-menu-open={isContextMenuOpen ? 'true' : undefined}
+      className={cn(
+        'align-top',
+        isContextMenuOpen && 'bg-[#1d3150]/80 ring-1 ring-inset ring-blue-400/50',
+        hasContextMenu &&
+          !isEditing &&
+          'focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-blue-300',
+      )}
+      tabIndex={hasContextMenu && !isEditing ? 0 : undefined}
+      aria-keyshortcuts={
+        hasContextMenu && !isEditing ? 'Shift+F10 ContextMenu' : undefined
+      }
+      onContextMenu={
+        onContextMenu ? (e) => onContextMenu(e, item, isEditing) : undefined
+      }
+      onKeyDown={
+        onContextMenuKeyDown
+          ? (e) => onContextMenuKeyDown(e, item, isEditing)
+          : undefined
+      }
+    >
       <td className="col-compact pt-3.5">
         <span style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--dvld-muted)' }}>
           #{item.licenseClassId}

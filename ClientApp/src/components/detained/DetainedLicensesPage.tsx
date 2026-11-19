@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Plus,
   Coins,
+  Copy,
 } from "lucide-react";
 import type { DetainedLicense } from "../../types/DetainedLicense";
 import { getDetainedLicenses } from "../../services/detainedLicenseService";
@@ -22,7 +23,11 @@ import TableToolbar, { type SearchFieldOption } from "../common/TableToolbar";
 import StatusBadge from "../common/StatusBadge";
 import ErrorAlert from "../common/ErrorAlert";
 import EmptyState from "../common/EmptyState";
-import DataTable, { type DataTableColumn } from "../common/DataTable";
+import DataTable, {
+  type DataTableColumn,
+  type DataTableRowAction,
+} from "../common/DataTable";
+import { copyToClipboard } from "../common/useRowContextMenu";
 import ReleaseDetainedLicenseModal from "./ReleaseDetainedLicenseModal";
 import {
   Select,
@@ -135,6 +140,49 @@ export default function DetainedLicensesPage({
     );
     return { total, active, released, totalFines };
   }, [detentions]);
+
+  const rowContextMenu = useCallback(
+    (item: DetainedLicense): DataTableRowAction<DetainedLicense>[] => [
+      {
+        key: "release",
+        label: item.isReleased
+          ? "Already Released"
+          : "Release Detained License",
+        icon: <Unlock className="size-4" />,
+        disabled: item.isReleased,
+        separatorAfter: true,
+        onClick: (detention) => {
+          if (!detention.isReleased) {
+            setSelectedDetentionForRelease(detention);
+          }
+        },
+      },
+      {
+        key: "detain-new",
+        label: "Detain New License",
+        icon: <Lock className="size-4" />,
+        separatorAfter: true,
+        onClick: () => onNavigateToDetain(),
+      },
+      {
+        key: "copy-license-id",
+        label: "Copy License ID",
+        icon: <Copy className="size-4" />,
+        onClick: (detention) => {
+          void copyToClipboard(String(detention.licenseId));
+        },
+      },
+      {
+        key: "copy-detain-id",
+        label: "Copy Detain ID",
+        icon: <Copy className="size-4" />,
+        onClick: (detention) => {
+          void copyToClipboard(String(detention.detainId));
+        },
+      },
+    ],
+    [onNavigateToDetain],
+  );
 
   const columns: DataTableColumn<DetainedLicense>[] = useMemo(
     () => [
@@ -348,6 +396,7 @@ export default function DetainedLicensesPage({
             columns={columns}
             data={filteredDetentions}
             getRowKey={(item: DetainedLicense) => item.detainId}
+            rowContextMenu={rowContextMenu}
             loading={loading}
             emptyState={
               <EmptyState

@@ -6,8 +6,12 @@ import PageHero from "../common/PageHero";
 import TableToolbar from "../common/TableToolbar";
 import ErrorAlert from "../common/ErrorAlert";
 import EmptyState from "../common/EmptyState";
-import DataTable, { type DataTableColumn } from "../common/DataTable";
-import { Globe as GlobeIcon } from "lucide-react";
+import DataTable, {
+  type DataTableColumn,
+  type DataTableRowAction,
+} from "../common/DataTable";
+import { copyToClipboard } from "../common/useRowContextMenu";
+import { Globe as GlobeIcon, Copy } from "lucide-react";
 import { Card } from "../ui/card";
 
 type CountriesPageProps = {
@@ -22,6 +26,30 @@ const SEARCH_OPTIONS: Array<{ value: SearchBy; label: string }> = [
   { value: "name", label: "Country Name" },
   { value: "id", label: "Country ID" },
 ];
+
+function getCountryRowContextMenu(): DataTableRowAction<Country>[] {
+  return [
+    {
+      key: "copy-name",
+      label: "Copy Country Name",
+      icon: <Copy className="size-4" />,
+      onClick: (country) => {
+        void copyToClipboard(country.countryName);
+      },
+    },
+    {
+      key: "copy-id",
+      label: "Copy Country ID",
+      icon: <Copy className="size-4" />,
+      onClick: (country) => {
+        void copyToClipboard(String(country.countryId));
+      },
+    },
+  ];
+}
+
+const countryRowContextMenu = (): DataTableRowAction<Country>[] =>
+  getCountryRowContextMenu();
 
 const columns: DataTableColumn<Country>[] = [
   {
@@ -153,6 +181,7 @@ export default function CountriesPage({ accessToken }: CountriesPageProps) {
             data={filteredCountries}
             columns={columns}
             getRowKey={(country) => country.countryId}
+            rowContextMenu={countryRowContextMenu}
             loading={loading}
             loadingMessage="Loading countries..."
             emptyState={

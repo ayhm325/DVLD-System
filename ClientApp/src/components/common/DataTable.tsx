@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import DataTableContainer from './DataTableContainer'
 import LoadingSpinner from './LoadingSpinner'
 import EmptyState from './EmptyState'
@@ -6,22 +6,15 @@ import ErrorAlert from './ErrorAlert'
 import DataTableRowContextMenu, {
   type DataTableRowAction,
 } from './DataTableRowContextMenu'
+import {
+  isNestedInteractiveTarget,
+  useRowContextMenu,
+} from './useRowContextMenu'
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export type { DataTableRowAction }
 export type SortDirection = 'asc' | 'desc'
-
-const ROW_INTERACTIVE_TARGET_SELECTOR =
-  'a, button, input, select, textarea, summary, [role="button"], [role="link"], [role="menuitem"], [role="checkbox"], [role="radio"], [role="switch"], [role="option"], [contenteditable]:not([contenteditable="false"]), [tabindex]:not([tabindex="-1"])'
-
-function isNestedInteractiveTarget(
-  target: HTMLElement,
-  row: HTMLTableRowElement,
-) {
-  const interactiveTarget = target.closest(ROW_INTERACTIVE_TARGET_SELECTOR)
-  return interactiveTarget !== null && interactiveTarget !== row
-}
 
 export interface DataTableColumn<T> {
   /** Unique key identifying the column */
@@ -137,104 +130,29 @@ export default function DataTable<T>({
   ariaLabel,
   rowContextMenu,
 }: DataTableProps<T>) {
-  const [contextMenuState, setContextMenuState] = useState<{
-    open: boolean
-    x: number
-    y: number
-    row: T | null
-    actions: DataTableRowAction<T>[]
-    restoreElement: HTMLElement | null
-  }>({
-    open: false,
-    x: 0,
-    y: 0,
-    row: null,
-    actions: [],
-    restoreElement: null,
-  })
+  const {
+    contextMenuState,
+    handleRowContextMenu,
+    handleRowContextMenuKeyDown,
+    handleOpenChange,
+  } = useRowContextMenu<T>(rowContextMenu)
 
   function handleRowKeyDown(
     event: React.KeyboardEvent<HTMLTableRowElement>,
     row: T,
   ) {
-    const target = event.target as HTMLElement | null
-    if (!target || isNestedInteractiveTarget(target, event.currentTarget)) return
-
-    // Explicitly detect ContextMenu key or Shift+F10
-    const isContextMenuKey =
-      event.key === 'ContextMenu' ||
-      (event.shiftKey && (event.key === 'F10' || event.code === 'F10'))
-
-    if (rowContextMenu && isContextMenuKey) {
-      const actions = rowContextMenu(row)
-      if (!actions || actions.length === 0) return
-
-      // Prevent the browser's native context-menu event from opening the menu a second time.
-      event.preventDefault()
-      event.stopPropagation()
-
-      const rect = event.currentTarget.getBoundingClientRect()
-      setContextMenuState({
-        open: true,
-        x: Math.max(0, rect.left + 16),
-        y: Math.max(0, rect.bottom + 4),
-        row,
-        actions,
-        restoreElement: event.currentTarget,
-      })
+    if (handleRowContextMenuKeyDown(event, row)) {
       return
     }
+
+    const target = event.target as HTMLElement | null
+    if (!target || isNestedInteractiveTarget(target, event.currentTarget)) return
 
     const activatesRow = event.key === 'Enter' || event.key === ' '
     if (!onRowClick || !activatesRow || event.repeat) return
 
     event.preventDefault()
     onRowClick(row)
-  }
-
-  function handleRowContextMenu(
-    event: React.MouseEvent<HTMLTableRowElement>,
-    row: T,
-  ) {
-    if (!rowContextMenu) return
-
-    // Ignore synthetic non-pointer contextmenu events (keyboard contextmenu fallback where clientX/Y are 0 and button !== 2)
-    if (event.button !== 2 && event.clientX === 0 && event.clientY === 0) {
-      event.preventDefault()
-      return
-    }
-
-    const target = event.target as HTMLElement | null
-    if (!target) return
-
-    // Preserve native context menus for controls and other focusable content in a row.
-    if (isNestedInteractiveTarget(target, event.currentTarget)) return
-
-    // Preserve native browser context menu when user has selected text in a cell
-    const selection = window.getSelection()
-    if (selection && selection.toString().trim().length > 0) {
-      return
-    }
-
-    // 3. Resolve actions for this specific row
-    const actions = rowContextMenu(row)
-    if (!actions || actions.length === 0) return
-
-    event.preventDefault()
-
-    // 4. Capture exact pointer/touch/pen coordinates
-    const x = event.clientX
-    const y = event.clientY
-
-    // 5. Update state. Pointer invocation does not capture an arbitrary activeElement for focus restoration.
-    setContextMenuState({
-      open: true,
-      x,
-      y,
-      row,
-      actions,
-      restoreElement: null,
-    })
   }
   function handleSortClick(column: DataTableColumn<T>) {
     if (!column.sortable || !onSort) return
@@ -347,13 +265,17 @@ export default function DataTable<T>({
                   : rowClassName
 
               const isClickable = Boolean(onRowClick)
+              const isContextMenuOpen =
+                contextMenuState.open && contextMenuState.row === row
 
               return (
                 <tr
                   key={rowKey}
+                  data-context-menu-open={isContextMenuOpen ? 'true' : undefined}
                   className={cn(
                     resolvedRowClass,
                     isClickable && 'cursor-pointer hover:bg-[#1d3150] transition-colors',
+                    isContextMenuOpen && 'bg-[#1d3150]/80 ring-1 ring-inset ring-blue-400/50',
                     (isClickable || rowContextMenu) &&
                       'focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-blue-300',
                   )}
@@ -414,9 +336,8 @@ export default function DataTable<T>({
       {rowContextMenu && (
         <DataTableRowContextMenu<T>
           open={contextMenuState.open}
-          onOpenChange={(open) =>
-            setContextMenuState((prev) => ({ ...prev, open }))
-          }
+          menuKey={contextMenuState.openKey}
+          onOpenChange={handleOpenChange}
           position={{ x: contextMenuState.x, y: contextMenuState.y }}
           row={contextMenuState.row}
           actions={contextMenuState.actions}

@@ -10,8 +10,19 @@ import TableToolbar from "../common/TableToolbar";
 import ErrorAlert from "../common/ErrorAlert";
 import EmptyState from "../common/EmptyState";
 import DataTableContainer from "../common/DataTableContainer";
+import DataTableRowContextMenu, {
+  type DataTableRowAction,
+} from "../common/DataTableRowContextMenu";
+import {
+  copyToClipboard,
+  useRowContextMenu,
+} from "../common/useRowContextMenu";
 import ApplicationTypeRow from "./ApplicationTypeRow";
-import { FileText as ApplicationsIcon } from "lucide-react";
+import {
+  Copy,
+  FileText as ApplicationsIcon,
+  Pencil,
+} from "lucide-react";
 import { canManageReferenceData } from "../../utils/permissions";
 import { useAuth } from "../../context/useAuth";
 import { Card } from "../ui/card";
@@ -162,6 +173,73 @@ export default function ApplicationTypesPage({
     }
   }
 
+  const rowContextMenu = (): DataTableRowAction<ApplicationType>[] => {
+    const actions: DataTableRowAction<ApplicationType>[] = [];
+
+    if (canEdit) {
+      actions.push({
+        key: "edit",
+        label: "Edit Application Type",
+        icon: <Pencil className="size-4" />,
+        separatorAfter: true,
+        onClick: (row) => startEditing(row),
+      });
+    }
+
+    actions.push(
+      {
+        key: "copy-title",
+        label: "Copy Type Name",
+        icon: <Copy className="size-4" />,
+        onClick: (row) => {
+          void copyToClipboard(row.applicationTypeTitle).then((copied) => {
+            if (copied) {
+              setError("");
+              setSuccess(
+                `Copied "${row.applicationTypeTitle}" to clipboard.`,
+              );
+            }
+          });
+        },
+      },
+      {
+        key: "copy-fees",
+        label: "Copy Application Fee",
+        icon: <Copy className="size-4" />,
+        onClick: (row) => {
+          void copyToClipboard(String(row.applicationTypeFees)).then((copied) => {
+            if (copied) {
+              setError("");
+              setSuccess(`Copied fee "${row.applicationTypeFees}" to clipboard.`);
+            }
+          });
+        },
+      },
+      {
+        key: "copy-id",
+        label: "Copy Type ID",
+        icon: <Copy className="size-4" />,
+        onClick: (row) => {
+          void copyToClipboard(String(row.applicationTypeId)).then((copied) => {
+            if (copied) {
+              setError("");
+              setSuccess(`Copied ID #${row.applicationTypeId} to clipboard.`);
+            }
+          });
+        },
+      },
+    );
+
+    return actions;
+  };
+
+  const {
+    contextMenuState,
+    handleRowContextMenu,
+    handleRowContextMenuKeyDown,
+    handleOpenChange,
+  } = useRowContextMenu<ApplicationType>(rowContextMenu);
+
   return (
     <section className="page-content">
       <PageHero pageId="Application Types" />
@@ -257,6 +335,14 @@ export default function ApplicationTypesPage({
                       setEditingId(null);
                       setError("");
                     }}
+                    hasContextMenu
+                    isContextMenuOpen={
+                      contextMenuState.open &&
+                      contextMenuState.row?.applicationTypeId ===
+                        item.applicationTypeId
+                    }
+                    onContextMenu={handleRowContextMenu}
+                    onContextMenuKeyDown={handleRowContextMenuKeyDown}
                   />
                 ))}
 
@@ -285,6 +371,16 @@ export default function ApplicationTypesPage({
           </div>
         )}
       </Card>
+
+      <DataTableRowContextMenu<ApplicationType>
+        open={contextMenuState.open}
+        menuKey={contextMenuState.openKey}
+        onOpenChange={handleOpenChange}
+        position={{ x: contextMenuState.x, y: contextMenuState.y }}
+        row={contextMenuState.row}
+        actions={contextMenuState.actions}
+        restoreFocusElement={contextMenuState.restoreElement}
+      />
     </section>
   );
 }
