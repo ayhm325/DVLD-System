@@ -217,4 +217,28 @@ public sealed class EfCoreMappingCompatibilityTests(
                 $"DROP TRIGGER IF EXISTS {triggerName}");
         }
     }
+
+    [Fact]
+    public async Task TestAppointmentRepository_LockAndGetForUpdate_EmitNo10103Warning_AndPreserveResults()
+    {
+        var warnings = new List<string>();
+        var options = new DbContextOptionsBuilder<Infrastructure.DVLDDbContext>()
+            .UseSqlServer(fixture.Database.ConnectionString)
+            .LogTo(
+                msg => warnings.Add(msg),
+                [Microsoft.EntityFrameworkCore.Diagnostics.CoreEventId.FirstWithoutOrderByAndFilterWarning])
+            .Options;
+
+        await using var context = new Infrastructure.DVLDDbContext(options);
+        var repo = new Infrastructure.Repositories.TestAppointmentRepository(context);
+
+        await using var tx = await context.Database.BeginTransactionAsync();
+        var missingLock = await repo.LockLocalApplicationForSchedulingAsync(int.MaxValue);
+        var missingAppointment = await repo.GetForUpdateAsync(int.MaxValue);
+        await tx.RollbackAsync();
+
+        Assert.False(missingLock);
+        Assert.Null(missingAppointment);
+        Assert.Empty(warnings);
+    }
 }

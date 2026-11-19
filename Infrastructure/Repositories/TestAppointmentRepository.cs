@@ -58,7 +58,7 @@ public sealed class TestAppointmentRepository(
                 WHERE TestAppointmentID = {id}
                 """)
             .Include(x => x.Test)
-            .FirstOrDefaultAsync(cancellationToken);
+            .SingleOrDefaultAsync(cancellationToken);
 
     public Task<List<TestAppointment>> GetAllAsync(CancellationToken cancellationToken = default) =>
         Query()
@@ -380,7 +380,7 @@ public sealed class TestAppointmentRepository(
             FROM LocalDrivingLicenseApplications WITH (UPDLOCK, HOLDLOCK)
             WHERE LocalDrivingLicenseApplicationID = {localAppId}
             """)
-            .FirstOrDefaultAsync(cancellationToken);
+            .SingleOrDefaultAsync(cancellationToken);
 
         return application is not null;
     }
