@@ -28,6 +28,7 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.Role)
             .HasConversion<int>()
             .HasDefaultValue(UserRole.Staff)
+            .HasSentinel((UserRole)0)
             .IsRequired();
 
         builder.Property(u => u.SecurityStamp)

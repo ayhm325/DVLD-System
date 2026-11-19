@@ -11,6 +11,10 @@ public sealed class TestAppointmentConfiguration
     public void Configure(
         EntityTypeBuilder<TestAppointment> builder)
     {
+        builder.ToTable(
+            "TestAppointments",
+            tb => tb.UseSqlOutputClause(false));
+
         builder.HasKey(x => x.TestAppointmentID);
 
         builder.Property(x => x.PaidFees)

@@ -72,9 +72,15 @@ public sealed class SqlServerApiWebApplicationFactory
     internal SqlServerTestDatabaseLease? DatabaseLeaseForTesting =>
         Volatile.Read(ref _databaseLease);
 
+    private const string TestJwtSecretKey =
+        "dvld-integration-test-only-signing-key-0123456789abcdef";
+
     protected override void ConfigureWebHost(
         IWebHostBuilder builder)
     {
+        builder.UseEnvironment("Testing");
+        builder.UseSetting("Jwt:SecretKey", TestJwtSecretKey);
+
         builder.UseSetting(
             "ConnectionStrings:DVLDConnection",
             ConnectionString);
