@@ -37,6 +37,8 @@ This document is the **sole authoritative inventory** for runtime environments, 
 |---|---|---|---|---|---|
 | **Microsoft.AspNetCore.App** | Framework Reference (`10.0`) | Implicit (`Microsoft.NET.Sdk.Web`) | `DVLD.Api` | Web API hosting, routing, middleware, controllers | Active (`.NET 10 LTS`) |
 | **Microsoft.AspNetCore.Authentication.JwtBearer** | `10.0.15` | `API/DVLD.Api/DVLD.Api.csproj` | `DVLD.Api` | JWT bearer authentication & request validation | Aligned (`10.0.15`) |
+| **Serilog.AspNetCore** | `10.0.0` | `API/DVLD.Api/DVLD.Api.csproj` | `DVLD.Api` | Structured diagnostic logging, request logging, Console & File sinks | Composition root only (`net10.0` aligned) |
+| **Serilog.Sinks.Seq** | `9.1.0` | `API/DVLD.Api/DVLD.Api.csproj` | `DVLD.Api` | Structured diagnostic-event sink for Seq | Composition root only; optional at runtime |
 | **Swashbuckle.AspNetCore** | `6.6.2` | `API/DVLD.Api/DVLD.Api.csproj` | `DVLD.Api` | OpenAPI 3.0 spec & Swagger UI (Development) | Verified compatible on `net10.0` (`ApiSmokeTests`) |
 | **Microsoft.EntityFrameworkCore.Design** | `10.0.15` | `API/DVLD.Api/DVLD.Api.csproj`, `Infrastructure/Infrastructure.csproj` | `DVLD.Api`, `Infrastructure` | EF Core design-time tooling (`PrivateAssets=all`) | Aligned (`10.0.15`) |
 | **BCrypt.Net-Next** | `4.2.0` | `Application/Application.csproj` | `Application` | Password hashing (WorkFactor = 11) | Active |
