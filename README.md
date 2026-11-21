@@ -1,9 +1,20 @@
 # DVLD — Driver & Vehicle Licensing Department System
 
-> - **Baseline Commit:** `e9e843e974af86a86003bcc364f0e7686c3faa87`
+> - **Live Demo:** [https://dvld-demo-ayhm-2026-frcwbghpadcccxaj.uaenorth-01.azurewebsites.net/](https://dvld-demo-ayhm-2026-frcwbghpadcccxaj.uaenorth-01.azurewebsites.net/)
+> - **Demo Login:** Username `ajad` · Password `12345678`
 > - **Architecture:** ASP.NET Core 10 LTS Web API (`DVLD.Api`) + SQL Server / EF Core 10 (`Infrastructure`) + React 19 SPA (`ClientApp`)
 
 DVLD is a departmental driving-license management system implementing clean Onion Architecture on .NET 10 LTS (`Domain`, `Application`, `Infrastructure`, `DVLD.Contracts`, `DVLD.Api`), automated test suites (`Test/`), and an independent TypeScript/Vite React single-page application (`ClientApp/`). This documentation reflects verified source code, configuration manifests, scripts, and local verification runs in the local repository.
+
+---
+
+## Live Demo Access
+
+You can try the deployed application immediately at:
+
+- **URL:** [https://dvld-demo-ayhm-2026-frcwbghpadcccxaj.uaenorth-01.azurewebsites.net/](https://dvld-demo-ayhm-2026-frcwbghpadcccxaj.uaenorth-01.azurewebsites.net/)
+- **Username:** `ajad`
+- **Password:** `12345678`
 
 ---
 
@@ -61,9 +72,9 @@ D:\DVLD-System\
 ├─ DVLD.Contracts/                       # Shared HTTP request/response contract DTOs
 ├─ ClientApp/                            # React 19 + TypeScript 6 + Vite 8 SPA & Vitest/Playwright tests
 ├─ Test/
-│  ├─ Application.UnitTests/             # Database-free unit tests (41 C# files)
-│  ├─ API.IntegrationTests/              # API contract, controller & workflow tests (58 C# files)
-│  ├─ Infrastructure.IntegrationTests/   # Real SQL Server repository & concurrency tests (41 C# files)
+│  ├─ Application.UnitTests/             # Database-free unit tests (46 C# files)
+│  ├─ API.IntegrationTests/              # API contract, controller & workflow tests (50 C# files)
+│  ├─ Infrastructure.IntegrationTests/   # Real SQL Server repository & concurrency tests (45 C# files)
 │  └─ Shared/                            # Shared ephemeral SQL Server safety & ownership helper
 ├─ eng/scripts/                          # Pipeline & local SQL engine init/cleanup/reporting scripts
 ├─ scripts/testing/                      # Local SQL integration environment validator (-Setup)
@@ -134,22 +145,22 @@ npm run dev
 
 ## 10. Automated Tests Inventory & Commands
 
-*(Local verification on `.NET 10.0.404` / `Node v26.13.1`: `Application.UnitTests` passed `983/983`, `API.IntegrationTests` passed `627/627`, `Infrastructure.IntegrationTests` passed `739/739` unfiltered with `Boundary5` passing `3/3` repeated isolated runs, Vitest passed `46/46` across `9` files, and Playwright passed `8/8` in both local and `CI=true` modes.)*
+*(Verified in the current local workspace on `.NET 10.0.404` / `Node v26.13.1`: `Application.UnitTests` passed `980/980`, database-free `API.IntegrationTests` passed `574/574`, and `ClientApp` Vitest passed `117/117` across `22` unit test files with `eslint` and `tsc -b && vite build` passing. SQL-backed `Infrastructure.IntegrationTests` and `API.IntegrationTests` `Auth`/`Workflows` require `DVLD_TEST_CONNECTION` and `DVLD_TEST_EXPECTED_INSTANCE`.)*
 
-- **`Application.UnitTests`** (41 files; 842 `[Fact]`, 51 `[Theory]`):
+- **`Application.UnitTests`** (46 files):
   ```powershell
   dotnet test .\Test\Application.UnitTests\Application.UnitTests.csproj -c Release
   ```
-- **`API.IntegrationTests`** (58 files; 466 `[Fact]`, 56 `[Theory]` — controller tests use mocked `ApiWebApplicationFactory`, workflow/cross-process tests require SQL env vars):
+- **`API.IntegrationTests`** (50 files — controller/smoke/security/result tests use mocked `ApiWebApplicationFactory`, workflow/cross-process tests require SQL env vars):
   ```powershell
   dotnet test .\Test\API.IntegrationTests\API.IntegrationTests.csproj -c Release --filter "FullyQualifiedName~Controllers"
   dotnet test .\Test\API.IntegrationTests\API.IntegrationTests.csproj -c Release --no-restore
   ```
-- **`Infrastructure.IntegrationTests`** (41 files; 652 `[Fact]`, 38 `[Theory]` — requires SQL env vars):
+- **`Infrastructure.IntegrationTests`** (45 files — requires SQL env vars):
   ```powershell
   dotnet test .\Test\Infrastructure.IntegrationTests\Infrastructure.IntegrationTests.csproj -c Release --no-restore
   ```
-- **`ClientApp` Frontend Tests** (**9** Vitest unit files in `ClientApp/tests/unit/` + **1** Playwright spec `ClientApp/tests/e2e/login.spec.ts` + 16 screenshots):
+- **`ClientApp` Frontend Tests** (**22** Vitest unit files in `ClientApp/tests/unit/` + **2** Playwright specs `ClientApp/tests/e2e/login.spec.ts` and `core-workflows.spec.ts`):
   ```powershell
   npm.cmd --prefix ClientApp run test
   npm.cmd --prefix ClientApp run test:e2e

@@ -1,6 +1,6 @@
 # DVLD — React Frontend (`ClientApp`)
 
-> - **Baseline Commit:** `e9e843e974af86a86003bcc364f0e7686c3faa87`
+> - **Live Demo:** [https://dvld-demo-ayhm-2026-frcwbghpadcccxaj.uaenorth-01.azurewebsites.net/](https://dvld-demo-ayhm-2026-frcwbghpadcccxaj.uaenorth-01.azurewebsites.net/) (`ajad` / `12345678`)
 > - **Directory:** `D:\DVLD-System\ClientApp`
 > - **Backend API:** ASP.NET Core 10 LTS Web API (`DVLD.Api`)
 
@@ -19,7 +19,7 @@ For repository-wide backend architecture, NuGet manifests, and governance polici
 Exact declared versions live in [`ClientApp/package.json`](./package.json) and are governed by [`TECHNOLOGY-STACK.md`](../docs/development/TECHNOLOGY-STACK.md):
 
 - **UI Runtime:** `react` `^19.3.1`, `react-dom` `^19.3.1`
-- **Language:** `typescript` `~6.0.3` (`tsconfig.app.json`: target `ES2023`, alias `@/*`, `verbatimModuleSyntax: true`, `noUnusedLocals`, `noUnusedParameters`, `erasableSyntaxOnly`; `"strict": true` is **not** set)
+- **Language:** `typescript` `~6.0.3` (`tsconfig.app.json`: target `ES2023`, alias `@/*`, `strict: true`, `verbatimModuleSyntax: true`, `noUnusedLocals`, `noUnusedParameters`, `erasableSyntaxOnly`)
 - **Bundler & CSS:** `vite` `^8.3.4`, `tailwindcss` `^4.3.3`, `@tailwindcss/vite` `^4.3.3`
 - **UI Primitives & Animation:** `@radix-ui/react-*`, `lucide-react` `^1.65.0`, `motion` `^14.9.0`, `@fontsource-variable/{fraunces,inter,jetbrains-mono}`
 - **Testing & Linting (Dev):** `vitest` `^5.1.0`, `@testing-library/react` `^16.3.3`, `@playwright/test` `^1.65.0`, `@axe-core/playwright` `^4.14.0`, `eslint` `^10.15.0`
@@ -83,9 +83,9 @@ ClientApp/
 │  └─ utils/                     # authTokenStore.ts, sessionStorage.ts, permissions.ts, formatters.ts
 └─ tests/
    ├─ setup.ts                   # Vitest global test setup
-   ├─ unit/                      # 9 Vitest unit/component test files
-   ├─ e2e/                       # 1 Playwright E2E test file (login.spec.ts)
-   └─ screenshots/               # 16 Chromium & phase1-signoff snapshot PNGs
+   ├─ unit/                      # 22 Vitest unit/component test files (117 tests)
+   ├─ e2e/                       # 2 Playwright E2E specs (login.spec.ts, core-workflows.spec.ts)
+   └─ screenshots/               # Chromium & phase1-signoff snapshot PNGs
 ```
 
 ---
@@ -116,7 +116,7 @@ ClientApp/
 - **Access Token (`src/utils/authTokenStore.ts`):** Held strictly in JavaScript memory (`currentAccessToken`). Never persisted to `localStorage` or `sessionStorage`.
 - **Refresh Token (`AuthContext.tsx`, `apiClient.ts`):** Managed via `HttpOnly`, `SameSite=Lax`, `Secure`-when-HTTPS cookie `dvld_rt` scoped to `/api/Auth`, exchanged via `POST /api/Auth/refresh` with `credentials: 'include'` and `X-CSRF-Protection: 1`.
 - **Minimal `localStorage` Usage:** `purgeLegacyTokenStorage()` (`src/utils/sessionStorage.ts`) removes legacy keys (`access_token`, `dvld_token`, `dvld_auth_session`) on startup. The **only** key stored in `localStorage` is `dvld_remembered_username` (`Login.tsx`) when "Remember me" is checked.
-- **Cross-Tab Sync & Logout Gap:** `BroadcastChannel('dvld-auth')` synchronizes `login`, `logout`, and `token-refreshed` events across browser tabs (`IMPLEMENTED`). However, `logout()` fires `void logoutSession()` best-effort without inspecting HTTP response status; if server revocation fails, reloading the browser may restore the session from the unrevoked `dvld_rt` cookie (`FE-01` / `AUTH-01` follow-up).
+- **Cross-Tab Sync & Verified Logout:** `BroadcastChannel('dvld-auth')` synchronizes `login`, `logout`, and `token-refreshed` events across browser tabs (`IMPLEMENTED`). `logoutSession()` returns a typed `LogoutResult` inspected by `AuthContext.logout()`, warning the user if server-side revocation fails while clearing local memory state immediately. `AppErrorBoundary` guards both the root application and individual lazy-loaded route groups.
 - **Two-Step `ChangePassword` Recovery (`ChangePasswordPage.tsx`):** If session establishment fails after the password change commits, form inputs are cleared and the user is signed out to re-authenticate with the new password.
 
 ---
@@ -144,20 +144,12 @@ ClientApp/
 
 ## 13. Automated Frontend Tests & Verification Status
 
-`ClientApp/tests/` contains **9 Vitest unit/component test files** and **1 Playwright E2E spec** (+ 16 reference PNGs), separated cleanly across configuration vs. execution dimensions:
+`ClientApp/tests/` contains **22 Vitest unit/component test files** (`117` passing tests) and **2 Playwright E2E specs** (`login.spec.ts` and `core-workflows.spec.ts`).
 
-| Test File | Suite Type | Packages & Config | Executed in Current Audit | Included in CI (`azure-pipelines.yml`) |
-|---|---|---|:---:|:---:|
-| `tests/unit/apiClientSession.test.ts` | Vitest Unit (`tests/unit/`) | `IMPLEMENTED` (`vitest.config.ts`) | `Passed` (`19` tests on Node `26.13.1`) | **Yes** (`Frontend_CI` + JUnit) |
-| `tests/unit/authContextStaleRefresh.test.tsx` | Vitest Unit | `IMPLEMENTED` | `Passed` (`1` test on Node `26.13.1`) | **Yes** |
-| `tests/unit/ChangePasswordPage.test.tsx` | Vitest Component | `IMPLEMENTED` | `Passed` (`4` tests on Node `26.13.1`) | **Yes** |
-| `tests/unit/DashboardPage.test.tsx` | Vitest Component | `IMPLEMENTED` | `Passed` (`3` tests on Node `26.13.1`) | **Yes** |
-| `tests/unit/designTokens.test.ts` | Vitest Unit | `IMPLEMENTED` | `Passed` (`1` test on Node `26.13.1`) | **Yes** |
-| `tests/unit/LicenseDetentionPage.test.tsx` | Vitest Component | `IMPLEMENTED` | `Passed` (`4` tests on Node `26.13.1`) | **Yes** |
-| `tests/unit/LocalApplicationsPage.test.tsx` | Vitest Component | `IMPLEMENTED` | `Passed` (`5` tests on Node `26.13.1`) | **Yes** |
-| `tests/unit/TestAppointmentsBookingFlow.test.tsx` | Vitest Component | `IMPLEMENTED` | `Passed` (`3` tests on Node `26.13.1`) | **Yes** |
-| `tests/unit/TestAppointmentsNavigation.test.tsx` | Vitest Component | `IMPLEMENTED` | `Passed` (`6` tests on Node `26.13.1`) | **Yes** |
-| `tests/e2e/login.spec.ts` | Playwright E2E (`tests/e2e/`) | `IMPLEMENTED` (`playwright.config.ts`) | `Passed` (`8/8` tests in local & `CI=true` modes) | **Yes** (`Frontend_CI` + Chromium + JUnit) |
+- `npm.cmd --prefix ClientApp run lint` (`eslint .`): `0` errors, `0` warnings.
+- `npm.cmd --prefix ClientApp run build` (`tsc -b && vite build`): passes with strict TypeScript checking and lazy-loaded `AppShell` + 7 route-group chunks.
+- `npm.cmd --prefix ClientApp run test -- --run`: `22/22` test files (`117/117` tests) pass.
+- `npm.cmd --prefix ClientApp run test:e2e`: configured in `playwright.config.ts` and `azure-pipelines.yml` (`Frontend_CI`), requires a live `DVLD.Api` + SQL Server backend.
 
 *(In [`azure-pipelines.yml`](../azure-pipelines.yml), stage `Frontend_CI` runs `npm ci`, two-tier `npm audit` [blocking `--omit=dev` gate + full report artifact], `npm run lint`, `tsc -b --pretty false`, Vitest + JUnit reporting, Playwright Chromium install + `npm run test:e2e` with `CI=true`, and `npx --no-install vite build`.)*
 
