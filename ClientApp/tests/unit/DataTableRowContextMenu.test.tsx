@@ -278,9 +278,15 @@ describe('Newly Wired Row Context Menus & Model B RBAC', () => {
       },
     ]
 
-    vi.spyOn(detainedService, 'getDetainedLicenses').mockResolvedValue(
-      mockDetentions,
-    )
+    vi.spyOn(detainedService, 'getDetainedLicensesPage').mockResolvedValue({
+      items: mockDetentions,
+      pageNumber: 1,
+      pageSize: 10,
+      totalCount: mockDetentions.length,
+      totalPages: 1,
+      hasPreviousPage: false,
+      hasNextPage: false,
+    })
     const onNavigateToDetain = vi.fn()
 
     render(

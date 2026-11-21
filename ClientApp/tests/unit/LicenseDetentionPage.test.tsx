@@ -96,8 +96,23 @@ describe("Unified License Detention Module", () => {
 
   it("renders unified PageHero, defaults to Registry tab, supports search/filter, and processes Release License", async () => {
     const getDetentionsSpy = vi
-      .spyOn(detainedService, "getDetainedLicenses")
-      .mockResolvedValue(mockDetentions);
+      .spyOn(detainedService, "getDetainedLicensesPage")
+      .mockImplementation(async (_token, _page, _size, searchQuery) => {
+        const filtered = searchQuery
+          ? mockDetentions.filter((d) =>
+              (d.fullName ?? "").toLowerCase().includes(searchQuery.toLowerCase()),
+            )
+          : mockDetentions;
+        return {
+          items: filtered,
+          pageNumber: 1,
+          pageSize: 10,
+          totalCount: filtered.length,
+          totalPages: 1,
+          hasPreviousPage: false,
+          hasNextPage: false,
+        };
+      });
     const releaseSpy = vi
       .spyOn(detainedService, "releaseDetainedLicense")
       .mockResolvedValue(undefined);
@@ -125,16 +140,20 @@ describe("Unified License Detention Module", () => {
       expect(screen.getByText("Sara Haddad")).toBeInTheDocument();
     });
 
-    // Test search filtering
+    // Test server-backed search filtering (debounced)
     const searchInput = screen.getByPlaceholderText(
       /search detained licenses/i,
     );
     fireEvent.change(searchInput, { target: { value: "Ahmad" } });
-    expect(screen.getByText("Ahmad Al-Mansoor")).toBeInTheDocument();
-    expect(screen.queryByText("Sara Haddad")).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("Ahmad Al-Mansoor")).toBeInTheDocument();
+      expect(screen.queryByText("Sara Haddad")).not.toBeInTheDocument();
+    });
 
     fireEvent.change(searchInput, { target: { value: "" } });
-    expect(screen.getByText("Sara Haddad")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("Sara Haddad")).toBeInTheDocument();
+    });
 
     // Open Release modal for active detention (#101)
     const releaseButton = screen.getByRole("button", { name: /^release$/i });
@@ -155,13 +174,21 @@ describe("Unified License Detention Module", () => {
         screen.getByText(/license released successfully/i),
       ).toBeInTheDocument();
     });
-    expect(getDetentionsSpy).toHaveBeenCalledTimes(1);
+    expect(getDetentionsSpy).toHaveBeenCalled();
   });
 
   it("switches to Detain License tab, preserves state across tab switches, supports Browser Back/Forward, and executes Detain workflow", async () => {
     const getDetentionsSpy = vi
-      .spyOn(detainedService, "getDetainedLicenses")
-      .mockResolvedValue(mockDetentions);
+      .spyOn(detainedService, "getDetainedLicensesPage")
+      .mockResolvedValue({
+        items: mockDetentions,
+        pageNumber: 1,
+        pageSize: 10,
+        totalCount: mockDetentions.length,
+        totalPages: 1,
+        hasPreviousPage: false,
+        hasNextPage: false,
+      });
     const getLicenseSpy = vi
       .spyOn(licenseService, "getLicenseDetailsById")
       .mockResolvedValue(mockEligibleLicense);
