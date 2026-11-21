@@ -66,9 +66,7 @@ public static class LicenseMapper
             IssueDate = dto.IssueDate,
             ExpirationDate = dto.ExpirationDate,
 
-            Notes = string.IsNullOrWhiteSpace(dto.Notes)
-                ? null
-                : dto.Notes.Trim(),
+            Notes = MappingHelpers.NormalizeOptional(dto.Notes),
 
             PaidFees = dto.PaidFees,
             IsActive = true,

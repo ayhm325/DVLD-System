@@ -32,10 +32,7 @@ public static class LocalDrivingLicenseApplicationMapper
                 entity.LicenseClass?.ClassFees ?? 0,
 
             FullName =
-                $"{entity.Application?.Person?.FirstName} " +
-                $"{entity.Application?.Person?.SecondName} " +
-                $"{entity.Application?.Person?.ThirdName} " +
-                $"{entity.Application?.Person?.LastName}".Trim(),
+                entity.Application?.Person?.FullName ?? string.Empty,
 
             ApplicationDate =
                 entity.Application?.ApplicationDate

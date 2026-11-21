@@ -1,8 +1,8 @@
 using Application.Common.Results;
 using Application.DTOs;
 using Application.Interfaces;
+using Application.Mappers;
 using Application.Validators;
-using Domain.Entities;
 
 namespace Application.Services;
 
@@ -31,7 +31,7 @@ public sealed class ApplicationTypeService(
                 .GetAllApplicationTypesAsync(cancellationToken);
 
         return Result<List<ApplicationTypeDto>>.Success(
-            appTypes.Select(MapToDto).ToList());
+            appTypes.Select(ApplicationTypeMapper.ToDto).ToList());
     }
 
     // =========================================================
@@ -60,7 +60,7 @@ public sealed class ApplicationTypeService(
         }
 
         return Result<ApplicationTypeDto>.Success(
-            MapToDto(appType));
+            ApplicationTypeMapper.ToDto(appType));
     }
 
     // =========================================================
@@ -116,20 +116,5 @@ public sealed class ApplicationTypeService(
             ? Result.Success()
             : Result.Failure(
                 "Failed to save application type changes.");
-    }
-
-    // =========================================================
-    // MAPPING
-    // =========================================================
-
-    private static ApplicationTypeDto MapToDto(
-        ApplicationType appType)
-    {
-        return new ApplicationTypeDto
-        {
-            ApplicationTypeId = appType.ApplicationTypeId,
-            ApplicationTypeTitle = appType.ApplicationTypeTitle,
-            ApplicationTypeFees = appType.ApplicationFees
-        };
     }
 }

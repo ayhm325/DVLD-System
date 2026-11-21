@@ -274,10 +274,22 @@ public sealed class LicenseClassServiceTests
     {
         var exception =
             Assert.Throws<ArgumentNullException>(
-                () => new LicenseClassService(null!));
+                () => new LicenseClassService(null!, _unitOfWork.Object));
 
         Assert.Equal(
             "licenseClassRepository",
+            exception.ParamName);
+    }
+
+    [Fact]
+    public void Constructor_WhenUnitOfWorkIsNull_ThrowsArgumentNullException()
+    {
+        var exception =
+            Assert.Throws<ArgumentNullException>(
+                () => new LicenseClassService(_repository.Object, null!));
+
+        Assert.Equal(
+            "unitOfWork",
             exception.ParamName);
     }
 

@@ -39,13 +39,8 @@ public static class TestMapper
         {
             TestAppointmentID = dto.TestAppointmentID,
             TestResult = dto.TestResult,
-            Notes = NormalizeNotes(dto.Notes),
+            Notes = MappingHelpers.NormalizeOptional(dto.Notes),
             CreatedByUserID = createdByUserId
         };
     }
-
-    private static string? NormalizeNotes(string? notes) =>
-        string.IsNullOrWhiteSpace(notes)
-            ? null
-            : notes.Trim();
 }

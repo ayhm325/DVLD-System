@@ -1,6 +1,7 @@
 using Application.Common.Results;
 using Application.DTOs.TestTypeDTO;
 using Application.Interfaces;
+using Application.Mappers;
 using Application.Validators;
 
 namespace Application.Services;
@@ -24,7 +25,7 @@ public sealed class TestTypeService(
 
         return Result<List<TestTypeDto>>.Success(
             testTypes
-                .Select(MapToDto)
+                .Select(TestTypeMapper.ToDto)
                 .ToList());
     }
 
@@ -48,7 +49,7 @@ public sealed class TestTypeService(
             ? Result<TestTypeDto>.FromNotFound(
                 "Test type not found.")
             : Result<TestTypeDto>.Success(
-                MapToDto(testType));
+                TestTypeMapper.ToDto(testType));
     }
 
     public async Task<Result> UpdateTestTypeAsync(
@@ -91,15 +92,4 @@ public sealed class TestTypeService(
             : Result.Failure(
                 "Failed to update test type.");
     }
-
-    private static TestTypeDto MapToDto(
-        Domain.Entities.TestType entity) =>
-        new()
-        {
-            TestTypeId = entity.TestTypeId,
-            TestTypeTitle = entity.TestTypeTitle,
-            TestTypeDescription =
-                entity.TestTypeDescription,
-            TestTypeFees = entity.TestTypeFees
-        };
 }

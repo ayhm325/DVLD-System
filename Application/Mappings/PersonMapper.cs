@@ -48,10 +48,7 @@ public static class PersonMapper
             ImagePath =
                 person.ImagePath,
 
-            RowVersion =
-                person.RowVersion != null && person.RowVersion.Length > 0
-                    ? Convert.ToBase64String(person.RowVersion)
-                    : string.Empty
+            RowVersion = MappingHelpers.EncodeRowVersion(person.RowVersion)
         };
     }
 
@@ -161,10 +158,6 @@ public static class PersonMapper
     }
 
     private static string? NormalizeOptional(
-        string? value)
-    {
-        return string.IsNullOrWhiteSpace(value)
-            ? null
-            : value.Trim();
-    }
+        string? value) =>
+        MappingHelpers.NormalizeOptional(value);
 }

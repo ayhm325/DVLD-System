@@ -9,24 +9,13 @@ public static class UserMapper
     {
         ArgumentNullException.ThrowIfNull(user);
 
-        var fullName = string.Join(
-            " ",
-            new[]
-            {
-                user.Person?.FirstName,
-                user.Person?.SecondName,
-                user.Person?.ThirdName,
-                user.Person?.LastName
-            }
-            .Where(x => !string.IsNullOrWhiteSpace(x)));
-
         return new UserDto
         {
             UserId = user.UserId,
             PersonId = user.PersonId,
             UserName = user.UserName,
             IsActive = user.IsActive,
-            FullName = fullName,
+            FullName = user.Person?.FullName ?? string.Empty,
             Role = user.Role,
             ImagePath = user.Person?.ImagePath
         };
@@ -86,9 +75,7 @@ public static class UserMapper
             NationalityCountryID = person?.NationalityCountryID ?? 0,
             CountryName = person?.Country?.CountryName,
             ImagePath = person?.ImagePath,
-            RowVersion = person?.RowVersion != null && person.RowVersion.Length > 0
-                ? Convert.ToBase64String(person.RowVersion)
-                : string.Empty
+            RowVersion = MappingHelpers.EncodeRowVersion(person?.RowVersion)
         };
     }
 }
