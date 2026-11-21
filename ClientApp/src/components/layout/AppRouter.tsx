@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import AccessDenied from "../common/AccessDenied";
+import AppErrorBoundary from "../common/AppErrorBoundary";
 import LoadingSpinner from "../common/LoadingSpinner";
 import { isPagePermitted } from "../../utils/permissions";
 import { useNavigation } from "../../context/useNavigation";
@@ -59,13 +60,18 @@ export default function AppRouter({
   const routeGroup = resolveRouteGroup(activePage);
 
   return (
-    <Suspense
-      fallback={
-        <div className="flex items-center justify-center min-h-100 w-full py-16">
-          <LoadingSpinner size="lg" />
-        </div>
-      }
+    <AppErrorBoundary
+      scope="route"
+      resetKey={activePage}
+      onBackToDashboard={() => onNavigate("Dashboard")}
     >
+      <Suspense
+        fallback={
+          <div className="flex items-center justify-center min-h-100 w-full py-16">
+            <LoadingSpinner size="lg" />
+          </div>
+        }
+      >
       {routeGroup === "dashboard" && (
         <DashboardRoutes
           accessToken={accessToken}
@@ -114,5 +120,6 @@ export default function AppRouter({
         <AccountRoutes accessToken={accessToken} activePage={activePage} />
       )}
     </Suspense>
+    </AppErrorBoundary>
   );
 }

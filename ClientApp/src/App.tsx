@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import "./App.css";
 
 import Login from "./components/auth/Login";
+import AppErrorBoundary from "./components/common/AppErrorBoundary";
 import LoadingSpinner from "./components/common/LoadingSpinner";
 import AppShell from "./components/layout/AppShell";
 
@@ -43,19 +44,25 @@ export default function App() {
   }
 
   if (!isAuthenticated || accessToken === null) {
-    return <Login />;
+    return (
+      <AppErrorBoundary scope="app">
+        <Login />
+      </AppErrorBoundary>
+    );
   }
 
   return (
-    <AppShell
-      accessToken={accessToken}
-      user={user}
-      onLogout={handleLogout}
-      statisticsRefreshKey={statisticsRefreshKey}
-      onDashboardNavigate={handleDashboardNavigate}
-      onStatisticsRefresh={handleStatisticsRefresh}
-      internationalRefreshKey={internationalRefreshKey}
-      onInternationalIssued={handleInternationalIssued}
-    />
+    <AppErrorBoundary scope="app">
+      <AppShell
+        accessToken={accessToken}
+        user={user}
+        onLogout={handleLogout}
+        statisticsRefreshKey={statisticsRefreshKey}
+        onDashboardNavigate={handleDashboardNavigate}
+        onStatisticsRefresh={handleStatisticsRefresh}
+        internationalRefreshKey={internationalRefreshKey}
+        onInternationalIssued={handleInternationalIssued}
+      />
+    </AppErrorBoundary>
   );
 }

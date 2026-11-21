@@ -1,3 +1,4 @@
+using Application.Common.Pagination;
 using Application.Common.Results;
 using Application.Common.Time;
 using Application.DTOs.ApplicationDTO;
@@ -45,6 +46,45 @@ public sealed class DetainedLicenseService(
 
         return Result<List<DetainedLicenseDto>>.Success(
             entities.Select(DetainedLicenseMapper.ToDto).ToList());
+    }
+
+    public Task<Result<PagedResult<DetainedLicenseDto>>> GetAllAsync(
+        PaginationRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (request is DetainedLicenseQueryRequest queryRequest)
+        {
+            return GetAllAsync(queryRequest, cancellationToken);
+        }
+
+        return GetAllInternalAsync(() => _repository.GetAllAsync(request, cancellationToken));
+    }
+
+    public Task<Result<PagedResult<DetainedLicenseDto>>> GetAllAsync(
+        DetainedLicenseQueryRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return GetAllInternalAsync(() => _repository.GetAllAsync(request, cancellationToken));
+    }
+
+    private async Task<Result<PagedResult<DetainedLicenseDto>>> GetAllInternalAsync(
+        Func<Task<PagedResult<Domain.Entities.DetainedLicense>>> fetcher)
+    {
+        var paged = await fetcher();
+        var items = paged.Items.Select(DetainedLicenseMapper.ToDto).ToList();
+
+        return Result<PagedResult<DetainedLicenseDto>>.Success(
+            new PagedResult<DetainedLicenseDto>
+            {
+                Items = items,
+                PageNumber = paged.PageNumber,
+                PageSize = paged.PageSize,
+                TotalCount = paged.TotalCount
+            });
     }
 
     public async Task<Result<DetainedLicenseDto>> GetByIdAsync(int id, CancellationToken cancellationToken = default)

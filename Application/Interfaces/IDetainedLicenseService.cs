@@ -1,3 +1,4 @@
+using Application.Common.Pagination;
 using Application.Common.Results;
 using Application.DTOs.DetainedLicenseDTO;
 
@@ -6,6 +7,14 @@ namespace Application.Interfaces;
 public interface IDetainedLicenseService
 {
     Task<Result<List<DetainedLicenseDto>>> GetAllAsync(CancellationToken cancellationToken = default);
+
+    Task<Result<PagedResult<DetainedLicenseDto>>> GetAllAsync(
+        PaginationRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<Result<PagedResult<DetainedLicenseDto>>> GetAllAsync(
+        DetainedLicenseQueryRequest request,
+        CancellationToken cancellationToken = default);
 
     Task<Result<DetainedLicenseDto>> GetByIdAsync(int id, CancellationToken cancellationToken = default);
 

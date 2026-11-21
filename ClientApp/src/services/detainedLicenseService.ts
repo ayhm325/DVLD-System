@@ -7,8 +7,47 @@ import type {
 
 export type { DetainedLicense, CreateDetainedLicenseRequest, ReleaseDetainedLicenseRequest }
 
+export interface DetainedLicensePageResponse {
+  items: DetainedLicense[]
+  pageNumber: number
+  pageSize: number
+  totalCount: number
+  totalPages: number
+  hasPreviousPage: boolean
+  hasNextPage: boolean
+}
+
 export function getDetainedLicenses(accessToken: string): Promise<DetainedLicense[]> {
   return apiRequest<DetainedLicense[]>('/DetainedLicenses', accessToken)
+}
+
+export function getDetainedLicensesPage(
+  accessToken: string,
+  pageNumber = 1,
+  pageSize = 10,
+  searchQuery?: string,
+  searchBy?: string,
+  statusFilter?: string,
+): Promise<DetainedLicensePageResponse> {
+  const params = new URLSearchParams({
+    pageNumber: String(pageNumber),
+    pageSize: String(pageSize),
+  })
+
+  if (searchQuery && searchQuery.trim()) {
+    params.set('searchQuery', searchQuery.trim())
+  }
+  if (searchBy && searchBy !== 'all') {
+    params.set('searchBy', searchBy)
+  }
+  if (statusFilter && statusFilter !== 'all') {
+    params.set('statusFilter', statusFilter)
+  }
+
+  return apiRequest<DetainedLicensePageResponse>(
+    `/DetainedLicenses?${params.toString()}`,
+    accessToken,
+  )
 }
 
 export function getDetainedLicenseById(

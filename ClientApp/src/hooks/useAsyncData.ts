@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 
 export interface UseAsyncDataOptions<T> {
@@ -25,22 +25,29 @@ export interface UseAsyncDataResult<T> {
   setError: Dispatch<SetStateAction<string>>
 }
 
+function isAbortError(err: unknown): boolean {
+  return (
+    (err instanceof DOMException && err.name === 'AbortError') ||
+    (err instanceof Error && err.name === 'AbortError')
+  )
+}
+
 /**
- * Reusable asynchronous data loading hook with stale-response protection,
- * cancellation guards on unmount, and manual refresh/retry capabilities.
+ * Reusable asynchronous data loading hook with AbortController cancellation,
+ * stale-response protection, and manual refresh/retry capabilities.
  */
 export function useAsyncData<T>(
-  fetcher: () => Promise<T>,
+  fetcher: (signal: AbortSignal) => Promise<T>,
   options: UseAsyncDataOptions<T> & { initialData: T },
 ): UseAsyncDataResult<T>
 
 export function useAsyncData<T>(
-  fetcher: () => Promise<T>,
+  fetcher: (signal: AbortSignal) => Promise<T>,
   options?: UseAsyncDataOptions<T>,
 ): UseAsyncDataResult<T | undefined>
 
 export function useAsyncData<T>(
-  fetcher: () => Promise<T>,
+  fetcher: (signal: AbortSignal) => Promise<T>,
   options: UseAsyncDataOptions<T> = {},
 ): UseAsyncDataResult<T | undefined> {
   const {
@@ -59,11 +66,22 @@ export function useAsyncData<T>(
   const [error, setError] = useState<string>('')
   const [refreshIndex, setRefreshIndex] = useState<number>(0)
 
+  const fetcherRef = useRef(fetcher)
+  const onSuccessRef = useRef(onSuccess)
+  const onErrorRef = useRef(onError)
+
+  useEffect(() => {
+    fetcherRef.current = fetcher
+    onSuccessRef.current = onSuccess
+    onErrorRef.current = onError
+  })
+
   useEffect(() => {
     if (!enabled) {
       return
     }
 
+    const controller = new AbortController()
     let cancelled = false
 
     async function load() {
@@ -71,20 +89,20 @@ export function useAsyncData<T>(
       setError('')
 
       try {
-        const result = await fetcher()
-        if (!cancelled) {
+        const result = await fetcherRef.current(controller.signal)
+        if (!cancelled && !controller.signal.aborted) {
           setData(result)
-          onSuccess?.(result)
+          onSuccessRef.current?.(result)
         }
       } catch (err) {
-        if (!cancelled) {
+        if (!cancelled && !controller.signal.aborted && !isAbortError(err)) {
           const message =
             err instanceof Error ? err.message : defaultErrorMessage
           setError(message)
-          onError?.(message)
+          onErrorRef.current?.(message)
         }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && !controller.signal.aborted) {
           setLoading(false)
         }
       }
@@ -94,9 +112,10 @@ export function useAsyncData<T>(
 
     return () => {
       cancelled = true
+      controller.abort()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, refreshIndex, ...dependencies])
+  }, [enabled, refreshIndex, defaultErrorMessage, ...dependencies])
 
   const refresh = useCallback(async () => {
     setRefreshIndex((prev) => prev + 1)

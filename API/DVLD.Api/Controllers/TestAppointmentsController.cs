@@ -14,8 +14,31 @@ public sealed class TestAppointmentsController(
     ITestAppointmentService service) : ControllerBase
 {
     [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken cancellationToken = default)
+    public async Task<IActionResult> GetAll(
+        [FromQuery] TestAppointmentQueryRequest? queryRequest,
+        CancellationToken cancellationToken = default)
     {
+        if (IsPagedOrFilteredRequest())
+        {
+            var pagedResult = await service.GetAllAsync(
+                queryRequest ?? new TestAppointmentQueryRequest(),
+                cancellationToken);
+            if (pagedResult.IsFailure) return pagedResult.ToActionResult(this);
+            if (pagedResult.Value is null) return StatusCode(StatusCodes.Status500InternalServerError);
+
+            var paged = pagedResult.Value;
+            return Ok(new
+            {
+                items = paged.Items.Select(MapToResponse).ToList(),
+                pageNumber = paged.PageNumber,
+                pageSize = paged.PageSize,
+                totalCount = paged.TotalCount,
+                totalPages = paged.TotalPages,
+                hasPreviousPage = paged.HasPreviousPage,
+                hasNextPage = paged.HasNextPage
+            });
+        }
+
         var result =
             await service.GetAllAsync(cancellationToken);
 
@@ -27,6 +50,16 @@ public sealed class TestAppointmentsController(
                 .Select(MapToResponse)
                 .ToList());
     }
+
+    private bool IsPagedOrFilteredRequest() =>
+        Request?.Query is not null &&
+        (Request.Query.ContainsKey("pageNumber") ||
+         Request.Query.ContainsKey("pageSize") ||
+         Request.Query.ContainsKey("searchQuery") ||
+         Request.Query.ContainsKey("testTypeId") ||
+         Request.Query.ContainsKey("statusFilter") ||
+         Request.Query.ContainsKey("tab") ||
+         Request.Query.ContainsKey("paged"));
 
     [HttpGet("{id:int}")]
     public async Task<IActionResult> GetById(int id, CancellationToken cancellationToken = default)

@@ -1,3 +1,4 @@
+using Application.Common.Pagination;
 using Application.Common.Results;
 using Application.Common.Time;
 using Application.DTOs.ApplicationDTO;
@@ -49,6 +50,45 @@ public sealed class InternationalService(
 
         return Result<List<InternationalDto>>.Success(
             entities.Select(InternationalLicenseMapper.ToDto).ToList());
+    }
+
+    public Task<Result<PagedResult<InternationalDto>>> GetAllAsync(
+        PaginationRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (request is InternationalLicenseQueryRequest queryRequest)
+        {
+            return GetAllAsync(queryRequest, cancellationToken);
+        }
+
+        return GetAllInternalAsync(() => _repository.GetAllAsync(request, cancellationToken));
+    }
+
+    public Task<Result<PagedResult<InternationalDto>>> GetAllAsync(
+        InternationalLicenseQueryRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return GetAllInternalAsync(() => _repository.GetAllAsync(request, cancellationToken));
+    }
+
+    private async Task<Result<PagedResult<InternationalDto>>> GetAllInternalAsync(
+        Func<Task<PagedResult<InternationalLicense>>> fetcher)
+    {
+        var paged = await fetcher();
+        var items = paged.Items.Select(InternationalLicenseMapper.ToDto).ToList();
+
+        return Result<PagedResult<InternationalDto>>.Success(
+            new PagedResult<InternationalDto>
+            {
+                Items = items,
+                PageNumber = paged.PageNumber,
+                PageSize = paged.PageSize,
+                TotalCount = paged.TotalCount
+            });
     }
 
     public async Task<Result<InternationalDto>> GetByIdAsync(int internationalLicenseId, CancellationToken cancellationToken = default)

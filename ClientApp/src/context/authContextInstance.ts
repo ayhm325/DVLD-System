@@ -8,7 +8,7 @@ export type AuthContextValue = {
   isLoading: boolean
   authMessage: string | null
   login: (response: LoginResponse) => void
-  logout: (reason?: string) => void
+  logout: (reason?: string) => Promise<void>
   logoutAll: () => void
   clearAuthMessage: () => void
   updateUser: (updatedUser: Partial<AuthUser>) => void

@@ -71,14 +71,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const logout = useCallback(
-    (reason?: string) => {
-      // Revoke the server session (best effort) and clear every local trace.
-      void logoutSession()
+    async (reason?: string): Promise<void> => {
+      // Initiate server revocation while the current access token is still readable,
+      // then clear local state immediately and warn if server revocation fails.
+      const logoutPromise = logoutSession()
       clearLocalState(reason ?? 'You have successfully signed out.')
       channelRef.current?.postMessage({
         type: 'logout',
         reason,
       } satisfies AuthChannelMessage)
+
+      const result = await logoutPromise
+      if (!result.ok) {
+        setAuthMessage(
+          'Signed out locally, but the server could not confirm session revocation. Please close the browser or try signing out again.',
+        )
+      }
     },
     [clearLocalState],
   )

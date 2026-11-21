@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Lock,
   Unlock,
@@ -9,13 +9,13 @@ import {
   Copy,
 } from "lucide-react";
 import type { DetainedLicense } from "../../types/DetainedLicense";
-import { getDetainedLicenses } from "../../services/detainedLicenseService";
+import { getDetainedLicensesPage } from "../../services/detainedLicenseService";
 import {
   formatDate,
   formatCurrency,
   formatNumber,
 } from "../../utils/formatters";
-import { useAsyncData, useTableFilters } from "../../hooks";
+import { useAsyncData, useDebounce, usePagination } from "../../hooks";
 import PageHero from "../common/PageHero";
 import StatsGrid from "../common/StatsGrid";
 import StatCard from "../common/StatCard";
@@ -23,6 +23,7 @@ import TableToolbar, { type SearchFieldOption } from "../common/TableToolbar";
 import StatusBadge from "../common/StatusBadge";
 import ErrorAlert from "../common/ErrorAlert";
 import EmptyState from "../common/EmptyState";
+import PaginationControls from "../common/PaginationControls";
 import DataTable, {
   type DataTableColumn,
   type DataTableRowAction,
@@ -49,10 +50,6 @@ type Props = {
 
 type SearchBy = "all" | "detainId" | "licenseId" | "nationalNo" | "fullName";
 
-interface DetainedFilters extends Record<string, unknown> {
-  statusFilter: "all" | "active" | "released";
-}
-
 const SEARCH_OPTIONS: SearchFieldOption<SearchBy>[] = [
   { value: "all", label: "All Fields" },
   { value: "detainId", label: "Detain ID" },
@@ -71,75 +68,78 @@ export default function DetainedLicensesPage({
 }: Props) {
   const [selectedDetentionForRelease, setSelectedDetentionForRelease] =
     useState<DetainedLicense | null>(null);
+  const [search, setSearch] = useState("");
+  const [searchBy, setSearchBy] = useState<SearchBy>("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "released">("all");
+  const debouncedSearch = useDebounce(search, 350);
+
+  const pagination = usePagination({ pageSize: 10 });
+  const { resetPage } = pagination;
+
+  useEffect(() => {
+    resetPage();
+  }, [debouncedSearch, searchBy, statusFilter, resetPage]);
 
   const fetcher = useCallback(
-    () => getDetainedLicenses(accessToken),
-    [accessToken],
+    () =>
+      getDetainedLicensesPage(
+        accessToken,
+        pagination.page,
+        pagination.pageSize,
+        debouncedSearch,
+        searchBy,
+        statusFilter,
+      ),
+    [
+      accessToken,
+      pagination.page,
+      pagination.pageSize,
+      debouncedSearch,
+      searchBy,
+      statusFilter,
+    ],
   );
 
   const {
-    data: detentions,
+    data: page,
     loading,
     error,
     refresh,
   } = useAsyncData(fetcher, {
     enabled: Boolean(accessToken),
-    initialData: [],
-    dependencies: [refreshTrigger],
+    dependencies: [
+      accessToken,
+      pagination.page,
+      pagination.pageSize,
+      debouncedSearch,
+      searchBy,
+      statusFilter,
+      refreshTrigger,
+    ],
     defaultErrorMessage: "Failed to load detained licenses.",
   });
 
-  const {
-    search,
-    setSearch,
-    searchField: searchBy,
-    setSearchField: setSearchBy,
-    filters,
-    setFilter,
-    filteredData: filteredDetentions,
-    isFiltered,
-    resetFilters: handleResetFilters,
-  } = useTableFilters<DetainedLicense, SearchBy, DetainedFilters>({
-    data: detentions,
-    initialSearchField: "all",
-    initialFilters: { statusFilter: "all" },
-    filterItem: (item, query, field, currentFilters) => {
-      // 1. Status Filter
-      const status = currentFilters.statusFilter;
-      if (status === "active" && item.isReleased) return false;
-      if (status === "released" && !item.isReleased) return false;
+  const detentions = useMemo(() => page?.items ?? [], [page?.items]);
+  const totalCount = page?.totalCount ?? 0;
+  const isFiltered = Boolean(search.trim() || statusFilter !== "all");
 
-      // 2. Search Query
-      if (!query) return true;
-
-      const q = query.toLowerCase();
-      if (field === "detainId") return String(item.detainId).includes(q);
-      if (field === "licenseId") return String(item.licenseId).includes(q);
-      if (field === "nationalNo")
-        return Boolean(item.nationalNo?.toLowerCase().includes(q));
-      if (field === "fullName")
-        return Boolean(item.fullName?.toLowerCase().includes(q));
-
-      return (
-        String(item.detainId).includes(q) ||
-        String(item.licenseId).includes(q) ||
-        Boolean(item.nationalNo?.toLowerCase().includes(q)) ||
-        Boolean(item.fullName?.toLowerCase().includes(q))
-      );
-    },
-  });
+  const handleResetFilters = useCallback(() => {
+    setSearch("");
+    setSearchBy("all");
+    setStatusFilter("all");
+    resetPage();
+  }, [resetPage]);
 
   // Statistics
   const stats = useMemo(() => {
-    const total = detentions.length;
     const active = detentions.filter((d) => !d.isReleased).length;
     const released = detentions.filter((d) => d.isReleased).length;
     const totalFines = detentions.reduce(
       (sum, d) => sum + (d.fineFees || 0),
       0,
     );
-    return { total, active, released, totalFines };
-  }, [detentions]);
+    return { total: totalCount, active, released, totalFines };
+  }, [detentions, totalCount]);
 
   const rowContextMenu = useCallback(
     (item: DetainedLicense): DataTableRowAction<DetainedLicense>[] => [
@@ -362,12 +362,9 @@ export default function DetainedLicensesPage({
             refreshing={loading}
             filters={
               <Select
-                value={filters.statusFilter}
+                value={statusFilter}
                 onValueChange={(val) =>
-                  setFilter(
-                    "statusFilter",
-                    val as "all" | "active" | "released",
-                  )
+                  setStatusFilter(val as "all" | "active" | "released")
                 }
               >
                 <SelectTrigger className="w-35 h-9 text-xs bg-[#081326] border-[#1b2f52] text-white">
@@ -394,7 +391,7 @@ export default function DetainedLicensesPage({
 
           <DataTable<DetainedLicense>
             columns={columns}
-            data={filteredDetentions}
+            data={detentions}
             getRowKey={(item: DetainedLicense) => item.detainId}
             rowContextMenu={rowContextMenu}
             loading={loading}
@@ -406,6 +403,22 @@ export default function DetainedLicensesPage({
               />
             }
           />
+
+          {!error && totalCount > 0 && (
+            <PaginationControls
+              pageNumber={page?.pageNumber ?? pagination.page}
+              pageSize={pagination.pageSize}
+              totalCount={totalCount}
+              totalPages={page?.totalPages ?? 1}
+              hasPreviousPage={Boolean(page?.hasPreviousPage)}
+              hasNextPage={Boolean(page?.hasNextPage)}
+              onPreviousPage={pagination.previousPage}
+              onNextPage={pagination.nextPage}
+              onPageSizeChange={pagination.setPageSize}
+              loading={loading}
+              itemName="detained licenses"
+            />
+          )}
         </Card>
 
         {/* Release Confirmation Modal */}

@@ -73,9 +73,15 @@ describe('Application-Driven Test Appointment Booking', () => {
   })
 
   it('removes global Book Test Appointment button from TestAppointmentsPage while preserving management view', async () => {
-    vi.spyOn(testAppointmentService, 'getAllAppointments').mockResolvedValue([
-      makeAppointment(),
-    ])
+    vi.spyOn(testAppointmentService, 'getAppointmentsPage').mockResolvedValue({
+      items: [makeAppointment()],
+      pageNumber: 1,
+      pageSize: 10,
+      totalCount: 1,
+      totalPages: 1,
+      hasPreviousPage: false,
+      hasNextPage: false,
+    })
 
     render(<TestAppointmentsPage accessToken="staff-token" />)
 
