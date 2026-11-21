@@ -1,19 +1,29 @@
+
 name: Build and Deploy DVLD Demo to Azure App Service
 
 on:
   push:
     branches:
       - main
+
+  pull_request:
+    branches:
+      - main
+
   workflow_dispatch:
 
+# Keep PR validation runs separate from production deployments.
+# New commits to the same PR cancel its previous validation run.
+# Production deployments are never cancelled while running.
 concurrency:
-  group: dvld-demo-production-deployment
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
-    # A manual run on the deployment branch must never deploy unmerged code.
-    if: github.ref == 'refs/heads/main'
+    # Validate pull requests and build only main for deployment.
+    # Manual runs from other branches are intentionally skipped.
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -82,7 +92,10 @@ jobs:
 
   deploy:
     needs: build
-    if: github.ref == 'refs/heads/main'
+
+    # Never deploy from a pull request or from a non-main branch.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+
     runs-on: ubuntu-latest
     permissions:
       contents: read
