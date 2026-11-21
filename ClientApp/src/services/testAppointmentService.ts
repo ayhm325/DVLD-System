@@ -19,8 +19,8 @@ export interface TestAppointmentPageResponse {
   hasNextPage: boolean
 }
 
-export function getAllAppointments(accessToken: string, signal?: AbortSignal): Promise<TestAppointment[]> {
-  return apiRequest<TestAppointment[]>('/TestAppointments', accessToken, { signal })
+export function getAllAppointments(accessToken: string): Promise<TestAppointment[]> {
+  return apiRequest<TestAppointment[]>('/TestAppointments', accessToken)
 }
 
 export function getAppointmentsPage(
@@ -31,7 +31,6 @@ export function getAppointmentsPage(
   testTypeId?: string | number,
   statusFilter?: string,
   tab?: string,
-  signal?: AbortSignal,
 ): Promise<TestAppointmentPageResponse> {
   const params = new URLSearchParams({
     pageNumber: String(pageNumber),
@@ -54,7 +53,6 @@ export function getAppointmentsPage(
   return apiRequest<TestAppointmentPageResponse>(
     `/TestAppointments?${params.toString()}`,
     accessToken,
-    { signal },
   )
 }
 

@@ -54,7 +54,7 @@ export default function TestAppointmentsPage({
   const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   // Asynchronous data fetcher using project standard hook
-  const fetcher = useCallback((signal?: AbortSignal) => {
+  const fetcher = useCallback(() => {
     return getAppointmentsPage(
       accessToken,
       pagination.page,
@@ -63,7 +63,6 @@ export default function TestAppointmentsPage({
       testTypeFilter,
       statusFilter,
       activeTab,
-      signal,
     )
   }, [
     accessToken,
@@ -96,6 +95,41 @@ export default function TestAppointmentsPage({
 
   const appointments = useMemo(() => page?.items ?? [], [page?.items])
   const totalCount = page?.totalCount ?? 0
+
+  const [tabCounts, setTabCounts] = useState<{ all?: number; today?: number; history?: number }>({})
+
+  const loadTabCounts = useCallback(async () => {
+    if (!accessToken) return
+    try {
+      const [allPage, todayPage, historyPage] = await Promise.all([
+        getAppointmentsPage(accessToken, 1, 1, undefined, undefined, undefined, 'all'),
+        getAppointmentsPage(accessToken, 1, 1, undefined, undefined, undefined, 'today'),
+        getAppointmentsPage(accessToken, 1, 1, undefined, undefined, undefined, 'history'),
+      ])
+      setTabCounts({
+        all: allPage.totalCount,
+        today: todayPage.totalCount,
+        history: historyPage.totalCount,
+      })
+    } catch {
+      // Non-blocking: active tab count still updates from `page.totalCount`
+    }
+  }, [accessToken])
+
+  useEffect(() => {
+    void loadTabCounts()
+  }, [loadTabCounts])
+
+  useEffect(() => {
+    if (
+      page &&
+      !debouncedSearch.trim() &&
+      testTypeFilter === 'all' &&
+      statusFilter === 'all'
+    ) {
+      setTabCounts((prev) => ({ ...prev, [activeTab]: page.totalCount }))
+    }
+  }, [page, activeTab, debouncedSearch, testTypeFilter, statusFilter])
 
   // Current Jordan facility date string (YYYY-MM-DD)
   const todayJordanStr = useMemo(() => getJordanDateString(new Date(), 0), [])
@@ -193,7 +227,7 @@ export default function TestAppointmentsPage({
                   activeTab === 'all' ? 'bg-black/30 text-white' : 'bg-[#1b2f52] text-cyan-300'
                 }`}
               >
-                {activeTab === 'all' ? totalCount : '—'}
+                {tabCounts.all ?? (activeTab === 'all' ? totalCount : 0)}
               </span>
             </button>
 
@@ -217,7 +251,7 @@ export default function TestAppointmentsPage({
                   activeTab === 'today' ? 'bg-black/30 text-white' : 'bg-[#1b2f52] text-cyan-300'
                 }`}
               >
-                {activeTab === 'today' ? totalCount : '—'}
+                {tabCounts.today ?? (activeTab === 'today' ? totalCount : 0)}
               </span>
             </button>
 
@@ -241,7 +275,7 @@ export default function TestAppointmentsPage({
                   activeTab === 'history' ? 'bg-black/30 text-white' : 'bg-[#1b2f52] text-cyan-300'
                 }`}
               >
-                {activeTab === 'history' ? totalCount : '—'}
+                {tabCounts.history ?? (activeTab === 'history' ? totalCount : 0)}
               </span>
             </button>
           </div>

@@ -69,7 +69,7 @@ export default function InternationalLicensesPage({
   }, [debouncedSearch, filter, status, resetPage]);
 
   const fetcher = useCallback(
-    (signal?: AbortSignal) =>
+    () =>
       getInternationalLicensesPage(
         accessToken,
         pagination.page,
@@ -77,7 +77,6 @@ export default function InternationalLicensesPage({
         debouncedSearch,
         filter,
         status,
-        signal,
       ),
     [
       accessToken,

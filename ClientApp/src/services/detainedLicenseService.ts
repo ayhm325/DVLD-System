@@ -17,8 +17,8 @@ export interface DetainedLicensePageResponse {
   hasNextPage: boolean
 }
 
-export function getDetainedLicenses(accessToken: string, signal?: AbortSignal): Promise<DetainedLicense[]> {
-  return apiRequest<DetainedLicense[]>('/DetainedLicenses', accessToken, { signal })
+export function getDetainedLicenses(accessToken: string): Promise<DetainedLicense[]> {
+  return apiRequest<DetainedLicense[]>('/DetainedLicenses', accessToken)
 }
 
 export function getDetainedLicensesPage(
@@ -28,7 +28,6 @@ export function getDetainedLicensesPage(
   searchQuery?: string,
   searchBy?: string,
   statusFilter?: string,
-  signal?: AbortSignal,
 ): Promise<DetainedLicensePageResponse> {
   const params = new URLSearchParams({
     pageNumber: String(pageNumber),
@@ -48,7 +47,6 @@ export function getDetainedLicensesPage(
   return apiRequest<DetainedLicensePageResponse>(
     `/DetainedLicenses?${params.toString()}`,
     accessToken,
-    { signal },
   )
 }
 

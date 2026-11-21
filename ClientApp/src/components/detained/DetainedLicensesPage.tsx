@@ -81,7 +81,7 @@ export default function DetainedLicensesPage({
   }, [debouncedSearch, searchBy, statusFilter, resetPage]);
 
   const fetcher = useCallback(
-    (signal?: AbortSignal) =>
+    () =>
       getDetainedLicensesPage(
         accessToken,
         pagination.page,
@@ -89,7 +89,6 @@ export default function DetainedLicensesPage({
         debouncedSearch,
         searchBy,
         statusFilter,
-        signal,
       ),
     [
       accessToken,

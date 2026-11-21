@@ -51,7 +51,7 @@ describe("Unified Pagination across Detained, International, and TestAppointment
     fireEvent.click(nextBtn);
 
     await screen.findByText("Page Two Driver");
-    expect(spy).toHaveBeenCalledWith("tok", 2, 10, "", "all", "all", expect.any(AbortSignal));
+    expect(spy).toHaveBeenCalledWith("tok", 2, 10, "", "all", "all");
   });
 
   it("InternationalLicensesPage renders PaginationControls and navigates to page 2", async () => {
@@ -85,7 +85,7 @@ describe("Unified Pagination across Detained, International, and TestAppointment
     fireEvent.click(nextBtn);
 
     await screen.findByText("#2002");
-    expect(spy).toHaveBeenCalledWith("tok", 2, 10, "", "all", "All", expect.any(AbortSignal));
+    expect(spy).toHaveBeenCalledWith("tok", 2, 10, "", "all", "All");
   });
 
   it("TestAppointmentsPage passes active tab and navigates to page 2", async () => {
@@ -124,11 +124,11 @@ describe("Unified Pagination across Detained, International, and TestAppointment
     fireEvent.click(screen.getByRole("button", { name: /next page/i }));
 
     await screen.findAllByText("Applicant P2");
-    expect(spy).toHaveBeenCalledWith("tok", 2, 10, "", "all", "all", "all", expect.any(AbortSignal));
+    expect(spy).toHaveBeenCalledWith("tok", 2, 10, "", "all", "all", "all");
 
     fireEvent.click(screen.getByRole("button", { name: /today/i }));
     await waitFor(() => {
-      expect(spy).toHaveBeenCalledWith("tok", 1, 10, "", "all", "all", "today", expect.any(AbortSignal));
+      expect(spy).toHaveBeenCalledWith("tok", 1, 10, "", "all", "all", "today");
     });
   });
 });

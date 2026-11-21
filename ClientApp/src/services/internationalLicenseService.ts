@@ -18,9 +18,8 @@ export interface InternationalLicensePageResponse {
 
 export const getInternationalLicenses = (
   token: string,
-  signal?: AbortSignal,
 ): Promise<InternationalLicense[]> =>
-  apiRequest<InternationalLicense[]>('/InternationalLicenses', token, { signal })
+  apiRequest<InternationalLicense[]>('/InternationalLicenses', token)
 
 export const getInternationalLicensesPage = (
   token: string,
@@ -29,7 +28,6 @@ export const getInternationalLicensesPage = (
   searchQuery?: string,
   searchBy?: string,
   statusFilter?: string,
-  signal?: AbortSignal,
 ): Promise<InternationalLicensePageResponse> => {
   const params = new URLSearchParams({
     pageNumber: String(pageNumber),
@@ -49,7 +47,6 @@ export const getInternationalLicensesPage = (
   return apiRequest<InternationalLicensePageResponse>(
     `/InternationalLicenses?${params.toString()}`,
     token,
-    { signal },
   )
 }
 
