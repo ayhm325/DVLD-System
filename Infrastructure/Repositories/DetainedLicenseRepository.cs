@@ -1,3 +1,5 @@
+using Application.Common.Pagination;
+using Application.DTOs.DetainedLicenseDTO;
 using Application.Interfaces;
 using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -23,7 +25,126 @@ public sealed class DetainedLicenseRepository(
         Query()
             .AsNoTracking()
             .OrderByDescending(d => d.DetainDate)
+            .ThenByDescending(d => d.DetainID)
             .ToListAsync(cancellationToken);
+
+    public Task<PagedResult<DetainedLicense>> GetAllAsync(
+        PaginationRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (request is DetainedLicenseQueryRequest queryRequest)
+        {
+            return GetAllAsync(queryRequest, cancellationToken);
+        }
+
+        return GetAllAsync(new DetainedLicenseQueryRequest
+        {
+            PageNumber = request.PageNumber,
+            PageSize = request.PageSize
+        }, cancellationToken);
+    }
+
+    public async Task<PagedResult<DetainedLicense>> GetAllAsync(
+        DetainedLicenseQueryRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var query = Query().AsNoTracking();
+
+        if (!string.IsNullOrWhiteSpace(request.StatusFilter))
+        {
+            var status = request.StatusFilter.Trim().ToLowerInvariant();
+            if (status == "active")
+            {
+                query = query.Where(d => !d.IsReleased);
+            }
+            else if (status == "released")
+            {
+                query = query.Where(d => d.IsReleased);
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.SearchQuery))
+        {
+            var term = request.SearchQuery.Trim();
+            var searchBy = request.SearchBy?.Trim().ToLowerInvariant() ?? "all";
+
+            switch (searchBy)
+            {
+                case "detainid":
+                case "id":
+                    if (int.TryParse(term.TrimStart('#'), out var detainId))
+                    {
+                        query = query.Where(d => d.DetainID == detainId);
+                    }
+                    else
+                    {
+                        query = query.Where(_ => false);
+                    }
+                    break;
+
+                case "licenseid":
+                    if (int.TryParse(term.TrimStart('#'), out var licenseId))
+                    {
+                        query = query.Where(d => d.LicenseID == licenseId);
+                    }
+                    else
+                    {
+                        query = query.Where(_ => false);
+                    }
+                    break;
+
+                case "nationalno":
+                    query = query.Where(d => d.License.Driver.Person.NationalNo.Contains(term));
+                    break;
+
+                case "fullname":
+                case "name":
+                    query = query.Where(d =>
+                        d.License.Driver.Person.FirstName.Contains(term) ||
+                        d.License.Driver.Person.SecondName.Contains(term) ||
+                        (d.License.Driver.Person.ThirdName != null && d.License.Driver.Person.ThirdName.Contains(term)) ||
+                        d.License.Driver.Person.LastName.Contains(term) ||
+                        (d.License.Driver.Person.FirstName + " " + d.License.Driver.Person.LastName).Contains(term) ||
+                        (d.License.Driver.Person.FirstName + " " + d.License.Driver.Person.SecondName + " " + d.License.Driver.Person.LastName).Contains(term));
+                    break;
+
+                case "all":
+                default:
+                    var isNum = int.TryParse(term.TrimStart('#'), out var parsedNum);
+                    query = query.Where(d =>
+                        d.License.Driver.Person.NationalNo.Contains(term) ||
+                        d.License.Driver.Person.FirstName.Contains(term) ||
+                        d.License.Driver.Person.SecondName.Contains(term) ||
+                        (d.License.Driver.Person.ThirdName != null && d.License.Driver.Person.ThirdName.Contains(term)) ||
+                        d.License.Driver.Person.LastName.Contains(term) ||
+                        (d.License.Driver.Person.FirstName + " " + d.License.Driver.Person.LastName).Contains(term) ||
+                        (d.License.Driver.Person.FirstName + " " + d.License.Driver.Person.SecondName + " " + d.License.Driver.Person.LastName).Contains(term) ||
+                        (isNum && (d.DetainID == parsedNum || d.LicenseID == parsedNum)));
+                    break;
+            }
+        }
+
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        var items = await query
+            .OrderByDescending(d => d.DetainDate)
+            .ThenByDescending(d => d.DetainID)
+            .Skip(request.Skip)
+            .Take(request.PageSize)
+            .ToListAsync(cancellationToken);
+
+        return new PagedResult<DetainedLicense>
+        {
+            Items = items,
+            PageNumber = request.PageNumber,
+            PageSize = request.PageSize,
+            TotalCount = totalCount
+        };
+    }
 
     public Task<DetainedLicense?> GetByIdAsync(int id, CancellationToken cancellationToken = default) =>
         id <= 0

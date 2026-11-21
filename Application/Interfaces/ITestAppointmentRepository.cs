@@ -1,3 +1,5 @@
+using Application.Common.Pagination;
+using Application.DTOs.TestAppointmentDTO;
 using Domain.Entities;
 using Domain.Enums;
 
@@ -10,6 +12,14 @@ public interface ITestAppointmentRepository
     Task<TestAppointment?> GetForUpdateAsync(int id, CancellationToken cancellationToken = default);
 
     Task<List<TestAppointment>> GetAllAsync(CancellationToken cancellationToken = default);
+
+    Task<PagedResult<TestAppointment>> GetAllAsync(
+        PaginationRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<PagedResult<TestAppointment>> GetAllAsync(
+        TestAppointmentQueryRequest request,
+        CancellationToken cancellationToken = default);
 
     Task<List<TestAppointment>>
         GetByLocalDrivingLicenseApplicationIdAsync(

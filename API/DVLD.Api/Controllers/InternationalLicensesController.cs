@@ -15,12 +15,44 @@ namespace DVLD.Api.Controllers;
 public sealed class InternationalLicensesController(IInternationalService service) : ControllerBase
 {
     [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken cancellationToken = default)
+    public async Task<IActionResult> GetAll(
+        [FromQuery] InternationalLicenseQueryRequest? queryRequest,
+        CancellationToken cancellationToken = default)
     {
+        if (IsPagedOrFilteredRequest())
+        {
+            var pagedResult = await service.GetAllAsync(
+                queryRequest ?? new InternationalLicenseQueryRequest(),
+                cancellationToken);
+            if (pagedResult.IsFailure) return pagedResult.ToActionResult(this);
+            if (pagedResult.Value is null) return UnexpectedResult();
+
+            var paged = pagedResult.Value;
+            return Ok(new
+            {
+                items = paged.Items.Select(MapToListResponse).ToList(),
+                pageNumber = paged.PageNumber,
+                pageSize = paged.PageSize,
+                totalCount = paged.TotalCount,
+                totalPages = paged.TotalPages,
+                hasPreviousPage = paged.HasPreviousPage,
+                hasNextPage = paged.HasNextPage
+            });
+        }
+
         var result = await service.GetAllAsync(cancellationToken);
         if (result.IsFailure) return result.ToActionResult(this);
         return result.Value is null ? UnexpectedResult() : Ok(result.Value.Select(MapToListResponse).ToList());
     }
+
+    private bool IsPagedOrFilteredRequest() =>
+        Request?.Query is not null &&
+        (Request.Query.ContainsKey("pageNumber") ||
+         Request.Query.ContainsKey("pageSize") ||
+         Request.Query.ContainsKey("searchQuery") ||
+         Request.Query.ContainsKey("searchBy") ||
+         Request.Query.ContainsKey("statusFilter") ||
+         Request.Query.ContainsKey("paged"));
 
     [HttpGet("{internationalLicenseId:int}")]
     public async Task<IActionResult> GetById(int internationalLicenseId, CancellationToken cancellationToken = default)

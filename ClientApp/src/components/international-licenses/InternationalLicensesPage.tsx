@@ -1,14 +1,15 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { InternationalLicense } from "../../types/InternationalLicense";
-import { getInternationalLicenses } from "../../services/internationalLicenseService";
+import { getInternationalLicensesPage } from "../../services/internationalLicenseService";
 import { formatNumber } from "../../utils/formatters";
-import { useAsyncData, useTableFilters } from "../../hooks";
+import { useAsyncData, useDebounce, usePagination } from "../../hooks";
 import InternationalLicenseTable from "./InternationalLicenseTable";
 import PageHero from "../common/PageHero";
 import StatsGrid from "../common/StatsGrid";
 import StatCard from "../common/StatCard";
 import TableToolbar from "../common/TableToolbar";
 import ErrorAlert from "../common/ErrorAlert";
+import PaginationControls from "../common/PaginationControls";
 import LicenseDetailsModal from "../licenses/LicenseDetailsModal";
 import {
   Select,
@@ -48,10 +49,6 @@ const SEARCH_OPTIONS: { value: FilterKey; label: string }[] = [
   { value: "issuedUsingLocalLicenseId", label: "Local License ID" },
 ];
 
-interface InternationalLicenseFilters extends Record<string, unknown> {
-  status: "All" | "Active" | "Inactive";
-}
-
 export default function InternationalLicensesPage({
   accessToken,
   onIssueNew,
@@ -59,66 +56,67 @@ export default function InternationalLicensesPage({
 }: Props) {
   const [selectedIntlLicense, setSelectedIntlLicense] =
     useState<InternationalLicense | null>(null);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<FilterKey>("all");
+  const [status, setStatus] = useState<"All" | "Active" | "Inactive">("All");
+  const debouncedSearch = useDebounce(search, 350);
+
+  const pagination = usePagination({ pageSize: 10 });
+  const { resetPage } = pagination;
+
+  useEffect(() => {
+    resetPage();
+  }, [debouncedSearch, filter, status, resetPage]);
+
   const fetcher = useCallback(
-    () => getInternationalLicenses(accessToken),
-    [accessToken],
+    (signal?: AbortSignal) =>
+      getInternationalLicensesPage(
+        accessToken,
+        pagination.page,
+        pagination.pageSize,
+        debouncedSearch,
+        filter,
+        status,
+        signal,
+      ),
+    [
+      accessToken,
+      pagination.page,
+      pagination.pageSize,
+      debouncedSearch,
+      filter,
+      status,
+    ],
   );
 
   const {
-    data: items,
+    data: page,
     loading,
     error,
     refresh,
   } = useAsyncData(fetcher, {
     enabled: Boolean(accessToken),
-    initialData: [],
+    dependencies: [
+      accessToken,
+      pagination.page,
+      pagination.pageSize,
+      debouncedSearch,
+      filter,
+      status,
+    ],
     defaultErrorMessage: "Could not load international licenses.",
   });
 
-  const {
-    search,
-    setSearch,
-    searchField: filter,
-    setSearchField: setFilter,
-    filters,
-    setFilter: setCustomFilter,
-    filteredData: filteredItems,
-    isFiltered,
-    resetFilters: handleResetFilters,
-  } = useTableFilters<
-    InternationalLicense,
-    FilterKey,
-    InternationalLicenseFilters
-  >({
-    data: items,
-    initialSearchField: "all",
-    initialFilters: { status: "All" },
-    filterItem: (item, query, field, currentFilters) => {
-      // 1. Status check
-      const currentStatus = currentFilters.status;
-      const matchesStatus =
-        currentStatus === "All" ||
-        (currentStatus === "Active" ? item.isActive : !item.isActive);
+  const items = useMemo(() => page?.items ?? [], [page?.items]);
+  const totalCount = page?.totalCount ?? 0;
+  const isFiltered = Boolean(search.trim() || status !== "All");
 
-      if (!matchesStatus) return false;
-
-      // 2. Query check
-      if (!query) return true;
-
-      if (field === "all") {
-        return (
-          String(item.internationalLicenseId).includes(query) ||
-          String(item.applicationId).includes(query) ||
-          String(item.driverId).includes(query) ||
-          String(item.issuedUsingLocalLicenseId).includes(query)
-        );
-      }
-
-      return String(item[field]).toLowerCase().includes(query);
-    },
-  });
-
-  const status = filters.status;
+  const handleResetFilters = useCallback(() => {
+    setSearch("");
+    setFilter("all");
+    setStatus("All");
+    resetPage();
+  }, [resetPage]);
 
   const placeholderText = useMemo(() => {
     switch (filter) {
@@ -144,7 +142,7 @@ export default function InternationalLicensesPage({
           label="Total Licenses"
           variant="violet"
           icon={<GlobeIcon size={20} />}
-          value={loading || error ? "—" : formatNumber(items.length)}
+          value={loading || error ? "—" : formatNumber(totalCount)}
           description="International licenses recorded"
         />
 
@@ -184,9 +182,7 @@ export default function InternationalLicensesPage({
             <span className="record-count">
               {loading
                 ? "Loading..."
-                : filteredItems.length === items.length
-                  ? `${items.length} Licenses`
-                  : `${filteredItems.length} of ${items.length} Licenses`}
+                : `${formatNumber(totalCount)} Licenses`}
             </span>
 
             {onIssueNew && (
@@ -215,7 +211,7 @@ export default function InternationalLicensesPage({
               <Select
                 value={status}
                 onValueChange={(val) =>
-                  setCustomFilter("status", val as typeof status)
+                  setStatus(val as typeof status)
                 }
               >
                 <SelectTrigger
@@ -254,9 +250,25 @@ export default function InternationalLicensesPage({
 
         {!loading && !error && (
           <InternationalLicenseTable
-            items={filteredItems}
+            items={items}
             onOpenDetails={onOpenDetails}
             onSelectLicense={setSelectedIntlLicense}
+          />
+        )}
+
+        {!loading && !error && totalCount > 0 && (
+          <PaginationControls
+            pageNumber={page?.pageNumber ?? pagination.page}
+            pageSize={pagination.pageSize}
+            totalCount={totalCount}
+            totalPages={page?.totalPages ?? 1}
+            hasPreviousPage={Boolean(page?.hasPreviousPage)}
+            hasNextPage={Boolean(page?.hasNextPage)}
+            onPreviousPage={pagination.previousPage}
+            onNextPage={pagination.nextPage}
+            onPageSizeChange={pagination.setPageSize}
+            loading={loading}
+            itemName="international licenses"
           />
         )}
 
@@ -270,8 +282,8 @@ export default function InternationalLicensesPage({
             }}
           >
             <span>
-              Showing <strong>{filteredItems.length}</strong> of{" "}
-              <strong>{items.length}</strong> licenses
+              Showing <strong>{items.length}</strong> of{" "}
+              <strong>{totalCount}</strong> licenses
             </span>
             <span>
               Right-click any license row or click View to inspect details.

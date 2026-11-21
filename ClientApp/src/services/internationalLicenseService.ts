@@ -6,8 +6,52 @@ import type { LocalLicenseInfo } from '../types/License'
 
 import { apiRequest } from './apiClient'
 
-export const getInternationalLicenses = (token: string): Promise<InternationalLicense[]> =>
-  apiRequest<InternationalLicense[]>('/InternationalLicenses', token)
+export interface InternationalLicensePageResponse {
+  items: InternationalLicense[]
+  pageNumber: number
+  pageSize: number
+  totalCount: number
+  totalPages: number
+  hasPreviousPage: boolean
+  hasNextPage: boolean
+}
+
+export const getInternationalLicenses = (
+  token: string,
+  signal?: AbortSignal,
+): Promise<InternationalLicense[]> =>
+  apiRequest<InternationalLicense[]>('/InternationalLicenses', token, { signal })
+
+export const getInternationalLicensesPage = (
+  token: string,
+  pageNumber = 1,
+  pageSize = 10,
+  searchQuery?: string,
+  searchBy?: string,
+  statusFilter?: string,
+  signal?: AbortSignal,
+): Promise<InternationalLicensePageResponse> => {
+  const params = new URLSearchParams({
+    pageNumber: String(pageNumber),
+    pageSize: String(pageSize),
+  })
+
+  if (searchQuery && searchQuery.trim()) {
+    params.set('searchQuery', searchQuery.trim())
+  }
+  if (searchBy && searchBy !== 'all') {
+    params.set('searchBy', searchBy)
+  }
+  if (statusFilter && statusFilter.toLowerCase() !== 'all') {
+    params.set('statusFilter', statusFilter)
+  }
+
+  return apiRequest<InternationalLicensePageResponse>(
+    `/InternationalLicenses?${params.toString()}`,
+    token,
+    { signal },
+  )
+}
 
 export const getInternationalLicensesByDriverId = (
   token: string,

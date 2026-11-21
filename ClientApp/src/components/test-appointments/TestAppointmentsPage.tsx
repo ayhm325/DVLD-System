@@ -1,12 +1,12 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import PageHero from '../common/PageHero'
 import ErrorAlert from '../common/ErrorAlert'
 import ConfirmModal from '../common/ConfirmModal'
+import PaginationControls from '../common/PaginationControls'
 import type { TestAppointment } from '../../types/TestAppointment'
-import { getAllAppointments, cancelTestAppointment } from '../../services/testAppointmentService'
-import { resolveAppointmentLifecycle } from '../../utils/status'
+import { getAppointmentsPage, cancelTestAppointment } from '../../services/testAppointmentService'
 import { formatJordanAppointmentDateTime, getJordanDateString } from '../../utils/jordanTime'
-import { useAsyncData } from '../../hooks'
+import { useAsyncData, useDebounce, usePagination } from '../../hooks'
 import {
   CalendarDays,
   Clock,
@@ -38,6 +38,14 @@ export default function TestAppointmentsPage({
   const [searchQuery, setSearchQuery] = useState('')
   const [testTypeFilter, setTestTypeFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const debouncedSearch = useDebounce(searchQuery, 350)
+
+  const pagination = usePagination({ pageSize: 10 })
+  const { resetPage } = pagination
+
+  useEffect(() => {
+    resetPage()
+  }, [debouncedSearch, testTypeFilter, statusFilter, activeTab, resetPage])
 
   // Modals / Actions
   const [appointmentToCancel, setAppointmentToCancel] = useState<TestAppointment | null>(null)
@@ -46,104 +54,54 @@ export default function TestAppointmentsPage({
   const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   // Asynchronous data fetcher using project standard hook
-  const fetcher = useCallback((): Promise<TestAppointment[]> => {
-    return getAllAppointments(accessToken)
-  }, [accessToken])
+  const fetcher = useCallback((signal?: AbortSignal) => {
+    return getAppointmentsPage(
+      accessToken,
+      pagination.page,
+      pagination.pageSize,
+      debouncedSearch,
+      testTypeFilter,
+      statusFilter,
+      activeTab,
+      signal,
+    )
+  }, [
+    accessToken,
+    pagination.page,
+    pagination.pageSize,
+    debouncedSearch,
+    testTypeFilter,
+    statusFilter,
+    activeTab,
+  ])
 
   const {
-    data: appointments = [],
+    data: page,
     loading,
     error,
     refresh: fetchData,
   } = useAsyncData(fetcher, {
     enabled: Boolean(accessToken),
-    initialData: [],
+    dependencies: [
+      accessToken,
+      pagination.page,
+      pagination.pageSize,
+      debouncedSearch,
+      testTypeFilter,
+      statusFilter,
+      activeTab,
+    ],
     defaultErrorMessage: 'Failed to retrieve test appointments from server.',
   })
+
+  const appointments = useMemo(() => page?.items ?? [], [page?.items])
+  const totalCount = page?.totalCount ?? 0
 
   // Current Jordan facility date string (YYYY-MM-DD)
   const todayJordanStr = useMemo(() => getJordanDateString(new Date(), 0), [])
 
-  // Derived collections based on the 3 tabs
-  const todayAppointments = useMemo(() => {
-    return appointments.filter((apt) => {
-      const aptDateStr = (apt.appointmentDateFormatted || apt.appointmentDate || '').substring(0, 10)
-      return aptDateStr === todayJordanStr
-    })
-  }, [appointments, todayJordanStr])
-
-  const historyAppointments = useMemo(() => {
-    return appointments
-      .filter((apt) => {
-        const lifecycle = resolveAppointmentLifecycle(apt)
-        return lifecycle.isTerminal || apt.isLocked || apt.testResult >= 0
-      })
-      .sort((a, b) => new Date(b.appointmentDate).getTime() - new Date(a.appointmentDate).getTime())
-  }, [appointments])
-
   // Context-aware KPI metrics computed strictly per active tab dataset
-  const currentStats = useMemo<TabStats>(() => {
-    switch (activeTab) {
-      case 'today':
-        return computeTabStats(todayAppointments)
-      case 'history':
-        return computeTabStats(historyAppointments)
-      case 'all':
-      default:
-        return computeTabStats(appointments)
-    }
-  }, [activeTab, appointments, todayAppointments, historyAppointments])
-
-  // Active base dataset according to selected tab
-  const baseData = useMemo(() => {
-    switch (activeTab) {
-      case 'today':
-        return todayAppointments
-      case 'history':
-        return historyAppointments
-      case 'all':
-      default:
-        return appointments
-    }
-  }, [activeTab, appointments, todayAppointments, historyAppointments])
-
-  // Apply search query and dropdown filters
-  const filteredAppointments = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase()
-
-    return baseData.filter((apt) => {
-      const lifecycle = resolveAppointmentLifecycle(apt)
-
-      // Test Type Filter
-      if (testTypeFilter !== 'all' && String(apt.testTypeId) !== testTypeFilter) {
-        return false
-      }
-
-      // Status Filter (includes granular passed/failed breakdown support)
-      if (statusFilter !== 'all') {
-        const rawState = lifecycle.state.toLowerCase()
-        if (statusFilter === 'scheduled' && !rawState.includes('scheduled')) return false
-        if (statusFilter === 'completed' && !rawState.includes('completed')) return false
-        if (statusFilter === 'passed' && lifecycle.resultLabel !== 'Passed') return false
-        if (statusFilter === 'failed' && lifecycle.resultLabel !== 'Failed') return false
-        if (statusFilter === 'noshow' && !rawState.includes('noshow')) return false
-        if (statusFilter === 'cancelled' && !rawState.includes('cancelled')) return false
-      }
-
-      // Query Search
-      if (!query) return true
-
-      const matchId = String(apt.testAppointmentId).includes(query)
-      const matchAppId = String(apt.localDrivingLicenseApplicationId).includes(query)
-      const matchTestType = apt.testTypeName.toLowerCase().includes(query)
-      const matchStatus = lifecycle.statusLabel.toLowerCase().includes(query)
-      const matchResult = lifecycle.resultLabel.toLowerCase().includes(query)
-      const matchName = apt.applicantFullName?.toLowerCase().includes(query) ?? false
-      const matchNationalNo = apt.nationalNo?.toLowerCase().includes(query) ?? false
-
-      return matchId || matchAppId || matchTestType || matchStatus || matchResult || matchName || matchNationalNo
-    })
-  }, [baseData, searchQuery, testTypeFilter, statusFilter])
+  const currentStats = useMemo<TabStats>(() => computeTabStats(appointments), [appointments])
 
   // Interactive KPI card click handler
   const handleKpiClick = (targetStatus: string) => {
@@ -178,7 +136,8 @@ export default function TestAppointmentsPage({
     setSearchQuery('')
     setTestTypeFilter('all')
     setStatusFilter('all')
-  }, [])
+    resetPage()
+  }, [resetPage])
 
   return (
     <section className="page-content">
@@ -207,9 +166,7 @@ export default function TestAppointmentsPage({
           <span className="record-count">
             {loading
               ? 'Loading...'
-              : filteredAppointments.length === appointments.length
-                ? `${appointments.length} Appointments`
-                : `${filteredAppointments.length} of ${appointments.length} Appointments`}
+              : `${totalCount} Appointments`}
           </span>
         </div>
 
@@ -236,7 +193,7 @@ export default function TestAppointmentsPage({
                   activeTab === 'all' ? 'bg-black/30 text-white' : 'bg-[#1b2f52] text-cyan-300'
                 }`}
               >
-                {appointments.length}
+                {activeTab === 'all' ? totalCount : '—'}
               </span>
             </button>
 
@@ -260,7 +217,7 @@ export default function TestAppointmentsPage({
                   activeTab === 'today' ? 'bg-black/30 text-white' : 'bg-[#1b2f52] text-cyan-300'
                 }`}
               >
-                {todayAppointments.length}
+                {activeTab === 'today' ? totalCount : '—'}
               </span>
             </button>
 
@@ -284,7 +241,7 @@ export default function TestAppointmentsPage({
                   activeTab === 'history' ? 'bg-black/30 text-white' : 'bg-[#1b2f52] text-cyan-300'
                 }`}
               >
-                {historyAppointments.length}
+                {activeTab === 'history' ? totalCount : '—'}
               </span>
             </button>
           </div>
@@ -326,7 +283,7 @@ export default function TestAppointmentsPage({
 
         {/* 4. Appointments Table with Toolbar, Columns, and Actions */}
         <TestAppointmentsTable
-          appointments={filteredAppointments}
+          appointments={appointments}
           loading={loading}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
@@ -342,6 +299,22 @@ export default function TestAppointmentsPage({
           onTakeExamination={onTakeExamination}
           onCancelAppointment={handleCancelAppointment}
         />
+
+        {!error && totalCount > 0 && (
+          <PaginationControls
+            pageNumber={page?.pageNumber ?? pagination.page}
+            pageSize={pagination.pageSize}
+            totalCount={totalCount}
+            totalPages={page?.totalPages ?? 1}
+            hasPreviousPage={Boolean(page?.hasPreviousPage)}
+            hasNextPage={Boolean(page?.hasNextPage)}
+            onPreviousPage={pagination.previousPage}
+            onNextPage={pagination.nextPage}
+            onPageSizeChange={pagination.setPageSize}
+            loading={loading}
+            itemName="appointments"
+          />
+        )}
       </Card>
 
       {/* 5. Cancellation Confirmation Dialog */}

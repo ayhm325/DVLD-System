@@ -265,7 +265,11 @@ async function performRefresh(
   }
 }
 
-export async function logoutSession(): Promise<void> {
+export type LogoutResult =
+  | { ok: true }
+  | { ok: false; status?: number; reason: 'http-error' | 'network-error' }
+
+export async function logoutSession(): Promise<LogoutResult> {
   const currentToken = getAccessToken()
   invalidateSession()
   try {
@@ -275,14 +279,19 @@ export async function logoutSession(): Promise<void> {
       },
       currentToken ?? undefined,
     )
-    await fetch(`${API_BASE_URL}/Auth/logout`, {
+    const response = await fetch(`${API_BASE_URL}/Auth/logout`, {
       method: 'POST',
       credentials: 'include',
       headers,
     })
+
+    if (!response.ok) {
+      return { ok: false, status: response.status, reason: 'http-error' }
+    }
+
+    return { ok: true }
   } catch {
-    // Logout is best-effort locally; the cookie is cleared by the browser only on
-    // a successful response, so a failed request leaves the session intact.
+    return { ok: false, reason: 'network-error' }
   } finally {
     setAccessToken(null)
   }

@@ -1,3 +1,4 @@
+using Application.Common.Pagination;
 using Application.Common.Results;
 using Application.DTOs.TestAppointmentDTO;
 
@@ -8,6 +9,14 @@ public interface ITestAppointmentService
     Task<Result<TestAppointmentDto>> GetByIdAsync(int id, CancellationToken cancellationToken = default);
 
     Task<Result<List<TestAppointmentDto>>> GetAllAsync(CancellationToken cancellationToken = default);
+
+    Task<Result<PagedResult<TestAppointmentDto>>> GetAllAsync(
+        PaginationRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<Result<PagedResult<TestAppointmentDto>>> GetAllAsync(
+        TestAppointmentQueryRequest request,
+        CancellationToken cancellationToken = default);
 
     Task<Result<List<TestAppointmentDto>>> GetByLocalDrivingLicenseApplicationIdAsync(
         int localAppId,

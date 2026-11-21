@@ -1,3 +1,4 @@
+using Application.Common.Pagination;
 using Application.Common.Results;
 using Application.DTOs.TestAppointmentDTO;
 using Application.Mappers;
@@ -26,6 +27,51 @@ public sealed partial class TestAppointmentService
         var entities = await _repository.GetAllAsync(cancellationToken);
         return Result<List<TestAppointmentDto>>.Success(
             entities.Select(TestAppointmentMapper.ToDto).ToList());
+    }
+
+    public Task<Result<PagedResult<TestAppointmentDto>>> GetAllAsync(
+        PaginationRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (request is TestAppointmentQueryRequest queryRequest)
+        {
+            return GetAllAsync(queryRequest, cancellationToken);
+        }
+
+        return GetAllInternalAsync(() => _repository.GetAllAsync(request, cancellationToken));
+    }
+
+    public Task<Result<PagedResult<TestAppointmentDto>>> GetAllAsync(
+        TestAppointmentQueryRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (string.Equals(request.Tab?.Trim(), "today", StringComparison.OrdinalIgnoreCase) &&
+            !request.TodayDate.HasValue)
+        {
+            request.TodayDate = _clock.Today;
+        }
+
+        return GetAllInternalAsync(() => _repository.GetAllAsync(request, cancellationToken));
+    }
+
+    private async Task<Result<PagedResult<TestAppointmentDto>>> GetAllInternalAsync(
+        Func<Task<PagedResult<Domain.Entities.TestAppointment>>> fetcher)
+    {
+        var paged = await fetcher();
+        var items = paged.Items.Select(TestAppointmentMapper.ToDto).ToList();
+
+        return Result<PagedResult<TestAppointmentDto>>.Success(
+            new PagedResult<TestAppointmentDto>
+            {
+                Items = items,
+                PageNumber = paged.PageNumber,
+                PageSize = paged.PageSize,
+                TotalCount = paged.TotalCount
+            });
     }
 
     public async Task<Result<List<TestAppointmentDto>>> GetByLocalDrivingLicenseApplicationIdAsync(int localAppId, CancellationToken cancellationToken = default)

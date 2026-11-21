@@ -844,6 +844,8 @@ public sealed class AppointmentConcurrencyIntegrationTests : IAsyncLifetime
         public Task<TestAppointment?> GetByIdAsync(int id, CancellationToken cancellationToken = default) => inner.GetByIdAsync(id, cancellationToken);
         public Task<TestAppointment?> GetForUpdateAsync(int id, CancellationToken cancellationToken = default) => inner.GetForUpdateAsync(id, cancellationToken);
         public Task<List<TestAppointment>> GetAllAsync(CancellationToken cancellationToken = default) => inner.GetAllAsync(cancellationToken);
+        public Task<Application.Common.Pagination.PagedResult<TestAppointment>> GetAllAsync(Application.Common.Pagination.PaginationRequest request, CancellationToken cancellationToken = default) => inner.GetAllAsync(request, cancellationToken);
+        public Task<Application.Common.Pagination.PagedResult<TestAppointment>> GetAllAsync(Application.DTOs.TestAppointmentDTO.TestAppointmentQueryRequest request, CancellationToken cancellationToken = default) => inner.GetAllAsync(request, cancellationToken);
         public Task<List<TestAppointment>> GetByLocalDrivingLicenseApplicationIdAsync(int localAppId, CancellationToken cancellationToken = default) => inner.GetByLocalDrivingLicenseApplicationIdAsync(localAppId, cancellationToken);
         public Task<List<TestAppointment>> GetByTestTypeIdAsync(TestTypeEnum testType, CancellationToken cancellationToken = default) => inner.GetByTestTypeIdAsync(testType, cancellationToken);
         public Task<List<TestAppointment>> GetByCreatedUserIdAsync(int userId, CancellationToken cancellationToken = default) => inner.GetByCreatedUserIdAsync(userId, cancellationToken);

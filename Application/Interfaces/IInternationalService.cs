@@ -1,3 +1,4 @@
+using Application.Common.Pagination;
 using Application.Common.Results;
 using Application.DTOs.InternationalLicenseDTO;
 using Application.DTOs.LicenseDTO;
@@ -7,6 +8,14 @@ namespace Application.Interfaces;
 public interface IInternationalService
 {
     Task<Result<List<InternationalDto>>> GetAllAsync(CancellationToken cancellationToken = default);
+
+    Task<Result<PagedResult<InternationalDto>>> GetAllAsync(
+        PaginationRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<Result<PagedResult<InternationalDto>>> GetAllAsync(
+        InternationalLicenseQueryRequest request,
+        CancellationToken cancellationToken = default);
 
     Task<Result<InternationalDto>> GetByIdAsync(
     int internationalLicenseId,

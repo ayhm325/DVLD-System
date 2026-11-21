@@ -1,3 +1,5 @@
+using Application.Common.Pagination;
+using Application.DTOs.TestAppointmentDTO;
 using Application.Interfaces;
 using Domain.Entities;
 using Domain.Enums;
@@ -64,7 +66,114 @@ public sealed class TestAppointmentRepository(
         Query()
             .AsNoTracking()
             .OrderByDescending(x => x.AppointmentDate)
+            .ThenByDescending(x => x.TestAppointmentID)
             .ToListAsync(cancellationToken);
+
+    public Task<PagedResult<TestAppointment>> GetAllAsync(
+        PaginationRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (request is TestAppointmentQueryRequest queryRequest)
+        {
+            return GetAllAsync(queryRequest, cancellationToken);
+        }
+
+        return GetAllAsync(new TestAppointmentQueryRequest
+        {
+            PageNumber = request.PageNumber,
+            PageSize = request.PageSize
+        }, cancellationToken);
+    }
+
+    public async Task<PagedResult<TestAppointment>> GetAllAsync(
+        TestAppointmentQueryRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var query = Query().AsNoTracking();
+
+        if (!string.IsNullOrWhiteSpace(request.Tab))
+        {
+            var tab = request.Tab.Trim().ToLowerInvariant();
+            if (tab == "today" && request.TodayDate.HasValue)
+            {
+                var start = request.TodayDate.Value.ToDateTime(TimeOnly.MinValue);
+                var end = start.AddDays(1);
+                query = query.Where(x => x.AppointmentDate >= start && x.AppointmentDate < end);
+            }
+            else if (tab == "history")
+            {
+                query = query.Where(x =>
+                    x.IsLocked ||
+                    x.Test != null ||
+                    x.Status == AppointmentStatus.Completed ||
+                    x.Status == AppointmentStatus.NoShow ||
+                    x.Status == AppointmentStatus.Cancelled);
+            }
+        }
+
+        if (request.TestTypeId.HasValue && request.TestTypeId.Value > 0)
+        {
+            var testTypeId = request.TestTypeId.Value;
+            query = query.Where(x => x.TestTypeID == testTypeId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.StatusFilter))
+        {
+            var status = request.StatusFilter.Trim().ToLowerInvariant();
+            query = status switch
+            {
+                "scheduled" => query.Where(x => (x.Status == null || x.Status == AppointmentStatus.Scheduled) && !x.IsLocked && x.Test == null),
+                "completed" => query.Where(x => x.Status == AppointmentStatus.Completed || x.Test != null),
+                "passed" => query.Where(x => x.Test != null && x.Test.TestResult),
+                "failed" => query.Where(x => x.Test != null && !x.Test.TestResult),
+                "noshow" => query.Where(x => x.Status == AppointmentStatus.NoShow),
+                "cancelled" => query.Where(x => x.Status == AppointmentStatus.Cancelled),
+                _ => query
+            };
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.SearchQuery))
+        {
+            var term = request.SearchQuery.Trim();
+            var isNum = int.TryParse(term.TrimStart('#'), out var parsedNum);
+
+            query = query.Where(x =>
+                x.TestType.TestTypeTitle.Contains(term) ||
+                x.LocalDrivingLicenseApplication.Application.Person.NationalNo.Contains(term) ||
+                x.LocalDrivingLicenseApplication.Application.Person.FirstName.Contains(term) ||
+                x.LocalDrivingLicenseApplication.Application.Person.SecondName.Contains(term) ||
+                (x.LocalDrivingLicenseApplication.Application.Person.ThirdName != null &&
+                 x.LocalDrivingLicenseApplication.Application.Person.ThirdName.Contains(term)) ||
+                x.LocalDrivingLicenseApplication.Application.Person.LastName.Contains(term) ||
+                (x.LocalDrivingLicenseApplication.Application.Person.FirstName + " " +
+                 x.LocalDrivingLicenseApplication.Application.Person.LastName).Contains(term) ||
+                (x.LocalDrivingLicenseApplication.Application.Person.FirstName + " " +
+                 x.LocalDrivingLicenseApplication.Application.Person.SecondName + " " +
+                 x.LocalDrivingLicenseApplication.Application.Person.LastName).Contains(term) ||
+                (isNum && (x.TestAppointmentID == parsedNum || x.LocalDrivingLicenseApplicationID == parsedNum)));
+        }
+
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        var items = await query
+            .OrderByDescending(x => x.AppointmentDate)
+            .ThenByDescending(x => x.TestAppointmentID)
+            .Skip(request.Skip)
+            .Take(request.PageSize)
+            .ToListAsync(cancellationToken);
+
+        return new PagedResult<TestAppointment>
+        {
+            Items = items,
+            PageNumber = request.PageNumber,
+            PageSize = request.PageSize,
+            TotalCount = totalCount
+        };
+    }
 
     public Task<List<TestAppointment>>
         GetByLocalDrivingLicenseApplicationIdAsync(

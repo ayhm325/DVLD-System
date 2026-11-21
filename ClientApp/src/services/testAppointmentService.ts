@@ -9,8 +9,53 @@ import type {
   TestResponse,
 } from '../types/TestAppointment'
 
-export function getAllAppointments(accessToken: string): Promise<TestAppointment[]> {
-  return apiRequest<TestAppointment[]>('/TestAppointments', accessToken)
+export interface TestAppointmentPageResponse {
+  items: TestAppointment[]
+  pageNumber: number
+  pageSize: number
+  totalCount: number
+  totalPages: number
+  hasPreviousPage: boolean
+  hasNextPage: boolean
+}
+
+export function getAllAppointments(accessToken: string, signal?: AbortSignal): Promise<TestAppointment[]> {
+  return apiRequest<TestAppointment[]>('/TestAppointments', accessToken, { signal })
+}
+
+export function getAppointmentsPage(
+  accessToken: string,
+  pageNumber = 1,
+  pageSize = 10,
+  searchQuery?: string,
+  testTypeId?: string | number,
+  statusFilter?: string,
+  tab?: string,
+  signal?: AbortSignal,
+): Promise<TestAppointmentPageResponse> {
+  const params = new URLSearchParams({
+    pageNumber: String(pageNumber),
+    pageSize: String(pageSize),
+  })
+
+  if (searchQuery && searchQuery.trim()) {
+    params.set('searchQuery', searchQuery.trim())
+  }
+  if (testTypeId !== undefined && testTypeId !== 'all' && Number(testTypeId) > 0) {
+    params.set('testTypeId', String(testTypeId))
+  }
+  if (statusFilter && statusFilter !== 'all') {
+    params.set('statusFilter', statusFilter)
+  }
+  if (tab && tab !== 'all') {
+    params.set('tab', tab)
+  }
+
+  return apiRequest<TestAppointmentPageResponse>(
+    `/TestAppointments?${params.toString()}`,
+    accessToken,
+    { signal },
+  )
 }
 
 export function getAppointmentById(
