@@ -48,6 +48,11 @@ public static class MiddlewareExtensions
 
         app.UseHttpsRedirection();
 
+        // Serve the React production bundle from the same origin as the API.
+        // The Vite development server and its cookie-rewriting proxy are not used in production.
+        app.UseDefaultFiles();
+        app.UseStaticFiles();
+
         app.UseRouting();
 
         app.UseCors("ReactApp");
@@ -57,6 +62,42 @@ public static class MiddlewareExtensions
         app.UseAuthentication();
 
         app.UseAuthorization();
+
+        // React SPA fallback.
+        // Only rewrite unmatched browser page requests to index.html.
+        // Never override API responses, matched endpoints, or HTTP method mismatches.
+        app.Use(async (context, next) =>
+        {
+            await next();
+
+            if (context.Response.HasStarted ||
+                context.Response.StatusCode != StatusCodes.Status404NotFound ||
+                context.GetEndpoint() is not null ||
+                context.Request.Path.StartsWithSegments("/api") ||
+                (!HttpMethods.IsGet(context.Request.Method) &&
+                 !HttpMethods.IsHead(context.Request.Method)) ||
+                Path.HasExtension(context.Request.Path.Value))
+            {
+                return;
+            }
+
+            var webRootPath = app.Environment.WebRootPath
+                ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+
+            var indexPath = Path.Combine(webRootPath, "index.html");
+
+            if (!File.Exists(indexPath))
+            {
+                return;
+            }
+
+            context.Response.StatusCode = StatusCodes.Status200OK;
+            context.Response.ContentType = "text/html; charset=utf-8";
+
+            await context.Response.SendFileAsync(
+                indexPath,
+                context.RequestAborted);
+        });
 
         app.MapControllers();
 
