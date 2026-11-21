@@ -121,7 +121,33 @@ jobs:
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          allow-no-subscriptions: true
+
+      - name: Select subscription containing the App Service
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          app_name="dvld-demo-ayhm-2026"
+          subscription_id=""
+
+          while IFS= read -r candidate_id; do
+            az account set --subscription "$candidate_id"
+            resource_group="$(az webapp list --query "[?name=='${app_name}'].resourceGroup | [0]" --output tsv)"
+            if [[ -n "$resource_group" ]]; then
+              subscription_id="$candidate_id"
+              echo "AZURE_RESOURCE_GROUP=$resource_group" >> "$GITHUB_ENV"
+              break
+            fi
+          done < <(az account list --query "[?state=='Enabled'].id" --output tsv)
+
+          if [[ -z "$subscription_id" ]]; then
+            echo "Unable to find App Service '$app_name' in any enabled Azure subscription available to this service principal." >&2
+            exit 1
+          fi
+
+          az account set --subscription "$subscription_id"
+          az account show --query "{subscription:id,name:name}" --output table
 
       - name: Deploy to Azure App Service
         uses: azure/webapps-deploy@v3.0.8
