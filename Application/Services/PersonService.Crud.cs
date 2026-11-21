@@ -3,7 +3,7 @@ using System.Collections;
 using Application.Common.Exceptions;
 using Application.Common.Results;
 using Application.DTOs.PersonDTO;
-using Application.Mappings;
+using Application.Mappers;
 using Application.Validators;
 using Microsoft.Extensions.Logging;
 

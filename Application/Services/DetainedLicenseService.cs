@@ -75,16 +75,8 @@ public sealed class DetainedLicenseService(
         Func<Task<PagedResult<Domain.Entities.DetainedLicense>>> fetcher)
     {
         var paged = await fetcher();
-        var items = paged.Items.Select(DetainedLicenseMapper.ToDto).ToList();
-
         return Result<PagedResult<DetainedLicenseDto>>.Success(
-            new PagedResult<DetainedLicenseDto>
-            {
-                Items = items,
-                PageNumber = paged.PageNumber,
-                PageSize = paged.PageSize,
-                TotalCount = paged.TotalCount
-            });
+            paged.Map(DetainedLicenseMapper.ToDto));
     }
 
     public async Task<Result<DetainedLicenseDto>> GetByIdAsync(int id, CancellationToken cancellationToken = default)
@@ -132,7 +124,7 @@ public sealed class DetainedLicenseService(
             return Result<DetainedLicenseDto>.FromValidationFailure(
                 validation.Error);
 
-        if (!IsAuthenticated())
+        if (!_currentUserService.IsAuthenticated())
             return Result<DetainedLicenseDto>.FromForbidden(
                 "Authenticated user is required.");
 
@@ -211,7 +203,7 @@ public sealed class DetainedLicenseService(
         if (validation.IsFailure)
             return validation;
 
-        if (!IsAuthenticated())
+        if (!_currentUserService.IsAuthenticated())
             return Result.Forbidden("Authenticated user is required.");
 
         return await _unitOfWork.ExecuteInTransactionAsync(
@@ -333,9 +325,6 @@ public sealed class DetainedLicenseService(
             IsolationLevel.Serializable,
             cancellationToken);
     }
-
-    private bool IsAuthenticated() =>
-        _currentUserService.IsLoggedIn && _currentUserService.UserId > 0;
 
     private static async Task<T> RollbackAsync<T>(
         IUnitOfWorkTransaction transaction,

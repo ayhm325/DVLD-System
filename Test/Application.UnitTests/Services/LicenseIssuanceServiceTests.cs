@@ -59,7 +59,6 @@ public class LicenseIssuanceServiceTests
             _currentUserServiceMock.Object,
             _licenseClassServiceMock.Object,
             _testWorkflowServiceMock.Object,
-            _loggerMock.Object,
             _clock);
     }
     [Fact]

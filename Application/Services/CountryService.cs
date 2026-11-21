@@ -1,7 +1,7 @@
 using Application.Common.Results;
 using Application.DTOs.CountryDTO;
 using Application.Interfaces;
-using Application.Mappings;
+using Application.Mappers;
 
 namespace Application.Services;
 

@@ -463,26 +463,31 @@ public sealed class LicenseRepository(DVLDDbContext context)
             })
             .ToListAsync(cancellationToken);
 
+        var maxNewerByDriverAndClass = new Dictionary<(int DriverID, int LicenseClass), License>(potentialNewer.Count);
+        foreach (var p in potentialNewer)
+        {
+            var key = (p.DriverID, p.LicenseClass);
+            if (!maxNewerByDriverAndClass.TryGetValue(key, out var currentMax) ||
+                p.LicenseID > currentMax.LicenseID)
+            {
+                maxNewerByDriverAndClass[key] = new License
+                {
+                    LicenseID = p.LicenseID,
+                    DriverID = p.DriverID,
+                    LicenseClass = p.LicenseClass,
+                    IssueReason = p.IssueReason
+                };
+            }
+        }
+
         var result = new Dictionary<int, License>();
 
         foreach (var candidate in candidateList)
         {
-            var newer = potentialNewer
-                .Where(p => p.DriverID == candidate.DriverID &&
-                            p.LicenseClass == candidate.LicenseClass &&
-                            p.LicenseID > candidate.LicenseID)
-                .OrderByDescending(p => p.LicenseID)
-                .FirstOrDefault();
-
-            if (newer is not null)
+            if (maxNewerByDriverAndClass.TryGetValue((candidate.DriverID, candidate.LicenseClass), out var newer) &&
+                newer.LicenseID > candidate.LicenseID)
             {
-                result[candidate.LicenseID] = new License
-                {
-                    LicenseID = newer.LicenseID,
-                    DriverID = newer.DriverID,
-                    LicenseClass = newer.LicenseClass,
-                    IssueReason = newer.IssueReason
-                };
+                result[candidate.LicenseID] = newer;
             }
         }
 

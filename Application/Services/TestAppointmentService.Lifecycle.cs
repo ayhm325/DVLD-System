@@ -1,5 +1,6 @@
 using Application.Common.Results;
 using Application.DTOs.TestAppointmentDTO;
+using Application.Interfaces;
 using Application.Validators;
 using Domain.Enums;
 
@@ -14,7 +15,7 @@ public sealed partial class TestAppointmentService
         if (validation.IsFailure)
             return validation;
 
-        if (!IsAuthenticated())
+        if (!_currentUserService.IsAuthenticated())
             return Result.Forbidden("You must be logged in first.");
 
         return await ExecuteTransactionAsync(async transaction =>
@@ -93,7 +94,7 @@ public sealed partial class TestAppointmentService
         if (validation.IsFailure)
             return validation;
 
-        if (!IsAuthenticated())
+        if (!_currentUserService.IsAuthenticated())
             return Result.Forbidden("You must be logged in first.");
 
         return await ExecuteTransactionAsync(async transaction =>

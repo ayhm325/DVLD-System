@@ -1,7 +1,7 @@
 using Application.DTOs.PersonDTO;
 using Domain.Entities;
 
-namespace Application.Mappings;
+namespace Application.Mappers;
 
 public static class PersonMapper
 {

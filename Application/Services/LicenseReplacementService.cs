@@ -50,7 +50,7 @@ public sealed class LicenseReplacementService(
         if (string.IsNullOrWhiteSpace(replacementReason))
             return Result<int>.FromValidationFailure("Replacement reason is required.");
 
-        if (!IsAuthenticated())
+        if (!_currentUserService.IsAuthenticated())
             return Result<int>.FromForbidden("Authenticated user is required.");
 
         var reason = replacementReason.Trim();
@@ -66,7 +66,7 @@ public sealed class LicenseReplacementService(
                 cancellationToken);
 
         if (applicationTypeResult.IsFailure)
-            return PropagateFailure<int>(applicationTypeResult);
+            return Result<int>.FromResult(applicationTypeResult);
 
         if (applicationTypeResult.Value is null)
             return Result<int>.FromNotFound(
@@ -123,7 +123,7 @@ public sealed class LicenseReplacementService(
                 if (applicationResult.IsFailure)
                     return await RollbackAsync(
                         transaction,
-                        PropagateFailure<int>(applicationResult));
+                        Result<int>.FromResult(applicationResult));
 
                 var applicationId = applicationResult.Value;
 
@@ -178,7 +178,7 @@ public sealed class LicenseReplacementService(
                 if (completeResult.IsFailure)
                     return await RollbackAsync(
                         transaction,
-                        PropagateFailure<int>(completeResult));
+                        Result<int>.FromResult(completeResult));
 
                 await transaction.CommitAsync(cancellationToken);
 
@@ -187,9 +187,6 @@ public sealed class LicenseReplacementService(
             IsolationLevel.Serializable,
             cancellationToken);
     }
-
-    private bool IsAuthenticated() =>
-        _currentUserService.IsLoggedIn && _currentUserService.UserId > 0;
 
     private static (int ApplicationTypeId, IssueReason IssueReason)? GetReplacementInfo(
         string reason) =>
@@ -206,15 +203,4 @@ public sealed class LicenseReplacementService(
         await transaction.RollbackAsync();
         return result;
     }
-
-    private static Result<T> PropagateFailure<T>(Result source) =>
-        source.ErrorType switch
-        {
-            ErrorType.Validation => Result<T>.FromValidationFailure(source.Error),
-            ErrorType.NotFound => Result<T>.FromNotFound(source.Error),
-            ErrorType.Conflict => Result<T>.FromConflict(source.Error),
-            ErrorType.Forbidden => Result<T>.FromForbidden(source.Error),
-            ErrorType.Unauthorized => Result<T>.FromUnauthorized(source.Error),
-            _ => Result<T>.FromFailure(source.Error)
-        };
 }

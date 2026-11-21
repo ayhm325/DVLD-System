@@ -54,7 +54,7 @@ public sealed class ApiWebApplicationFactory
 
     public Mock<ILicenseRenewalService> LicenseRenewalServiceMock { get; } = new();
 
-    public Mock<ILicenseService> LicenseServiceMock { get; } = new();
+    public Mock<ILicenseQueryService> LicenseServiceMock { get; } = new();
 
     public Mock<IInternationalService> InternationalServiceMock { get; } = new();
 
@@ -136,7 +136,7 @@ public sealed class ApiWebApplicationFactory
             services.RemoveAll<ILicenseRenewalService>();
             services.AddScoped(_ => LicenseRenewalServiceMock.Object);
 
-            services.RemoveAll<ILicenseService>();
+            services.RemoveAll<ILicenseQueryService>();
             services.AddScoped(_ => LicenseServiceMock.Object);
 
             services.RemoveAll<IInternationalService>();

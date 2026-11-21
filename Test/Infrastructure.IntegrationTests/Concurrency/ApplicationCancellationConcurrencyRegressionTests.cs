@@ -5,7 +5,7 @@ using Application.DTOs.DriverDTO;
 using Application.DTOs.LicenseDTO;
 using Application.DTOs.UserDTO;
 using Application.Interfaces;
-using Application.Mappings;
+using Application.Mappers;
 using Application.Services;
 using Application.Validators;
 using Domain.Entities;
@@ -604,7 +604,6 @@ public sealed class ApplicationCancellationConcurrencyRegressionTests : IClassFi
             currentUser,
             licenseClassService,
             testWorkflowService,
-            NullLogger<LicenseIssuanceService>.Instance,
             _clock);
     }
 

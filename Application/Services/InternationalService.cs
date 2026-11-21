@@ -79,16 +79,8 @@ public sealed class InternationalService(
         Func<Task<PagedResult<InternationalLicense>>> fetcher)
     {
         var paged = await fetcher();
-        var items = paged.Items.Select(InternationalLicenseMapper.ToDto).ToList();
-
         return Result<PagedResult<InternationalDto>>.Success(
-            new PagedResult<InternationalDto>
-            {
-                Items = items,
-                PageNumber = paged.PageNumber,
-                PageSize = paged.PageSize,
-                TotalCount = paged.TotalCount
-            });
+            paged.Map(InternationalLicenseMapper.ToDto));
     }
 
     public async Task<Result<InternationalDto>> GetByIdAsync(int internationalLicenseId, CancellationToken cancellationToken = default)
@@ -150,14 +142,14 @@ public sealed class InternationalService(
         if (validation.IsFailure)
             return Result<int>.FromValidationFailure(validation.Error);
 
-        if (!IsAuthenticated())
+        if (!_currentUserService.IsAuthenticated())
             return Result<int>.FromForbidden("Authenticated user is required.");
 
         var applicationTypeResult =
             await _applicationTypeService.GetApplicationTypeByIdAsync(InternationalApplicationTypeId, cancellationToken);
 
         if (applicationTypeResult.IsFailure)
-            return PropagateFailure<int>(applicationTypeResult);
+            return Result<int>.FromResult(applicationTypeResult);
 
         if (applicationTypeResult.Value is null)
             return Result<int>.FromNotFound("International application type not found.");
@@ -168,7 +160,7 @@ public sealed class InternationalService(
                 var licenseResult = await _licenseQueryService.GetByIdAsync(localLicenseId, cancellationToken);
 
                 if (licenseResult.IsFailure)
-                    return await RollbackAsync(transaction, PropagateFailure<int>(licenseResult));
+                    return await RollbackAsync(transaction, Result<int>.FromResult(licenseResult));
 
                 if (licenseResult.Value is null)
                     return await RollbackAsync(
@@ -227,7 +219,7 @@ public sealed class InternationalService(
                 if (applicationResult.IsFailure)
                     return await RollbackAsync(
                         transaction,
-                        PropagateFailure<int>(applicationResult));
+                        Result<int>.FromResult(applicationResult));
 
                 var applicationId = applicationResult.Value;
 
@@ -263,7 +255,7 @@ public sealed class InternationalService(
                 if (completeResult.IsFailure)
                     return await RollbackAsync(
                         transaction,
-                        PropagateFailure<int>(completeResult));
+                        Result<int>.FromResult(completeResult));
 
                 await transaction.CommitAsync(cancellationToken);
 
@@ -282,7 +274,7 @@ public sealed class InternationalService(
         var licenseResult = await _licenseQueryService.GetByIdAsync(licenseId, cancellationToken);
 
         if (licenseResult.IsFailure)
-            return PropagateFailure<DriverLicenseInfoDto>(licenseResult);
+            return Result<DriverLicenseInfoDto>.FromResult(licenseResult);
 
         if (licenseResult.Value is null)
             return Result<DriverLicenseInfoDto>.FromNotFound("Local license not found.");
@@ -313,9 +305,6 @@ public sealed class InternationalService(
             InternationalLicenseMapper.ToDriverLicenseInfoDto(license));
     }
 
-    private bool IsAuthenticated() =>
-        _currentUserService.IsLoggedIn && _currentUserService.UserId > 0;
-
     private static async Task<T> RollbackAsync<T>(
         IUnitOfWorkTransaction transaction,
         T result)
@@ -323,15 +312,4 @@ public sealed class InternationalService(
         await transaction.RollbackAsync();
         return result;
     }
-
-    private static Result<T> PropagateFailure<T>(Result source) =>
-        source.ErrorType switch
-        {
-            ErrorType.Validation => Result<T>.FromValidationFailure(source.Error),
-            ErrorType.NotFound => Result<T>.FromNotFound(source.Error),
-            ErrorType.Conflict => Result<T>.FromConflict(source.Error),
-            ErrorType.Forbidden => Result<T>.FromForbidden(source.Error),
-            ErrorType.Unauthorized => Result<T>.FromUnauthorized(source.Error),
-            _ => Result<T>.FromFailure(source.Error)
-        };
 }

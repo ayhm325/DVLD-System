@@ -1,7 +1,7 @@
 using Application.DTOs.UserDTO;
 using Domain.Entities;
 
-namespace Application.Mappings;
+namespace Application.Mappers;
 
 public static class UserMapper
 {

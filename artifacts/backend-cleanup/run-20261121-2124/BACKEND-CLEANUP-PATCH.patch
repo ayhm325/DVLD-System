@@ -1,0 +1,1561 @@
+﻿diff --git a/API/DVLD.Api/Configuration/DependencyInjectionExtensions.cs b/API/DVLD.Api/Configuration/DependencyInjectionExtensions.cs
+index 1159e5d..b453ee6 100644
+--- a/API/DVLD.Api/Configuration/DependencyInjectionExtensions.cs
++++ b/API/DVLD.Api/Configuration/DependencyInjectionExtensions.cs
+@@ -94,7 +94,6 @@ public static class DependencyInjectionExtensions
+                 "AuthSession configuration is invalid: refresh lifetime must be 1-90 days, idle timeout 1-30 days and not greater than the refresh lifetime, rotation grace 0-300 seconds, and the cookie name/path must be configured.")
+             .ValidateOnStart();
+ 
+-        services.AddScoped<ILicenseService, LicenseService>();
+         services.AddScoped<
+             ILicenseRenewalService,
+             LicenseRenewalService>();
+diff --git a/API/DVLD.Api/Controllers/LicensesController.cs b/API/DVLD.Api/Controllers/LicensesController.cs
+index f153ea2..e2ab541 100644
+--- a/API/DVLD.Api/Controllers/LicensesController.cs
++++ b/API/DVLD.Api/Controllers/LicensesController.cs
+@@ -11,7 +11,7 @@ namespace DVLD.Api.Controllers;
+ [ApiController]
+ [Authorize(Policy = "StaffOnly")]
+ [Route("api/[controller]")]
+-public sealed class LicensesController(ILicenseService service) : ControllerBase
++public sealed class LicensesController(ILicenseQueryService service) : ControllerBase
+ {
+     [HttpGet]
+     public async Task<IActionResult> GetAll(
+diff --git a/Application/Common/Pagination/PagedResult.cs b/Application/Common/Pagination/PagedResult.cs
+index a4b258f..d859da8 100644
+--- a/Application/Common/Pagination/PagedResult.cs
++++ b/Application/Common/Pagination/PagedResult.cs
+@@ -22,4 +22,17 @@ public sealed class PagedResult<T>
+ 
+     public bool HasNextPage =>
+         PageNumber < TotalPages;
++
++    public PagedResult<TResult> Map<TResult>(Func<T, TResult> mapper)
++    {
++        ArgumentNullException.ThrowIfNull(mapper);
++
++        return new PagedResult<TResult>
++        {
++            Items = Items.Select(mapper).ToList(),
++            PageNumber = PageNumber,
++            PageSize = PageSize,
++            TotalCount = TotalCount
++        };
++    }
+ }
+\ No newline at end of file
+diff --git a/Application/Interfaces/ICurrentUserService.cs b/Application/Interfaces/ICurrentUserService.cs
+index 7d647bc..c8bdee9 100644
+--- a/Application/Interfaces/ICurrentUserService.cs
++++ b/Application/Interfaces/ICurrentUserService.cs
+@@ -24,4 +24,13 @@ public interface ICurrentUserService
+         string accessToken);
+ 
+     void Clear();
++}
++
++public static class CurrentUserServiceExtensions
++{
++    public static bool IsAuthenticated(this ICurrentUserService currentUserService)
++    {
++        ArgumentNullException.ThrowIfNull(currentUserService);
++        return currentUserService.IsLoggedIn && currentUserService.UserId > 0;
++    }
+ }
+\ No newline at end of file
+diff --git a/Application/Interfaces/ILicenseService.cs b/Application/Interfaces/ILicenseService.cs
+deleted file mode 100644
+index 532866a..0000000
+--- a/Application/Interfaces/ILicenseService.cs
++++ /dev/null
+@@ -1,50 +0,0 @@
+-using Application.Common.Pagination;
+-using Application.Common.Results;
+-using Application.DTOs.LicenseDTO;
+-
+-namespace Application.Interfaces;
+-
+-public interface ILicenseService
+-{
+-    Task<Result<LicenseDto>> GetByIdAsync(int licenseId, CancellationToken cancellationToken = default);
+-
+-    Task<Result<List<LicenseDto>>> GetAllAsync(CancellationToken cancellationToken = default);
+-    Task<Result<List<LicenseDto>>> GetAllAsync(bool? isExpired, CancellationToken cancellationToken = default);
+-    Task<Result<PagedResult<LicenseDto>>> GetAllAsync(PaginationRequest request, CancellationToken cancellationToken = default);
+-    Task<Result<PagedResult<LicenseDto>>> GetAllAsync(LicenseQueryRequest request, CancellationToken cancellationToken = default);
+-    Task<Result<RenewalSummaryDto>> GetRenewalSummaryAsync(CancellationToken cancellationToken = default);
+-
+-    Task<Result<List<LicenseDto>>> GetByDriverIdAsync(
+-        int driverId,
+-        CancellationToken cancellationToken = default);
+-
+-    Task<Result<List<LicenseDto>>> GetByApplicationIdAsync(
+-        int applicationId,
+-        CancellationToken cancellationToken = default);
+-
+-    Task<Result<List<LicenseDto>>> GetByLicenseClassIdAsync(
+-        int licenseClassId,
+-        CancellationToken cancellationToken = default);
+-
+-    Task<Result<List<LicenseDto>>> GetLicensesByPersonIdAsync(
+-        int personId,
+-        CancellationToken cancellationToken = default);
+-
+-    Task<Result<bool>> IsLicenseExistsAsync(int licenseId, CancellationToken cancellationToken = default);
+-
+-    Task<Result<bool>> IsDriverHasLicenseAsync(
+-        int driverId,
+-        CancellationToken cancellationToken = default);
+-
+-    Task<Result<bool>> IsApplicationHasLicenseAsync(
+-        int applicationId,
+-        CancellationToken cancellationToken = default);
+-
+-    Task<Result<DriverLicenseInfoDto>> GetDetailsAsync(
+-        int localAppId,
+-        CancellationToken cancellationToken = default);
+-
+-    Task<Result<DriverLicenseInfoDto>> GetLicenseDetailsByIdAsync(
+-        int licenseId,
+-        CancellationToken cancellationToken = default);
+-}
+diff --git a/Application/Mappings/CountryMapper.cs b/Application/Mappings/CountryMapper.cs
+index e77772b..29583ce 100644
+--- a/Application/Mappings/CountryMapper.cs
++++ b/Application/Mappings/CountryMapper.cs
+@@ -1,7 +1,7 @@
+ using Application.DTOs.CountryDTO;
+ using Domain.Entities;
+ 
+-namespace Application.Mappings;
++namespace Application.Mappers;
+ 
+ public static class CountryMapper
+ {
+diff --git a/Application/Mappings/PersonMapper.cs b/Application/Mappings/PersonMapper.cs
+index f919e5b..ebd7bfc 100644
+--- a/Application/Mappings/PersonMapper.cs
++++ b/Application/Mappings/PersonMapper.cs
+@@ -1,7 +1,7 @@
+ using Application.DTOs.PersonDTO;
+ using Domain.Entities;
+ 
+-namespace Application.Mappings;
++namespace Application.Mappers;
+ 
+ public static class PersonMapper
+ {
+diff --git a/Application/Mappings/UserMapper.cs b/Application/Mappings/UserMapper.cs
+index 1349d80..ffefa53 100644
+--- a/Application/Mappings/UserMapper.cs
++++ b/Application/Mappings/UserMapper.cs
+@@ -1,7 +1,7 @@
+ using Application.DTOs.UserDTO;
+ using Domain.Entities;
+ 
+-namespace Application.Mappings;
++namespace Application.Mappers;
+ 
+ public static class UserMapper
+ {
+diff --git a/Application/Services/ApplicationService.cs b/Application/Services/ApplicationService.cs
+index d51d64c..b8739f4 100644
+--- a/Application/Services/ApplicationService.cs
++++ b/Application/Services/ApplicationService.cs
+@@ -93,7 +93,7 @@ public sealed class ApplicationService(
+         if (validation.IsFailure)
+             return Result<int>.FromValidationFailure(validation.Error);
+ 
+-        if (!IsAuthenticated())
++        if (!_currentUserService.IsAuthenticated())
+             return Result<int>.FromForbidden("Authenticated user is required.");
+ 
+         var applicationType = await _applicationTypeRepository.GetApplicationTypeByIdAsync(dto.ApplicationTypeID, cancellationToken);
+@@ -228,9 +228,6 @@ public sealed class ApplicationService(
+         return Result.Success();
+     }
+ 
+-    private bool IsAuthenticated() =>
+-        _currentUserService.IsLoggedIn && _currentUserService.UserId > 0;
+-
+     private async Task<Result<ApplicationD>> GetTrackedApplicationAsync(
+         int id,
+         CancellationToken cancellationToken = default)
+diff --git a/Application/Services/CountryService.cs b/Application/Services/CountryService.cs
+index 05d2d82..63703c6 100644
+--- a/Application/Services/CountryService.cs
++++ b/Application/Services/CountryService.cs
+@@ -1,7 +1,7 @@
+ using Application.Common.Results;
+ using Application.DTOs.CountryDTO;
+ using Application.Interfaces;
+-using Application.Mappings;
++using Application.Mappers;
+ 
+ namespace Application.Services;
+ 
+diff --git a/Application/Services/DetainedLicenseService.cs b/Application/Services/DetainedLicenseService.cs
+index 9341bfb..9f1d773 100644
+--- a/Application/Services/DetainedLicenseService.cs
++++ b/Application/Services/DetainedLicenseService.cs
+@@ -75,16 +75,8 @@ public sealed class DetainedLicenseService(
+         Func<Task<PagedResult<Domain.Entities.DetainedLicense>>> fetcher)
+     {
+         var paged = await fetcher();
+-        var items = paged.Items.Select(DetainedLicenseMapper.ToDto).ToList();
+-
+         return Result<PagedResult<DetainedLicenseDto>>.Success(
+-            new PagedResult<DetainedLicenseDto>
+-            {
+-                Items = items,
+-                PageNumber = paged.PageNumber,
+-                PageSize = paged.PageSize,
+-                TotalCount = paged.TotalCount
+-            });
++            paged.Map(DetainedLicenseMapper.ToDto));
+     }
+ 
+     public async Task<Result<DetainedLicenseDto>> GetByIdAsync(int id, CancellationToken cancellationToken = default)
+@@ -132,7 +124,7 @@ public sealed class DetainedLicenseService(
+             return Result<DetainedLicenseDto>.FromValidationFailure(
+                 validation.Error);
+ 
+-        if (!IsAuthenticated())
++        if (!_currentUserService.IsAuthenticated())
+             return Result<DetainedLicenseDto>.FromForbidden(
+                 "Authenticated user is required.");
+ 
+@@ -211,7 +203,7 @@ public sealed class DetainedLicenseService(
+         if (validation.IsFailure)
+             return validation;
+ 
+-        if (!IsAuthenticated())
++        if (!_currentUserService.IsAuthenticated())
+             return Result.Forbidden("Authenticated user is required.");
+ 
+         return await _unitOfWork.ExecuteInTransactionAsync(
+@@ -334,9 +326,6 @@ public sealed class DetainedLicenseService(
+             cancellationToken);
+     }
+ 
+-    private bool IsAuthenticated() =>
+-        _currentUserService.IsLoggedIn && _currentUserService.UserId > 0;
+-
+     private static async Task<T> RollbackAsync<T>(
+         IUnitOfWorkTransaction transaction,
+         T result)
+diff --git a/Application/Services/DriverService.cs b/Application/Services/DriverService.cs
+index 0b1d161..a954c68 100644
+--- a/Application/Services/DriverService.cs
++++ b/Application/Services/DriverService.cs
+@@ -79,18 +79,8 @@ public sealed class DriverService(
+         Func<Task<PagedResult<Domain.Entities.Driver>>> fetcher)
+     {
+         var pagedEntities = await fetcher();
+-
+-        var items = pagedEntities.Items
+-            .Select(DriverMapper.ToDto)
+-            .ToList();
+-
+-        return Result<PagedResult<DriverDto>>.Success(new PagedResult<DriverDto>
+-        {
+-            Items = items,
+-            PageNumber = pagedEntities.PageNumber,
+-            PageSize = pagedEntities.PageSize,
+-            TotalCount = pagedEntities.TotalCount
+-        });
++        return Result<PagedResult<DriverDto>>.Success(
++            pagedEntities.Map(DriverMapper.ToDto));
+     }
+ 
+     public async Task<Result<DriverDto>> GetByPersonIdAsync(int personId, CancellationToken cancellationToken = default)
+@@ -153,7 +143,7 @@ public sealed class DriverService(
+                 validation.Error);
+         }
+ 
+-        if (!IsAuthenticated())
++        if (!_currentUserService.IsAuthenticated())
+         {
+             return Result<int>.FromForbidden(
+                 "Authenticated user is required.");
+@@ -198,7 +188,7 @@ public sealed class DriverService(
+                 validation.Error);
+         }
+ 
+-        if (!IsAuthenticated())
++        if (!_currentUserService.IsAuthenticated())
+         {
+             return Result.Forbidden(
+                 "Authenticated user is required.");
+@@ -254,7 +244,7 @@ public sealed class DriverService(
+                 validation.Error);
+         }
+ 
+-        if (!IsAuthenticated())
++        if (!_currentUserService.IsAuthenticated())
+         {
+             return Result.Forbidden(
+                 "Authenticated user is required.");
+@@ -291,8 +281,4 @@ public sealed class DriverService(
+             : Result.Failure(
+                 "Failed to delete driver.");
+     }
+-
+-    private bool IsAuthenticated() =>
+-        _currentUserService.IsLoggedIn &&
+-        _currentUserService.UserId > 0;
+ }
+diff --git a/Application/Services/InternationalService.cs b/Application/Services/InternationalService.cs
+index 048ab4e..3409223 100644
+--- a/Application/Services/InternationalService.cs
++++ b/Application/Services/InternationalService.cs
+@@ -79,16 +79,8 @@ public sealed class InternationalService(
+         Func<Task<PagedResult<InternationalLicense>>> fetcher)
+     {
+         var paged = await fetcher();
+-        var items = paged.Items.Select(InternationalLicenseMapper.ToDto).ToList();
+-
+         return Result<PagedResult<InternationalDto>>.Success(
+-            new PagedResult<InternationalDto>
+-            {
+-                Items = items,
+-                PageNumber = paged.PageNumber,
+-                PageSize = paged.PageSize,
+-                TotalCount = paged.TotalCount
+-            });
++            paged.Map(InternationalLicenseMapper.ToDto));
+     }
+ 
+     public async Task<Result<InternationalDto>> GetByIdAsync(int internationalLicenseId, CancellationToken cancellationToken = default)
+@@ -150,14 +142,14 @@ public sealed class InternationalService(
+         if (validation.IsFailure)
+             return Result<int>.FromValidationFailure(validation.Error);
+ 
+-        if (!IsAuthenticated())
++        if (!_currentUserService.IsAuthenticated())
+             return Result<int>.FromForbidden("Authenticated user is required.");
+ 
+         var applicationTypeResult =
+             await _applicationTypeService.GetApplicationTypeByIdAsync(InternationalApplicationTypeId, cancellationToken);
+ 
+         if (applicationTypeResult.IsFailure)
+-            return PropagateFailure<int>(applicationTypeResult);
++            return Result<int>.FromResult(applicationTypeResult);
+ 
+         if (applicationTypeResult.Value is null)
+             return Result<int>.FromNotFound("International application type not found.");
+@@ -168,7 +160,7 @@ public sealed class InternationalService(
+                 var licenseResult = await _licenseQueryService.GetByIdAsync(localLicenseId, cancellationToken);
+ 
+                 if (licenseResult.IsFailure)
+-                    return await RollbackAsync(transaction, PropagateFailure<int>(licenseResult));
++                    return await RollbackAsync(transaction, Result<int>.FromResult(licenseResult));
+ 
+                 if (licenseResult.Value is null)
+                     return await RollbackAsync(
+@@ -227,7 +219,7 @@ public sealed class InternationalService(
+                 if (applicationResult.IsFailure)
+                     return await RollbackAsync(
+                         transaction,
+-                        PropagateFailure<int>(applicationResult));
++                        Result<int>.FromResult(applicationResult));
+ 
+                 var applicationId = applicationResult.Value;
+ 
+@@ -263,7 +255,7 @@ public sealed class InternationalService(
+                 if (completeResult.IsFailure)
+                     return await RollbackAsync(
+                         transaction,
+-                        PropagateFailure<int>(completeResult));
++                        Result<int>.FromResult(completeResult));
+ 
+                 await transaction.CommitAsync(cancellationToken);
+ 
+@@ -282,7 +274,7 @@ public sealed class InternationalService(
+         var licenseResult = await _licenseQueryService.GetByIdAsync(licenseId, cancellationToken);
+ 
+         if (licenseResult.IsFailure)
+-            return PropagateFailure<DriverLicenseInfoDto>(licenseResult);
++            return Result<DriverLicenseInfoDto>.FromResult(licenseResult);
+ 
+         if (licenseResult.Value is null)
+             return Result<DriverLicenseInfoDto>.FromNotFound("Local license not found.");
+@@ -313,9 +305,6 @@ public sealed class InternationalService(
+             InternationalLicenseMapper.ToDriverLicenseInfoDto(license));
+     }
+ 
+-    private bool IsAuthenticated() =>
+-        _currentUserService.IsLoggedIn && _currentUserService.UserId > 0;
+-
+     private static async Task<T> RollbackAsync<T>(
+         IUnitOfWorkTransaction transaction,
+         T result)
+@@ -323,15 +312,4 @@ public sealed class InternationalService(
+         await transaction.RollbackAsync();
+         return result;
+     }
+-
+-    private static Result<T> PropagateFailure<T>(Result source) =>
+-        source.ErrorType switch
+-        {
+-            ErrorType.Validation => Result<T>.FromValidationFailure(source.Error),
+-            ErrorType.NotFound => Result<T>.FromNotFound(source.Error),
+-            ErrorType.Conflict => Result<T>.FromConflict(source.Error),
+-            ErrorType.Forbidden => Result<T>.FromForbidden(source.Error),
+-            ErrorType.Unauthorized => Result<T>.FromUnauthorized(source.Error),
+-            _ => Result<T>.FromFailure(source.Error)
+-        };
+ }
+diff --git a/Application/Services/LicenseIssuanceService.cs b/Application/Services/LicenseIssuanceService.cs
+index fa32127..022d110 100644
+--- a/Application/Services/LicenseIssuanceService.cs
++++ b/Application/Services/LicenseIssuanceService.cs
+@@ -6,7 +6,6 @@ using Application.Interfaces;
+ using Application.Mappers;
+ using Application.Validators;
+ using Domain.Enums;
+-using Microsoft.Extensions.Logging;
+ 
+ namespace Application.Services;
+ 
+@@ -20,7 +19,6 @@ public sealed class LicenseIssuanceService(
+     ICurrentUserService currentUserService,
+     ILicenseClassService licenseClassService,
+     ITestWorkflowService testWorkflowService,
+-    ILogger<LicenseIssuanceService> logger,
+     IJordanClock clock) : ILicenseIssuanceService
+ {
+     private const int NewLocalDrivingLicenseApplicationTypeId = 1;
+@@ -43,8 +41,6 @@ public sealed class LicenseIssuanceService(
+         licenseClassService ?? throw new ArgumentNullException(nameof(licenseClassService));
+     private readonly ITestWorkflowService _testWorkflowService =
+         testWorkflowService ?? throw new ArgumentNullException(nameof(testWorkflowService));
+-    private readonly ILogger<LicenseIssuanceService> _logger =
+-        logger ?? throw new ArgumentNullException(nameof(logger));
+     private readonly IJordanClock _clock =
+         clock ?? throw new ArgumentNullException(nameof(clock));
+ 
+@@ -54,14 +50,14 @@ public sealed class LicenseIssuanceService(
+         if (validation.IsFailure)
+             return Result<int>.FromValidationFailure(validation.Error);
+ 
+-        if (!IsAuthenticated())
++        if (!_currentUserService.IsAuthenticated())
+             return Result<int>.FromForbidden("Authenticated user is required.");
+ 
+         var localResult = await _localApplicationService
+             .GetLocalDrivingLicenseApplicationByIdAsync(localAppId, cancellationToken);
+ 
+         if (localResult.IsFailure)
+-            return PropagateFailure<int>(localResult);
++            return Result<int>.FromResult(localResult);
+ 
+         if (localResult.Value is null)
+             return Result<int>.FromNotFound(
+@@ -73,7 +69,7 @@ public sealed class LicenseIssuanceService(
+             await _localApplicationService.GetApplicationIdByLocalIdAsync(localAppId, cancellationToken);
+ 
+         if (applicationIdResult.IsFailure)
+-            return PropagateFailure<int>(applicationIdResult);
++            return Result<int>.FromResult(applicationIdResult);
+ 
+         var applicationId = applicationIdResult.Value;
+ 
+@@ -88,7 +84,7 @@ public sealed class LicenseIssuanceService(
+             await _applicationService.GetApplicationByIdAsync(applicationId, cancellationToken);
+ 
+         if (applicationResult.IsFailure)
+-            return PropagateFailure<int>(applicationResult);
++            return Result<int>.FromResult(applicationResult);
+ 
+         if (applicationResult.Value is null)
+             return Result<int>.FromNotFound("Application was not found.");
+@@ -107,7 +103,7 @@ public sealed class LicenseIssuanceService(
+             await _personService.GetPersonByIdAsync(application.ApplicantPersonID, cancellationToken);
+ 
+         if (personResult.IsFailure)
+-            return PropagateFailure<int>(personResult);
++            return Result<int>.FromResult(personResult);
+ 
+         if (personResult.Value is null)
+             return Result<int>.FromNotFound("Applicant person was not found.");
+@@ -126,7 +122,7 @@ public sealed class LicenseIssuanceService(
+                 cancellationToken);
+ 
+         if (classResult.IsFailure)
+-            return PropagateFailure<int>(classResult);
++            return Result<int>.FromResult(classResult);
+ 
+         if (classResult.Value is null)
+             return Result<int>.FromNotFound("License class was not found.");
+@@ -147,7 +143,7 @@ public sealed class LicenseIssuanceService(
+                 await _applicationService.GetApplicationForIssuanceAsync(applicationId, cancellationToken);
+ 
+             if (currentApplicationResult.IsFailure)
+-                return PropagateFailure<int>(currentApplicationResult);
++                return Result<int>.FromResult(currentApplicationResult);
+ 
+             if (currentApplicationResult.Value is null)
+                 return Result<int>.FromNotFound("Application was not found.");
+@@ -180,14 +176,14 @@ public sealed class LicenseIssuanceService(
+             else
+             {
+                 if (driverResult.ErrorType != ErrorType.NotFound)
+-                    return PropagateFailure<int>(driverResult);
++                    return Result<int>.FromResult(driverResult);
+ 
+                 var createDriverResult = await _driverService.AddAsync(
+                     new CreateDriverDto { PersonID = person.PersonId },
+                     cancellationToken);
+ 
+                 if (createDriverResult.IsFailure)
+-                    return PropagateFailure<int>(createDriverResult);
++                    return Result<int>.FromResult(createDriverResult);
+ 
+                 driverId = createDriverResult.Value;
+             }
+@@ -240,7 +236,7 @@ public sealed class LicenseIssuanceService(
+                 await _applicationService.CompleteApplicationStateAsync(applicationId, cancellationToken);
+ 
+             if (completeResult.IsFailure)
+-                return PropagateFailure<int>(completeResult);
++                return Result<int>.FromResult(completeResult);
+ 
+             await transaction.CommitAsync(cancellationToken);
+ 
+@@ -255,43 +251,4 @@ public sealed class LicenseIssuanceService(
+             operation,
+             IsolationLevel.Serializable,
+             cancellationToken);
+-
+-    private bool IsAuthenticated() =>
+-        _currentUserService.IsLoggedIn && _currentUserService.UserId > 0;
+-
+-    private static async Task<T> RollbackAsync<T>(
+-    IUnitOfWorkTransaction transaction,
+-    T result)
+-    {
+-        await transaction.RollbackAsync();
+-
+-        return result;
+-    }
+-
+-    private async Task RollbackSafelyAsync(
+-        IUnitOfWorkTransaction transaction,
+-        int localAppId)
+-    {
+-        try
+-        {
+-            await transaction.RollbackAsync();
+-        }
+-        catch (Exception rollbackException)
+-        {
+-            _logger.LogError(
+-                rollbackException,
+-                "Rollback failed while issuing first license for LocalApplicationId {LocalApplicationId}.",
+-                localAppId);
+-        }
+-    }
+-
+-    private static Result<T> PropagateFailure<T>(Result source) => source.ErrorType switch
+-    {
+-        ErrorType.Validation => Result<T>.FromValidationFailure(source.Error),
+-        ErrorType.NotFound => Result<T>.FromNotFound(source.Error),
+-        ErrorType.Conflict => Result<T>.FromConflict(source.Error),
+-        ErrorType.Forbidden => Result<T>.FromForbidden(source.Error),
+-        ErrorType.Unauthorized => Result<T>.FromUnauthorized(source.Error),
+-        _ => Result<T>.FromFailure(source.Error)
+-    };
+ }
+diff --git a/Application/Services/LicenseQueryService.cs b/Application/Services/LicenseQueryService.cs
+index 6c1b3ef..4ce9ede 100644
+--- a/Application/Services/LicenseQueryService.cs
++++ b/Application/Services/LicenseQueryService.cs
+@@ -4,7 +4,6 @@ using Application.Common.Time;
+ using Application.DTOs.LicenseDTO;
+ using Application.Interfaces;
+ using Application.Mappers;
+-using Application.Mappings;
+ using Application.Validators;
+ using Domain.Entities;
+ 
+@@ -49,7 +48,11 @@ public sealed class LicenseQueryService(
+         var licenses = isExpired.HasValue
+             ? await _licenseRepository.GetAllLicensesAsync(isExpired.Value, today, cancellationToken)
+             : await _licenseRepository.GetAllLicensesAsync(cancellationToken);
+-        var dtos = await MapToDtosBatchAsync(licenses ?? [], today, checkExternalNewerIfMissing: false, cancellationToken);
++        var dtos = await MapToDtosBatchAsync(
++            licenses ?? [],
++            today,
++            checkExternalNewerIfMissing: isExpired.HasValue,
++            cancellationToken);
+         return Result<List<LicenseDto>>.Success(dtos);
+     }
+ 
+@@ -215,6 +218,17 @@ public sealed class LicenseQueryService(
+         var activeDetainedIds = await _detainedLicenseRepository
+             .GetActiveDetainedLicenseIdsAsync(licenseIds, cancellationToken);
+ 
++        var maxLicenseByDriverAndClass = new Dictionary<(int DriverID, int LicenseClass), License>(licenses.Count);
++        foreach (var l in licenses)
++        {
++            var key = (l.DriverID, l.LicenseClass);
++            if (!maxLicenseByDriverAndClass.TryGetValue(key, out var currentMax) ||
++                l.LicenseID > currentMax.LicenseID)
++            {
++                maxLicenseByDriverAndClass[key] = l;
++            }
++        }
++
+         Dictionary<int, License>? externalNewerMap = null;
+ 
+         if (checkExternalNewerIfMissing)
+@@ -223,10 +237,8 @@ public sealed class LicenseQueryService(
+                 .Where(l =>
+                     LicenseExpirationPolicy.IsExpired(l.ExpirationDate, today) &&
+                     !activeDetainedIds.Contains(l.LicenseID) &&
+-                    !licenses.Any(other =>
+-                        other.DriverID == l.DriverID &&
+-                        other.LicenseClass == l.LicenseClass &&
+-                        other.LicenseID > l.LicenseID))
++                    maxLicenseByDriverAndClass.TryGetValue((l.DriverID, l.LicenseClass), out var maxInBatch) &&
++                    maxInBatch.LicenseID == l.LicenseID)
+                 .ToList();
+ 
+             if (candidateLicenses.Count > 0)
+@@ -256,13 +268,11 @@ public sealed class LicenseQueryService(
+             }
+             else
+             {
+-                var newer = licenses
+-                    .Where(other =>
+-                        other.DriverID == l.DriverID &&
+-                        other.LicenseClass == l.LicenseClass &&
+-                        other.LicenseID > l.LicenseID)
+-                    .OrderByDescending(other => other.LicenseID)
+-                    .FirstOrDefault();
++                License? newer =
++                    maxLicenseByDriverAndClass.TryGetValue((l.DriverID, l.LicenseClass), out var maxInBatch) &&
++                    maxInBatch.LicenseID > l.LicenseID
++                        ? maxInBatch
++                        : null;
+ 
+                 if (newer is null && externalNewerMap is not null)
+                 {
+diff --git a/Application/Services/LicenseRenewalService.cs b/Application/Services/LicenseRenewalService.cs
+index 3ea0d62..2e43a1e 100644
+--- a/Application/Services/LicenseRenewalService.cs
++++ b/Application/Services/LicenseRenewalService.cs
+@@ -46,7 +46,7 @@ public sealed class LicenseRenewalService(
+         if (validation.IsFailure)
+             return Result<int>.FromValidationFailure(validation.Error);
+ 
+-        if (!IsAuthenticated())
++        if (!_currentUserService.IsAuthenticated())
+             return Result<int>.FromForbidden("Authenticated user is required.");
+ 
+         var applicationTypeResult =
+@@ -55,7 +55,7 @@ public sealed class LicenseRenewalService(
+                 cancellationToken);
+ 
+         if (applicationTypeResult.IsFailure)
+-            return PropagateFailure<int>(applicationTypeResult);
++            return Result<int>.FromResult(applicationTypeResult);
+ 
+         if (applicationTypeResult.Value is null)
+             return Result<int>.FromNotFound(
+@@ -151,7 +151,7 @@ public sealed class LicenseRenewalService(
+                 if (applicationResult.IsFailure)
+                     return await RollbackAsync(
+                         transaction,
+-                        PropagateFailure<int>(applicationResult));
++                        Result<int>.FromResult(applicationResult));
+ 
+                 var applicationId = applicationResult.Value;
+ 
+@@ -213,7 +213,7 @@ public sealed class LicenseRenewalService(
+                 if (completeResult.IsFailure)
+                     return await RollbackAsync(
+                         transaction,
+-                        PropagateFailure<int>(completeResult));
++                        Result<int>.FromResult(completeResult));
+ 
+                 await transaction.CommitAsync(cancellationToken);
+ 
+@@ -230,9 +230,6 @@ public sealed class LicenseRenewalService(
+             cancellationToken);
+     }
+ 
+-    private bool IsAuthenticated() =>
+-        _currentUserService.IsLoggedIn && _currentUserService.UserId > 0;
+-
+     private static async Task<T> RollbackAsync<T>(
+         IUnitOfWorkTransaction transaction,
+         T result)
+@@ -240,15 +237,4 @@ public sealed class LicenseRenewalService(
+         await transaction.RollbackAsync();
+         return result;
+     }
+-
+-    private static Result<T> PropagateFailure<T>(Result source) =>
+-        source.ErrorType switch
+-        {
+-            ErrorType.Validation => Result<T>.FromValidationFailure(source.Error),
+-            ErrorType.NotFound => Result<T>.FromNotFound(source.Error),
+-            ErrorType.Conflict => Result<T>.FromConflict(source.Error),
+-            ErrorType.Forbidden => Result<T>.FromForbidden(source.Error),
+-            ErrorType.Unauthorized => Result<T>.FromUnauthorized(source.Error),
+-            _ => Result<T>.FromFailure(source.Error)
+-        };
+ }
+diff --git a/Application/Services/LicenseReplacementService.cs b/Application/Services/LicenseReplacementService.cs
+index dfe2d43..4474ceb 100644
+--- a/Application/Services/LicenseReplacementService.cs
++++ b/Application/Services/LicenseReplacementService.cs
+@@ -50,7 +50,7 @@ public sealed class LicenseReplacementService(
+         if (string.IsNullOrWhiteSpace(replacementReason))
+             return Result<int>.FromValidationFailure("Replacement reason is required.");
+ 
+-        if (!IsAuthenticated())
++        if (!_currentUserService.IsAuthenticated())
+             return Result<int>.FromForbidden("Authenticated user is required.");
+ 
+         var reason = replacementReason.Trim();
+@@ -66,7 +66,7 @@ public sealed class LicenseReplacementService(
+                 cancellationToken);
+ 
+         if (applicationTypeResult.IsFailure)
+-            return PropagateFailure<int>(applicationTypeResult);
++            return Result<int>.FromResult(applicationTypeResult);
+ 
+         if (applicationTypeResult.Value is null)
+             return Result<int>.FromNotFound(
+@@ -123,7 +123,7 @@ public sealed class LicenseReplacementService(
+                 if (applicationResult.IsFailure)
+                     return await RollbackAsync(
+                         transaction,
+-                        PropagateFailure<int>(applicationResult));
++                        Result<int>.FromResult(applicationResult));
+ 
+                 var applicationId = applicationResult.Value;
+ 
+@@ -178,7 +178,7 @@ public sealed class LicenseReplacementService(
+                 if (completeResult.IsFailure)
+                     return await RollbackAsync(
+                         transaction,
+-                        PropagateFailure<int>(completeResult));
++                        Result<int>.FromResult(completeResult));
+ 
+                 await transaction.CommitAsync(cancellationToken);
+ 
+@@ -188,9 +188,6 @@ public sealed class LicenseReplacementService(
+             cancellationToken);
+     }
+ 
+-    private bool IsAuthenticated() =>
+-        _currentUserService.IsLoggedIn && _currentUserService.UserId > 0;
+-
+     private static (int ApplicationTypeId, IssueReason IssueReason)? GetReplacementInfo(
+         string reason) =>
+         reason.Equals("Lost License", StringComparison.OrdinalIgnoreCase)
+@@ -206,15 +203,4 @@ public sealed class LicenseReplacementService(
+         await transaction.RollbackAsync();
+         return result;
+     }
+-
+-    private static Result<T> PropagateFailure<T>(Result source) =>
+-        source.ErrorType switch
+-        {
+-            ErrorType.Validation => Result<T>.FromValidationFailure(source.Error),
+-            ErrorType.NotFound => Result<T>.FromNotFound(source.Error),
+-            ErrorType.Conflict => Result<T>.FromConflict(source.Error),
+-            ErrorType.Forbidden => Result<T>.FromForbidden(source.Error),
+-            ErrorType.Unauthorized => Result<T>.FromUnauthorized(source.Error),
+-            _ => Result<T>.FromFailure(source.Error)
+-        };
+ }
+diff --git a/Application/Services/LicenseService.cs b/Application/Services/LicenseService.cs
+deleted file mode 100644
+index 7574d51..0000000
+--- a/Application/Services/LicenseService.cs
++++ /dev/null
+@@ -1,80 +0,0 @@
+-using Application.Common.Pagination;
+-using Application.Common.Results;
+-using Application.DTOs.LicenseDTO;
+-using Application.Interfaces;
+-
+-namespace Application.Services;
+-
+-public sealed class LicenseService(
+-    ILicenseQueryService queryService)
+-    : ILicenseService
+-{
+-    private readonly ILicenseQueryService _queryService =
+-        queryService
+-        ?? throw new ArgumentNullException(nameof(queryService));
+-
+-    public Task<Result<LicenseDto>> GetByIdAsync(
+-        int licenseId,
+-        CancellationToken cancellationToken = default) =>
+-        _queryService.GetByIdAsync(licenseId, cancellationToken);
+-
+-    public Task<Result<List<LicenseDto>>> GetAllAsync(CancellationToken cancellationToken = default) =>
+-        _queryService.GetAllAsync(cancellationToken);
+-
+-    public Task<Result<List<LicenseDto>>> GetAllAsync(bool? isExpired, CancellationToken cancellationToken = default) =>
+-        _queryService.GetAllAsync(isExpired, cancellationToken);
+-
+-    public Task<Result<PagedResult<LicenseDto>>> GetAllAsync(PaginationRequest request, CancellationToken cancellationToken = default) =>
+-        _queryService.GetAllAsync(request, cancellationToken);
+-
+-    public Task<Result<PagedResult<LicenseDto>>> GetAllAsync(LicenseQueryRequest request, CancellationToken cancellationToken = default) =>
+-        _queryService.GetAllAsync(request, cancellationToken);
+-
+-    public Task<Result<RenewalSummaryDto>> GetRenewalSummaryAsync(CancellationToken cancellationToken = default) =>
+-        _queryService.GetRenewalSummaryAsync(cancellationToken);
+-
+-    public Task<Result<List<LicenseDto>>> GetByDriverIdAsync(
+-        int driverId,
+-        CancellationToken cancellationToken = default) =>
+-        _queryService.GetByDriverIdAsync(driverId, cancellationToken);
+-
+-    public Task<Result<List<LicenseDto>>> GetByApplicationIdAsync(
+-        int applicationId,
+-        CancellationToken cancellationToken = default) =>
+-        _queryService.GetByApplicationIdAsync(applicationId, cancellationToken);
+-
+-    public Task<Result<List<LicenseDto>>> GetByLicenseClassIdAsync(
+-        int licenseClassId,
+-        CancellationToken cancellationToken = default) =>
+-        _queryService.GetByLicenseClassIdAsync(licenseClassId, cancellationToken);
+-
+-    public Task<Result<List<LicenseDto>>> GetLicensesByPersonIdAsync(
+-        int personId,
+-        CancellationToken cancellationToken = default) =>
+-        _queryService.GetLicensesByPersonIdAsync(personId, cancellationToken);
+-
+-    public Task<Result<bool>> IsLicenseExistsAsync(
+-        int licenseId,
+-        CancellationToken cancellationToken = default) =>
+-        _queryService.IsLicenseExistsAsync(licenseId, cancellationToken);
+-
+-    public Task<Result<bool>> IsDriverHasLicenseAsync(
+-        int driverId,
+-        CancellationToken cancellationToken = default) =>
+-        _queryService.IsDriverHasLicenseAsync(driverId, cancellationToken);
+-
+-    public Task<Result<bool>> IsApplicationHasLicenseAsync(
+-        int applicationId,
+-        CancellationToken cancellationToken = default) =>
+-        _queryService.IsApplicationHasLicenseAsync(applicationId, cancellationToken);
+-
+-    public Task<Result<DriverLicenseInfoDto>> GetDetailsAsync(
+-        int localAppId,
+-        CancellationToken cancellationToken = default) =>
+-        _queryService.GetDetailsAsync(localAppId, cancellationToken);
+-
+-    public Task<Result<DriverLicenseInfoDto>> GetLicenseDetailsByIdAsync(
+-        int licenseId,
+-        CancellationToken cancellationToken = default) =>
+-        _queryService.GetLicenseDetailsByIdAsync(licenseId, cancellationToken);
+-}
+diff --git a/Application/Services/LocalDrivingLicenseApplicationService.cs b/Application/Services/LocalDrivingLicenseApplicationService.cs
+index 0538dc4..93efa8f 100644
+--- a/Application/Services/LocalDrivingLicenseApplicationService.cs
++++ b/Application/Services/LocalDrivingLicenseApplicationService.cs
+@@ -157,7 +157,7 @@ public sealed class LocalDrivingLicenseApplicationService(
+             return Result<int>.FromValidationFailure(
+                 localValidation.Error);
+ 
+-        if (!IsAuthenticated())
++        if (!_currentUserService.IsAuthenticated())
+             return Result<int>.FromFailure(
+                 "Authenticated user is required.");
+ 
+@@ -521,9 +521,6 @@ public sealed class LocalDrivingLicenseApplicationService(
+             cancellationToken);
+     }
+ 
+-    private bool IsAuthenticated() =>
+-        _currentUserService.IsLoggedIn && _currentUserService.UserId > 0;
+-
+     private async Task<List<LocalDrivingLicenseApplicationListDto>> MapListToDtoAsync(
+         IReadOnlyList<LocalDrivingLicenseApplication> entities, CancellationToken cancellationToken = default)
+     {
+diff --git a/Application/Services/PersonService.Crud.cs b/Application/Services/PersonService.Crud.cs
+index 35583a8..3289dfe 100644
+--- a/Application/Services/PersonService.Crud.cs
++++ b/Application/Services/PersonService.Crud.cs
+@@ -3,7 +3,7 @@ using System.Collections;
+ using Application.Common.Exceptions;
+ using Application.Common.Results;
+ using Application.DTOs.PersonDTO;
+-using Application.Mappings;
++using Application.Mappers;
+ using Application.Validators;
+ using Microsoft.Extensions.Logging;
+ 
+diff --git a/Application/Services/PersonService.Queries.cs b/Application/Services/PersonService.Queries.cs
+index c1168f4..92588b1 100644
+--- a/Application/Services/PersonService.Queries.cs
++++ b/Application/Services/PersonService.Queries.cs
+@@ -1,7 +1,7 @@
+ using Application.Common.Pagination;
+ using Application.Common.Results;
+ using Application.DTOs.PersonDTO;
+-using Application.Mappings;
++using Application.Mappers;
+ using Domain.Entities;
+ using Microsoft.Extensions.Logging;
+ 
+@@ -60,21 +60,8 @@ public sealed partial class PersonService
+     GetAllInternalAsync(Func<Task<PagedResult<Person>>> fetcher)
+     {
+         var pagedEntities = await fetcher();
+-
+-        var items = pagedEntities.Items
+-            .Select(PersonMapper.ToDto)
+-            .ToList();
+-
+-        var result = new PagedResult<PersonDto>
+-        {
+-            Items = items,
+-            PageNumber = pagedEntities.PageNumber,
+-            PageSize = pagedEntities.PageSize,
+-            TotalCount = pagedEntities.TotalCount
+-        };
+-
+-        return Result<PagedResult<PersonDto>>
+-            .Success(result);
++        return Result<PagedResult<PersonDto>>.Success(
++            pagedEntities.Map(PersonMapper.ToDto));
+     }
+ 
+     public async Task<Result<List<PersonDto>>>
+diff --git a/Application/Services/TestAppointmentService.Lifecycle.cs b/Application/Services/TestAppointmentService.Lifecycle.cs
+index bcadb5e..6f1dd46 100644
+--- a/Application/Services/TestAppointmentService.Lifecycle.cs
++++ b/Application/Services/TestAppointmentService.Lifecycle.cs
+@@ -1,5 +1,6 @@
+ using Application.Common.Results;
+ using Application.DTOs.TestAppointmentDTO;
++using Application.Interfaces;
+ using Application.Validators;
+ using Domain.Enums;
+ 
+@@ -14,7 +15,7 @@ public sealed partial class TestAppointmentService
+         if (validation.IsFailure)
+             return validation;
+ 
+-        if (!IsAuthenticated())
++        if (!_currentUserService.IsAuthenticated())
+             return Result.Forbidden("You must be logged in first.");
+ 
+         return await ExecuteTransactionAsync(async transaction =>
+@@ -93,7 +94,7 @@ public sealed partial class TestAppointmentService
+         if (validation.IsFailure)
+             return validation;
+ 
+-        if (!IsAuthenticated())
++        if (!_currentUserService.IsAuthenticated())
+             return Result.Forbidden("You must be logged in first.");
+ 
+         return await ExecuteTransactionAsync(async transaction =>
+diff --git a/Application/Services/TestAppointmentService.Queries.cs b/Application/Services/TestAppointmentService.Queries.cs
+index f270bff..75bf68f 100644
+--- a/Application/Services/TestAppointmentService.Queries.cs
++++ b/Application/Services/TestAppointmentService.Queries.cs
+@@ -62,16 +62,8 @@ public sealed partial class TestAppointmentService
+         Func<Task<PagedResult<Domain.Entities.TestAppointment>>> fetcher)
+     {
+         var paged = await fetcher();
+-        var items = paged.Items.Select(TestAppointmentMapper.ToDto).ToList();
+-
+         return Result<PagedResult<TestAppointmentDto>>.Success(
+-            new PagedResult<TestAppointmentDto>
+-            {
+-                Items = items,
+-                PageNumber = paged.PageNumber,
+-                PageSize = paged.PageSize,
+-                TotalCount = paged.TotalCount
+-            });
++            paged.Map(TestAppointmentMapper.ToDto));
+     }
+ 
+     public async Task<Result<List<TestAppointmentDto>>> GetByLocalDrivingLicenseApplicationIdAsync(int localAppId, CancellationToken cancellationToken = default)
+diff --git a/Application/Services/TestAppointmentService.Scheduling.cs b/Application/Services/TestAppointmentService.Scheduling.cs
+index 910689d..5677cf2 100644
+--- a/Application/Services/TestAppointmentService.Scheduling.cs
++++ b/Application/Services/TestAppointmentService.Scheduling.cs
+@@ -1,6 +1,7 @@
+ using Application.Common.Results;
+ using Application.DTOs.ApplicationDTO;
+ using Application.DTOs.TestAppointmentDTO;
++using Application.Interfaces;
+ using Application.Mappers;
+ using Application.Validators;
+ using Domain.Enums;
+@@ -79,7 +80,7 @@ public sealed partial class TestAppointmentService
+         if (validation.IsFailure)
+             return validation;
+ 
+-        if (!IsAuthenticated())
++        if (!_currentUserService.IsAuthenticated())
+             return Result.Forbidden("You must be logged in first.");
+ 
+         var testType = await _testTypeRepository.GetByIdAsync(dto.TestTypeID, cancellationToken);
+@@ -155,7 +156,7 @@ public sealed partial class TestAppointmentService
+         if (validation.IsFailure)
+             return Result<ScheduleTestDto>.FromValidationFailure(validation.Error);
+ 
+-        if (!IsAuthenticated())
++        if (!_currentUserService.IsAuthenticated())
+             return Result<ScheduleTestDto>.FromForbidden(
+                 "You must be logged in first.");
+ 
+diff --git a/Application/Services/TestAppointmentService.cs b/Application/Services/TestAppointmentService.cs
+index eff4db5..fda491a 100644
+--- a/Application/Services/TestAppointmentService.cs
++++ b/Application/Services/TestAppointmentService.cs
+@@ -31,9 +31,6 @@ public sealed partial class TestAppointmentService(
+     private readonly ILogger<TestAppointmentService> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+     private readonly IJordanClock _clock = clock ?? throw new ArgumentNullException(nameof(clock));
+ 
+-    private bool IsAuthenticated() =>
+-        _currentUserService.IsLoggedIn && _currentUserService.UserId > 0;
+-
+     private async Task<T> ExecuteTransactionAsync<T>(
+         Func<IUnitOfWorkTransaction, Task<T>> operation,
+         CancellationToken cancellationToken = default) =>
+diff --git a/Application/Services/UserService.Administration.cs b/Application/Services/UserService.Administration.cs
+index 6c4b295..5cf1db2 100644
+--- a/Application/Services/UserService.Administration.cs
++++ b/Application/Services/UserService.Administration.cs
+@@ -4,7 +4,7 @@ using Application.Common.Exceptions;
+ using Application.Common.Results;
+ using Application.DTOs.UserDTO;
+ using Application.Interfaces;
+-using Application.Mappings;
++using Application.Mappers;
+ using Application.Validators;
+ using Domain.Entities;
+ using Domain.Enums;
+diff --git a/Application/Services/UserService.Queries.cs b/Application/Services/UserService.Queries.cs
+index e865dbf..fa9874f 100644
+--- a/Application/Services/UserService.Queries.cs
++++ b/Application/Services/UserService.Queries.cs
+@@ -1,6 +1,6 @@
+ using Application.Common.Results;
+ using Application.DTOs.UserDTO;
+-using Application.Mappings;
++using Application.Mappers;
+ 
+ namespace Application.Services;
+ 
+diff --git a/Infrastructure/Repositories/LicenseRepository.cs b/Infrastructure/Repositories/LicenseRepository.cs
+index ce311e7..10bc6a4 100644
+--- a/Infrastructure/Repositories/LicenseRepository.cs
++++ b/Infrastructure/Repositories/LicenseRepository.cs
+@@ -463,26 +463,31 @@ public sealed class LicenseRepository(DVLDDbContext context)
+             })
+             .ToListAsync(cancellationToken);
+ 
++        var maxNewerByDriverAndClass = new Dictionary<(int DriverID, int LicenseClass), License>(potentialNewer.Count);
++        foreach (var p in potentialNewer)
++        {
++            var key = (p.DriverID, p.LicenseClass);
++            if (!maxNewerByDriverAndClass.TryGetValue(key, out var currentMax) ||
++                p.LicenseID > currentMax.LicenseID)
++            {
++                maxNewerByDriverAndClass[key] = new License
++                {
++                    LicenseID = p.LicenseID,
++                    DriverID = p.DriverID,
++                    LicenseClass = p.LicenseClass,
++                    IssueReason = p.IssueReason
++                };
++            }
++        }
++
+         var result = new Dictionary<int, License>();
+ 
+         foreach (var candidate in candidateList)
+         {
+-            var newer = potentialNewer
+-                .Where(p => p.DriverID == candidate.DriverID &&
+-                            p.LicenseClass == candidate.LicenseClass &&
+-                            p.LicenseID > candidate.LicenseID)
+-                .OrderByDescending(p => p.LicenseID)
+-                .FirstOrDefault();
+-
+-            if (newer is not null)
++            if (maxNewerByDriverAndClass.TryGetValue((candidate.DriverID, candidate.LicenseClass), out var newer) &&
++                newer.LicenseID > candidate.LicenseID)
+             {
+-                result[candidate.LicenseID] = new License
+-                {
+-                    LicenseID = newer.LicenseID,
+-                    DriverID = newer.DriverID,
+-                    LicenseClass = newer.LicenseClass,
+-                    IssueReason = newer.IssueReason
+-                };
++                result[candidate.LicenseID] = newer;
+             }
+         }
+ 
+diff --git a/Test/API.IntegrationTests/Infrastructure/ApiWebApplicationFactory.cs b/Test/API.IntegrationTests/Infrastructure/ApiWebApplicationFactory.cs
+index b17d333..c9b2d84 100644
+--- a/Test/API.IntegrationTests/Infrastructure/ApiWebApplicationFactory.cs
++++ b/Test/API.IntegrationTests/Infrastructure/ApiWebApplicationFactory.cs
+@@ -54,7 +54,7 @@ public sealed class ApiWebApplicationFactory
+ 
+     public Mock<ILicenseRenewalService> LicenseRenewalServiceMock { get; } = new();
+ 
+-    public Mock<ILicenseService> LicenseServiceMock { get; } = new();
++    public Mock<ILicenseQueryService> LicenseServiceMock { get; } = new();
+ 
+     public Mock<IInternationalService> InternationalServiceMock { get; } = new();
+ 
+@@ -136,7 +136,7 @@ public sealed class ApiWebApplicationFactory
+             services.RemoveAll<ILicenseRenewalService>();
+             services.AddScoped(_ => LicenseRenewalServiceMock.Object);
+ 
+-            services.RemoveAll<ILicenseService>();
++            services.RemoveAll<ILicenseQueryService>();
+             services.AddScoped(_ => LicenseServiceMock.Object);
+ 
+             services.RemoveAll<IInternationalService>();
+diff --git a/Test/Application.UnitTests/Services/ApiDataEfficiencyOptimizationTests.cs b/Test/Application.UnitTests/Services/ApiDataEfficiencyOptimizationTests.cs
+index eaf3ed0..544bf62 100644
+--- a/Test/Application.UnitTests/Services/ApiDataEfficiencyOptimizationTests.cs
++++ b/Test/Application.UnitTests/Services/ApiDataEfficiencyOptimizationTests.cs
+@@ -233,4 +233,96 @@ public sealed class ApiDataEfficiencyOptimizationTests
+         mockRepo.Verify(r => r.GetAllLicensesAsync(It.IsAny<CancellationToken>()), Times.Once);
+         mockRepo.Verify(r => r.GetAllLicensesAsync(It.IsAny<bool?>(), It.IsAny<DateOnly?>(), It.IsAny<CancellationToken>()), Times.Never);
+     }
++
++    [Fact]
++    public async Task LicenseQueryService_GetAllAsync_WhenIsExpiredTrue_ChecksExternalNewerLicenses()
++    {
++        // Arrange
++        var mockRepo = new Mock<ILicenseRepository>();
++        var mockLocalApp = new Mock<ILocalDrivingLicenseApplicationService>();
++        var mockDetained = new Mock<IDetainedLicenseRepository>();
++        var mockClock = new Mock<IJordanClock>();
++
++        var testToday = new DateOnly(2026, 11, 7);
++        mockClock.SetupGet(c => c.Today).Returns(testToday);
++
++        var expiredLicense = new License
++        {
++            LicenseID = 10,
++            DriverID = 5,
++            LicenseClass = 3,
++            ExpirationDate = new DateTime(2025, 1, 1),
++            IsActive = false
++        };
++
++        mockRepo.Setup(r => r.GetAllLicensesAsync(true, testToday, It.IsAny<CancellationToken>()))
++            .ReturnsAsync([expiredLicense]);
++        mockDetained.Setup(d => d.GetActiveDetainedLicenseIdsAsync(It.IsAny<IEnumerable<int>>(), It.IsAny<CancellationToken>()))
++            .ReturnsAsync([]);
++        mockRepo.Setup(r => r.GetNewerLicensesBatchAsync(It.IsAny<IEnumerable<License>>(), It.IsAny<CancellationToken>()))
++            .ReturnsAsync(new Dictionary<int, License>
++            {
++                [10] = new License
++                {
++                    LicenseID = 20,
++                    DriverID = 5,
++                    LicenseClass = 3,
++                    IssueReason = Domain.Enums.IssueReason.Renew
++                }
++            });
++
++        var service = new LicenseQueryService(
++            mockRepo.Object,
++            mockLocalApp.Object,
++            mockDetained.Object,
++            mockClock.Object);
++
++        // Act
++        var result = await service.GetAllAsync(isExpired: true);
++
++        // Assert
++        Assert.True(result.IsSuccess);
++        Assert.Single(result.Value!);
++        Assert.False(result.Value![0].IsEligibleForRenewal);
++        Assert.Contains("License #20", result.Value![0].IneligibilityReason);
++        mockRepo.Verify(r => r.GetNewerLicensesBatchAsync(It.IsAny<IEnumerable<License>>(), It.IsAny<CancellationToken>()), Times.Once);
++    }
++
++    [Fact]
++    public void PagedResult_Map_PreservesMetadataAndProjectsItems()
++    {
++        var source = new Application.Common.Pagination.PagedResult<int>
++        {
++            Items = [1, 2, 3],
++            PageNumber = 2,
++            PageSize = 3,
++            TotalCount = 10
++        };
++
++        var mapped = source.Map(x => x * 10);
++
++        Assert.Equal([10, 20, 30], mapped.Items);
++        Assert.Equal(2, mapped.PageNumber);
++        Assert.Equal(3, mapped.PageSize);
++        Assert.Equal(10, mapped.TotalCount);
++        Assert.Equal(4, mapped.TotalPages);
++        Assert.True(mapped.HasPreviousPage);
++        Assert.True(mapped.HasNextPage);
++    }
++
++    [Fact]
++    public void CurrentUserServiceExtensions_IsAuthenticated_RequiresLoggedInAndPositiveUserId()
++    {
++        var mockUser = new Mock<ICurrentUserService>();
++        mockUser.SetupGet(u => u.IsLoggedIn).Returns(true);
++        mockUser.SetupGet(u => u.UserId).Returns(1);
++        Assert.True(mockUser.Object.IsAuthenticated());
++
++        mockUser.SetupGet(u => u.UserId).Returns(0);
++        Assert.False(mockUser.Object.IsAuthenticated());
++
++        mockUser.SetupGet(u => u.UserId).Returns(1);
++        mockUser.SetupGet(u => u.IsLoggedIn).Returns(false);
++        Assert.False(mockUser.Object.IsAuthenticated());
++    }
+ }
+diff --git a/Test/Application.UnitTests/Services/LicenseIssuanceServiceTests.cs b/Test/Application.UnitTests/Services/LicenseIssuanceServiceTests.cs
+index 9e00ea6..423924c 100644
+--- a/Test/Application.UnitTests/Services/LicenseIssuanceServiceTests.cs
++++ b/Test/Application.UnitTests/Services/LicenseIssuanceServiceTests.cs
+@@ -59,7 +59,6 @@ public class LicenseIssuanceServiceTests
+             _currentUserServiceMock.Object,
+             _licenseClassServiceMock.Object,
+             _testWorkflowServiceMock.Object,
+-            _loggerMock.Object,
+             _clock);
+     }
+     [Fact]
+diff --git a/Test/Application.UnitTests/Services/LicenseServiceTests.cs b/Test/Application.UnitTests/Services/LicenseServiceTests.cs
+deleted file mode 100644
+index 2d4da98..0000000
+--- a/Test/Application.UnitTests/Services/LicenseServiceTests.cs
++++ /dev/null
+@@ -1,279 +0,0 @@
+-using Application.Common.Pagination;
+-using Application.Common.Results;
+-using Application.DTOs.LicenseDTO;
+-using Application.Interfaces;
+-using Application.Services;
+-using Moq;
+-
+-namespace Application.UnitTests.Services;
+-
+-public sealed class LicenseServiceTests
+-{
+-    private readonly Mock<ILicenseQueryService> _queryService = new();
+-
+-    private LicenseService CreateService() =>
+-        new(_queryService.Object);
+-
+-    [Fact]
+-    public void Constructor_WhenQueryServiceIsNull_ThrowsArgumentNullException()
+-    {
+-        var exception = Assert.Throws<ArgumentNullException>(
+-            () => new LicenseService(null!));
+-
+-        Assert.Equal("queryService", exception.ParamName);
+-    }
+-
+-    [Fact]
+-    public async Task GetByIdAsync_DelegatesToQueryServiceAndReturnsSameResult()
+-    {
+-        var expected = Result<LicenseDto>.FromNotFound("not found");
+-        _queryService
+-            .Setup(x => x.GetByIdAsync(42, It.IsAny<CancellationToken>()))
+-            .ReturnsAsync(expected);
+-
+-        var result = await CreateService().GetByIdAsync(42);
+-
+-        Assert.Same(expected, result);
+-
+-        _queryService.Verify(
+-            x => x.GetByIdAsync(42, It.IsAny<CancellationToken>()),
+-            Times.Once);
+-    }
+-
+-    [Fact]
+-    public async Task GetAllAsync_DelegatesToQueryServiceAndReturnsSameResult()
+-    {
+-        var expected = Result<List<LicenseDto>>.FromFailure("failure");
+-        _queryService
+-            .Setup(x => x.GetAllAsync(It.IsAny<CancellationToken>()))
+-            .ReturnsAsync(expected);
+-
+-        var result = await CreateService().GetAllAsync();
+-
+-        Assert.Same(expected, result);
+-
+-        _queryService.Verify(
+-            x => x.GetAllAsync(It.IsAny<CancellationToken>()),
+-            Times.Once);
+-    }
+-
+-    [Fact]
+-    public async Task GetAllAsync_WithPaginationRequest_DelegatesToQueryService()
+-    {
+-        var request = new PaginationRequest { PageNumber = 2, PageSize = 10 };
+-        var expected = Result<PagedResult<LicenseDto>>.Success(new PagedResult<LicenseDto>
+-        {
+-            Items = [],
+-            PageNumber = 2,
+-            PageSize = 10,
+-            TotalCount = 0
+-        });
+-
+-        _queryService
+-            .Setup(x => x.GetAllAsync(request, It.IsAny<CancellationToken>()))
+-            .ReturnsAsync(expected);
+-
+-        var result = await CreateService().GetAllAsync(request);
+-
+-        Assert.Same(expected, result);
+-        _queryService.Verify(x => x.GetAllAsync(request, It.IsAny<CancellationToken>()), Times.Once);
+-    }
+-
+-    [Fact]
+-    public async Task GetAllAsync_WithLicenseQueryRequest_DelegatesToQueryService()
+-    {
+-        var request = new LicenseQueryRequest { PageNumber = 1, PageSize = 20, SearchQuery = "test" };
+-        var expected = Result<PagedResult<LicenseDto>>.Success(new PagedResult<LicenseDto>
+-        {
+-            Items = [],
+-            PageNumber = 1,
+-            PageSize = 20,
+-            TotalCount = 0
+-        });
+-
+-        _queryService
+-            .Setup(x => x.GetAllAsync(request, It.IsAny<CancellationToken>()))
+-            .ReturnsAsync(expected);
+-
+-        var result = await CreateService().GetAllAsync(request);
+-
+-        Assert.Same(expected, result);
+-        _queryService.Verify(x => x.GetAllAsync(request, It.IsAny<CancellationToken>()), Times.Once);
+-    }
+-
+-    [Fact]
+-    public async Task GetByDriverIdAsync_DelegatesToQueryServiceAndReturnsSameResult()
+-    {
+-        var expected = Result<List<LicenseDto>>.FromNotFound("not found");
+-        _queryService
+-            .Setup(x => x.GetByDriverIdAsync(15, It.IsAny<CancellationToken>()))
+-            .ReturnsAsync(expected);
+-
+-        var result = await CreateService().GetByDriverIdAsync(15);
+-
+-        Assert.Same(expected, result);
+-
+-        _queryService.Verify(
+-            x => x.GetByDriverIdAsync(15, It.IsAny<CancellationToken>()),
+-            Times.Once);
+-    }
+-
+-    [Fact]
+-    public async Task GetByApplicationIdAsync_DelegatesToQueryServiceAndReturnsSameResult()
+-    {
+-        var expected = Result<List<LicenseDto>>.FromFailure("failure");
+-        _queryService
+-            .Setup(x => x.GetByApplicationIdAsync(25, It.IsAny<CancellationToken>()))
+-            .ReturnsAsync(expected);
+-
+-        var result = await CreateService().GetByApplicationIdAsync(25);
+-
+-        Assert.Same(expected, result);
+-
+-        _queryService.Verify(
+-            x => x.GetByApplicationIdAsync(25, It.IsAny<CancellationToken>()),
+-            Times.Once);
+-    }
+-
+-    [Fact]
+-    public async Task GetByLicenseClassIdAsync_DelegatesToQueryServiceAndReturnsSameResult()
+-    {
+-        var expected = Result<List<LicenseDto>>.FromFailure("failure");
+-        _queryService
+-            .Setup(x => x.GetByLicenseClassIdAsync(7, It.IsAny<CancellationToken>()))
+-            .ReturnsAsync(expected);
+-
+-        var result = await CreateService().GetByLicenseClassIdAsync(7);
+-
+-        Assert.Same(expected, result);
+-
+-        _queryService.Verify(
+-            x => x.GetByLicenseClassIdAsync(7, It.IsAny<CancellationToken>()),
+-            Times.Once);
+-    }
+-
+-    [Fact]
+-    public async Task GetLicensesByPersonIdAsync_DelegatesToQueryServiceAndReturnsSameResult()
+-    {
+-        var expected = Result<List<LicenseDto>>.FromNotFound("not found");
+-        _queryService
+-            .Setup(x => x.GetLicensesByPersonIdAsync(31, It.IsAny<CancellationToken>()))
+-            .ReturnsAsync(expected);
+-
+-        var result = await CreateService().GetLicensesByPersonIdAsync(31);
+-
+-        Assert.Same(expected, result);
+-
+-        _queryService.Verify(
+-            x => x.GetLicensesByPersonIdAsync(31, It.IsAny<CancellationToken>()),
+-            Times.Once);
+-    }
+-
+-    [Fact]
+-    public async Task IsLicenseExistsAsync_DelegatesToQueryServiceAndReturnsSameResult()
+-    {
+-        var expected = Result<bool>.Success(true);
+-        _queryService
+-            .Setup(x => x.IsLicenseExistsAsync(50, It.IsAny<CancellationToken>()))
+-            .ReturnsAsync(expected);
+-
+-        var result = await CreateService().IsLicenseExistsAsync(50);
+-
+-        Assert.Same(expected, result);
+-        Assert.True(result.IsSuccess);
+-        Assert.True(result.Value);
+-
+-        _queryService.Verify(
+-            x => x.IsLicenseExistsAsync(50, It.IsAny<CancellationToken>()),
+-            Times.Once);
+-    }
+-
+-    [Fact]
+-    public async Task IsDriverHasLicenseAsync_DelegatesToQueryServiceAndReturnsSameResult()
+-    {
+-        var expected = Result<bool>.Success(false);
+-        _queryService
+-            .Setup(x => x.IsDriverHasLicenseAsync(60, It.IsAny<CancellationToken>()))
+-            .ReturnsAsync(expected);
+-
+-        var result = await CreateService().IsDriverHasLicenseAsync(60);
+-
+-        Assert.Same(expected, result);
+-        Assert.True(result.IsSuccess);
+-        Assert.False(result.Value);
+-
+-        _queryService.Verify(
+-            x => x.IsDriverHasLicenseAsync(60, It.IsAny<CancellationToken>()),
+-            Times.Once);
+-    }
+-
+-    [Fact]
+-    public async Task IsApplicationHasLicenseAsync_DelegatesToQueryServiceAndReturnsSameResult()
+-    {
+-        var expected = Result<bool>.FromNotFound("application not found");
+-        _queryService
+-            .Setup(x => x.IsApplicationHasLicenseAsync(70, It.IsAny<CancellationToken>()))
+-            .ReturnsAsync(expected);
+-
+-        var result = await CreateService().IsApplicationHasLicenseAsync(70);
+-
+-        Assert.Same(expected, result);
+-
+-        _queryService.Verify(
+-            x => x.IsApplicationHasLicenseAsync(70, It.IsAny<CancellationToken>()),
+-            Times.Once);
+-    }
+-
+-    [Fact]
+-    public async Task GetDetailsAsync_DelegatesToQueryServiceAndReturnsSameResult()
+-    {
+-        var expected =
+-            Result<DriverLicenseInfoDto>.FromNotFound("details not found");
+-
+-        _queryService
+-            .Setup(x => x.GetDetailsAsync(80, It.IsAny<CancellationToken>()))
+-            .ReturnsAsync(expected);
+-
+-        var result = await CreateService().GetDetailsAsync(80);
+-
+-        Assert.Same(expected, result);
+-
+-        _queryService.Verify(
+-            x => x.GetDetailsAsync(80, It.IsAny<CancellationToken>()),
+-            Times.Once);
+-    }
+-
+-    [Fact]
+-    public async Task GetLicenseDetailsByIdAsync_DelegatesToQueryServiceAndReturnsSameResult()
+-    {
+-        var expected =
+-            Result<DriverLicenseInfoDto>.FromNotFound("license details not found");
+-
+-        _queryService
+-            .Setup(x => x.GetLicenseDetailsByIdAsync(90, It.IsAny<CancellationToken>()))
+-            .ReturnsAsync(expected);
+-
+-        var result =
+-            await CreateService().GetLicenseDetailsByIdAsync(90);
+-
+-        Assert.Same(expected, result);
+-
+-        _queryService.Verify(
+-            x => x.GetLicenseDetailsByIdAsync(90, It.IsAny<CancellationToken>()),
+-            Times.Once);
+-    }
+-
+-    [Fact]
+-    public async Task GetByIdAsync_WhenQueryServiceThrows_PropagatesException()
+-    {
+-        _queryService
+-            .Setup(x => x.GetByIdAsync(42, It.IsAny<CancellationToken>()))
+-            .ThrowsAsync(new InvalidOperationException("query failed"));
+-
+-        var exception =
+-            await Assert.ThrowsAsync<InvalidOperationException>(
+-                () => CreateService().GetByIdAsync(42));
+-
+-        Assert.Equal("query failed", exception.Message);
+-    }
+-}
+diff --git a/Test/Infrastructure.IntegrationTests/Concurrency/ApplicationCancellationConcurrencyRegressionTests.cs b/Test/Infrastructure.IntegrationTests/Concurrency/ApplicationCancellationConcurrencyRegressionTests.cs
+index b73146a..7de0834 100644
+--- a/Test/Infrastructure.IntegrationTests/Concurrency/ApplicationCancellationConcurrencyRegressionTests.cs
++++ b/Test/Infrastructure.IntegrationTests/Concurrency/ApplicationCancellationConcurrencyRegressionTests.cs
+@@ -5,7 +5,7 @@ using Application.DTOs.DriverDTO;
+ using Application.DTOs.LicenseDTO;
+ using Application.DTOs.UserDTO;
+ using Application.Interfaces;
+-using Application.Mappings;
++using Application.Mappers;
+ using Application.Services;
+ using Application.Validators;
+ using Domain.Entities;
+@@ -604,7 +604,6 @@ public sealed class ApplicationCancellationConcurrencyRegressionTests : IClassFi
+             currentUser,
+             licenseClassService,
+             testWorkflowService,
+-            NullLogger<LicenseIssuanceService>.Instance,
+             _clock);
+     }
+ 
+diff --git a/Test/Infrastructure.IntegrationTests/Concurrency/RepositoryConcurrencyLostUpdateTests.cs b/Test/Infrastructure.IntegrationTests/Concurrency/RepositoryConcurrencyLostUpdateTests.cs
+index de7c90b..306b4a6 100644
+--- a/Test/Infrastructure.IntegrationTests/Concurrency/RepositoryConcurrencyLostUpdateTests.cs
++++ b/Test/Infrastructure.IntegrationTests/Concurrency/RepositoryConcurrencyLostUpdateTests.cs
+@@ -489,7 +489,6 @@ public sealed class RepositoryConcurrencyLostUpdateTests : IClassFixture<SqlServ
+             currentUser,
+             licenseClassService,
+             testWorkflowService,
+-            NullLogger<LicenseIssuanceService>.Instance,
+             _clock);
+     }
+ 

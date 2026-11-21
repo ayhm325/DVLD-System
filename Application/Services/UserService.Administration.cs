@@ -4,7 +4,7 @@ using Application.Common.Exceptions;
 using Application.Common.Results;
 using Application.DTOs.UserDTO;
 using Application.Interfaces;
-using Application.Mappings;
+using Application.Mappers;
 using Application.Validators;
 using Domain.Entities;
 using Domain.Enums;

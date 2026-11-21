@@ -79,18 +79,8 @@ public sealed class DriverService(
         Func<Task<PagedResult<Domain.Entities.Driver>>> fetcher)
     {
         var pagedEntities = await fetcher();
-
-        var items = pagedEntities.Items
-            .Select(DriverMapper.ToDto)
-            .ToList();
-
-        return Result<PagedResult<DriverDto>>.Success(new PagedResult<DriverDto>
-        {
-            Items = items,
-            PageNumber = pagedEntities.PageNumber,
-            PageSize = pagedEntities.PageSize,
-            TotalCount = pagedEntities.TotalCount
-        });
+        return Result<PagedResult<DriverDto>>.Success(
+            pagedEntities.Map(DriverMapper.ToDto));
     }
 
     public async Task<Result<DriverDto>> GetByPersonIdAsync(int personId, CancellationToken cancellationToken = default)
@@ -153,7 +143,7 @@ public sealed class DriverService(
                 validation.Error);
         }
 
-        if (!IsAuthenticated())
+        if (!_currentUserService.IsAuthenticated())
         {
             return Result<int>.FromForbidden(
                 "Authenticated user is required.");
@@ -198,7 +188,7 @@ public sealed class DriverService(
                 validation.Error);
         }
 
-        if (!IsAuthenticated())
+        if (!_currentUserService.IsAuthenticated())
         {
             return Result.Forbidden(
                 "Authenticated user is required.");
@@ -254,7 +244,7 @@ public sealed class DriverService(
                 validation.Error);
         }
 
-        if (!IsAuthenticated())
+        if (!_currentUserService.IsAuthenticated())
         {
             return Result.Forbidden(
                 "Authenticated user is required.");
@@ -291,8 +281,4 @@ public sealed class DriverService(
             : Result.Failure(
                 "Failed to delete driver.");
     }
-
-    private bool IsAuthenticated() =>
-        _currentUserService.IsLoggedIn &&
-        _currentUserService.UserId > 0;
 }

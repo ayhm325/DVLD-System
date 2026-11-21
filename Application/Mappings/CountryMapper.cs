@@ -1,7 +1,7 @@
 using Application.DTOs.CountryDTO;
 using Domain.Entities;
 
-namespace Application.Mappings;
+namespace Application.Mappers;
 
 public static class CountryMapper
 {

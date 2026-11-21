@@ -46,7 +46,7 @@ public sealed class LicenseRenewalService(
         if (validation.IsFailure)
             return Result<int>.FromValidationFailure(validation.Error);
 
-        if (!IsAuthenticated())
+        if (!_currentUserService.IsAuthenticated())
             return Result<int>.FromForbidden("Authenticated user is required.");
 
         var applicationTypeResult =
@@ -55,7 +55,7 @@ public sealed class LicenseRenewalService(
                 cancellationToken);
 
         if (applicationTypeResult.IsFailure)
-            return PropagateFailure<int>(applicationTypeResult);
+            return Result<int>.FromResult(applicationTypeResult);
 
         if (applicationTypeResult.Value is null)
             return Result<int>.FromNotFound(
@@ -151,7 +151,7 @@ public sealed class LicenseRenewalService(
                 if (applicationResult.IsFailure)
                     return await RollbackAsync(
                         transaction,
-                        PropagateFailure<int>(applicationResult));
+                        Result<int>.FromResult(applicationResult));
 
                 var applicationId = applicationResult.Value;
 
@@ -213,7 +213,7 @@ public sealed class LicenseRenewalService(
                 if (completeResult.IsFailure)
                     return await RollbackAsync(
                         transaction,
-                        PropagateFailure<int>(completeResult));
+                        Result<int>.FromResult(completeResult));
 
                 await transaction.CommitAsync(cancellationToken);
 
@@ -230,9 +230,6 @@ public sealed class LicenseRenewalService(
             cancellationToken);
     }
 
-    private bool IsAuthenticated() =>
-        _currentUserService.IsLoggedIn && _currentUserService.UserId > 0;
-
     private static async Task<T> RollbackAsync<T>(
         IUnitOfWorkTransaction transaction,
         T result)
@@ -240,15 +237,4 @@ public sealed class LicenseRenewalService(
         await transaction.RollbackAsync();
         return result;
     }
-
-    private static Result<T> PropagateFailure<T>(Result source) =>
-        source.ErrorType switch
-        {
-            ErrorType.Validation => Result<T>.FromValidationFailure(source.Error),
-            ErrorType.NotFound => Result<T>.FromNotFound(source.Error),
-            ErrorType.Conflict => Result<T>.FromConflict(source.Error),
-            ErrorType.Forbidden => Result<T>.FromForbidden(source.Error),
-            ErrorType.Unauthorized => Result<T>.FromUnauthorized(source.Error),
-            _ => Result<T>.FromFailure(source.Error)
-        };
 }

@@ -1,6 +1,6 @@
 using Application.Common.Results;
 using Application.DTOs.UserDTO;
-using Application.Mappings;
+using Application.Mappers;
 
 namespace Application.Services;
 

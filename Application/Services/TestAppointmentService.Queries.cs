@@ -62,16 +62,8 @@ public sealed partial class TestAppointmentService
         Func<Task<PagedResult<Domain.Entities.TestAppointment>>> fetcher)
     {
         var paged = await fetcher();
-        var items = paged.Items.Select(TestAppointmentMapper.ToDto).ToList();
-
         return Result<PagedResult<TestAppointmentDto>>.Success(
-            new PagedResult<TestAppointmentDto>
-            {
-                Items = items,
-                PageNumber = paged.PageNumber,
-                PageSize = paged.PageSize,
-                TotalCount = paged.TotalCount
-            });
+            paged.Map(TestAppointmentMapper.ToDto));
     }
 
     public async Task<Result<List<TestAppointmentDto>>> GetByLocalDrivingLicenseApplicationIdAsync(int localAppId, CancellationToken cancellationToken = default)

@@ -157,7 +157,7 @@ public sealed class LocalDrivingLicenseApplicationService(
             return Result<int>.FromValidationFailure(
                 localValidation.Error);
 
-        if (!IsAuthenticated())
+        if (!_currentUserService.IsAuthenticated())
             return Result<int>.FromFailure(
                 "Authenticated user is required.");
 
@@ -520,9 +520,6 @@ public sealed class LocalDrivingLicenseApplicationService(
             IsolationLevel.ReadCommitted,
             cancellationToken);
     }
-
-    private bool IsAuthenticated() =>
-        _currentUserService.IsLoggedIn && _currentUserService.UserId > 0;
 
     private async Task<List<LocalDrivingLicenseApplicationListDto>> MapListToDtoAsync(
         IReadOnlyList<LocalDrivingLicenseApplication> entities, CancellationToken cancellationToken = default)

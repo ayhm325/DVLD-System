@@ -94,7 +94,6 @@ public static class DependencyInjectionExtensions
                 "AuthSession configuration is invalid: refresh lifetime must be 1-90 days, idle timeout 1-30 days and not greater than the refresh lifetime, rotation grace 0-300 seconds, and the cookie name/path must be configured.")
             .ValidateOnStart();
 
-        services.AddScoped<ILicenseService, LicenseService>();
         services.AddScoped<
             ILicenseRenewalService,
             LicenseRenewalService>();

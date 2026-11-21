@@ -6,7 +6,6 @@ using Application.Interfaces;
 using Application.Mappers;
 using Application.Validators;
 using Domain.Enums;
-using Microsoft.Extensions.Logging;
 
 namespace Application.Services;
 
@@ -20,7 +19,6 @@ public sealed class LicenseIssuanceService(
     ICurrentUserService currentUserService,
     ILicenseClassService licenseClassService,
     ITestWorkflowService testWorkflowService,
-    ILogger<LicenseIssuanceService> logger,
     IJordanClock clock) : ILicenseIssuanceService
 {
     private const int NewLocalDrivingLicenseApplicationTypeId = 1;
@@ -43,8 +41,6 @@ public sealed class LicenseIssuanceService(
         licenseClassService ?? throw new ArgumentNullException(nameof(licenseClassService));
     private readonly ITestWorkflowService _testWorkflowService =
         testWorkflowService ?? throw new ArgumentNullException(nameof(testWorkflowService));
-    private readonly ILogger<LicenseIssuanceService> _logger =
-        logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly IJordanClock _clock =
         clock ?? throw new ArgumentNullException(nameof(clock));
 
@@ -54,14 +50,14 @@ public sealed class LicenseIssuanceService(
         if (validation.IsFailure)
             return Result<int>.FromValidationFailure(validation.Error);
 
-        if (!IsAuthenticated())
+        if (!_currentUserService.IsAuthenticated())
             return Result<int>.FromForbidden("Authenticated user is required.");
 
         var localResult = await _localApplicationService
             .GetLocalDrivingLicenseApplicationByIdAsync(localAppId, cancellationToken);
 
         if (localResult.IsFailure)
-            return PropagateFailure<int>(localResult);
+            return Result<int>.FromResult(localResult);
 
         if (localResult.Value is null)
             return Result<int>.FromNotFound(
@@ -73,7 +69,7 @@ public sealed class LicenseIssuanceService(
             await _localApplicationService.GetApplicationIdByLocalIdAsync(localAppId, cancellationToken);
 
         if (applicationIdResult.IsFailure)
-            return PropagateFailure<int>(applicationIdResult);
+            return Result<int>.FromResult(applicationIdResult);
 
         var applicationId = applicationIdResult.Value;
 
@@ -88,7 +84,7 @@ public sealed class LicenseIssuanceService(
             await _applicationService.GetApplicationByIdAsync(applicationId, cancellationToken);
 
         if (applicationResult.IsFailure)
-            return PropagateFailure<int>(applicationResult);
+            return Result<int>.FromResult(applicationResult);
 
         if (applicationResult.Value is null)
             return Result<int>.FromNotFound("Application was not found.");
@@ -107,7 +103,7 @@ public sealed class LicenseIssuanceService(
             await _personService.GetPersonByIdAsync(application.ApplicantPersonID, cancellationToken);
 
         if (personResult.IsFailure)
-            return PropagateFailure<int>(personResult);
+            return Result<int>.FromResult(personResult);
 
         if (personResult.Value is null)
             return Result<int>.FromNotFound("Applicant person was not found.");
@@ -126,7 +122,7 @@ public sealed class LicenseIssuanceService(
                 cancellationToken);
 
         if (classResult.IsFailure)
-            return PropagateFailure<int>(classResult);
+            return Result<int>.FromResult(classResult);
 
         if (classResult.Value is null)
             return Result<int>.FromNotFound("License class was not found.");
@@ -147,7 +143,7 @@ public sealed class LicenseIssuanceService(
                 await _applicationService.GetApplicationForIssuanceAsync(applicationId, cancellationToken);
 
             if (currentApplicationResult.IsFailure)
-                return PropagateFailure<int>(currentApplicationResult);
+                return Result<int>.FromResult(currentApplicationResult);
 
             if (currentApplicationResult.Value is null)
                 return Result<int>.FromNotFound("Application was not found.");
@@ -180,14 +176,14 @@ public sealed class LicenseIssuanceService(
             else
             {
                 if (driverResult.ErrorType != ErrorType.NotFound)
-                    return PropagateFailure<int>(driverResult);
+                    return Result<int>.FromResult(driverResult);
 
                 var createDriverResult = await _driverService.AddAsync(
                     new CreateDriverDto { PersonID = person.PersonId },
                     cancellationToken);
 
                 if (createDriverResult.IsFailure)
-                    return PropagateFailure<int>(createDriverResult);
+                    return Result<int>.FromResult(createDriverResult);
 
                 driverId = createDriverResult.Value;
             }
@@ -240,7 +236,7 @@ public sealed class LicenseIssuanceService(
                 await _applicationService.CompleteApplicationStateAsync(applicationId, cancellationToken);
 
             if (completeResult.IsFailure)
-                return PropagateFailure<int>(completeResult);
+                return Result<int>.FromResult(completeResult);
 
             await transaction.CommitAsync(cancellationToken);
 
@@ -255,43 +251,4 @@ public sealed class LicenseIssuanceService(
             operation,
             IsolationLevel.Serializable,
             cancellationToken);
-
-    private bool IsAuthenticated() =>
-        _currentUserService.IsLoggedIn && _currentUserService.UserId > 0;
-
-    private static async Task<T> RollbackAsync<T>(
-    IUnitOfWorkTransaction transaction,
-    T result)
-    {
-        await transaction.RollbackAsync();
-
-        return result;
-    }
-
-    private async Task RollbackSafelyAsync(
-        IUnitOfWorkTransaction transaction,
-        int localAppId)
-    {
-        try
-        {
-            await transaction.RollbackAsync();
-        }
-        catch (Exception rollbackException)
-        {
-            _logger.LogError(
-                rollbackException,
-                "Rollback failed while issuing first license for LocalApplicationId {LocalApplicationId}.",
-                localAppId);
-        }
-    }
-
-    private static Result<T> PropagateFailure<T>(Result source) => source.ErrorType switch
-    {
-        ErrorType.Validation => Result<T>.FromValidationFailure(source.Error),
-        ErrorType.NotFound => Result<T>.FromNotFound(source.Error),
-        ErrorType.Conflict => Result<T>.FromConflict(source.Error),
-        ErrorType.Forbidden => Result<T>.FromForbidden(source.Error),
-        ErrorType.Unauthorized => Result<T>.FromUnauthorized(source.Error),
-        _ => Result<T>.FromFailure(source.Error)
-    };
 }

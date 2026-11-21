@@ -22,4 +22,17 @@ public sealed class PagedResult<T>
 
     public bool HasNextPage =>
         PageNumber < TotalPages;
+
+    public PagedResult<TResult> Map<TResult>(Func<T, TResult> mapper)
+    {
+        ArgumentNullException.ThrowIfNull(mapper);
+
+        return new PagedResult<TResult>
+        {
+            Items = Items.Select(mapper).ToList(),
+            PageNumber = PageNumber,
+            PageSize = PageSize,
+            TotalCount = TotalCount
+        };
+    }
 }

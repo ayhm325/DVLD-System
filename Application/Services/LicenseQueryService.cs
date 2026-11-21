@@ -4,7 +4,6 @@ using Application.Common.Time;
 using Application.DTOs.LicenseDTO;
 using Application.Interfaces;
 using Application.Mappers;
-using Application.Mappings;
 using Application.Validators;
 using Domain.Entities;
 
@@ -49,7 +48,11 @@ public sealed class LicenseQueryService(
         var licenses = isExpired.HasValue
             ? await _licenseRepository.GetAllLicensesAsync(isExpired.Value, today, cancellationToken)
             : await _licenseRepository.GetAllLicensesAsync(cancellationToken);
-        var dtos = await MapToDtosBatchAsync(licenses ?? [], today, checkExternalNewerIfMissing: false, cancellationToken);
+        var dtos = await MapToDtosBatchAsync(
+            licenses ?? [],
+            today,
+            checkExternalNewerIfMissing: isExpired.HasValue,
+            cancellationToken);
         return Result<List<LicenseDto>>.Success(dtos);
     }
 
@@ -215,6 +218,17 @@ public sealed class LicenseQueryService(
         var activeDetainedIds = await _detainedLicenseRepository
             .GetActiveDetainedLicenseIdsAsync(licenseIds, cancellationToken);
 
+        var maxLicenseByDriverAndClass = new Dictionary<(int DriverID, int LicenseClass), License>(licenses.Count);
+        foreach (var l in licenses)
+        {
+            var key = (l.DriverID, l.LicenseClass);
+            if (!maxLicenseByDriverAndClass.TryGetValue(key, out var currentMax) ||
+                l.LicenseID > currentMax.LicenseID)
+            {
+                maxLicenseByDriverAndClass[key] = l;
+            }
+        }
+
         Dictionary<int, License>? externalNewerMap = null;
 
         if (checkExternalNewerIfMissing)
@@ -223,10 +237,8 @@ public sealed class LicenseQueryService(
                 .Where(l =>
                     LicenseExpirationPolicy.IsExpired(l.ExpirationDate, today) &&
                     !activeDetainedIds.Contains(l.LicenseID) &&
-                    !licenses.Any(other =>
-                        other.DriverID == l.DriverID &&
-                        other.LicenseClass == l.LicenseClass &&
-                        other.LicenseID > l.LicenseID))
+                    maxLicenseByDriverAndClass.TryGetValue((l.DriverID, l.LicenseClass), out var maxInBatch) &&
+                    maxInBatch.LicenseID == l.LicenseID)
                 .ToList();
 
             if (candidateLicenses.Count > 0)
@@ -256,13 +268,11 @@ public sealed class LicenseQueryService(
             }
             else
             {
-                var newer = licenses
-                    .Where(other =>
-                        other.DriverID == l.DriverID &&
-                        other.LicenseClass == l.LicenseClass &&
-                        other.LicenseID > l.LicenseID)
-                    .OrderByDescending(other => other.LicenseID)
-                    .FirstOrDefault();
+                License? newer =
+                    maxLicenseByDriverAndClass.TryGetValue((l.DriverID, l.LicenseClass), out var maxInBatch) &&
+                    maxInBatch.LicenseID > l.LicenseID
+                        ? maxInBatch
+                        : null;
 
                 if (newer is null && externalNewerMap is not null)
                 {

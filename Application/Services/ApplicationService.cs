@@ -93,7 +93,7 @@ public sealed class ApplicationService(
         if (validation.IsFailure)
             return Result<int>.FromValidationFailure(validation.Error);
 
-        if (!IsAuthenticated())
+        if (!_currentUserService.IsAuthenticated())
             return Result<int>.FromForbidden("Authenticated user is required.");
 
         var applicationType = await _applicationTypeRepository.GetApplicationTypeByIdAsync(dto.ApplicationTypeID, cancellationToken);
@@ -227,9 +227,6 @@ public sealed class ApplicationService(
         entity.LastStatusDate = _clock.Now;
         return Result.Success();
     }
-
-    private bool IsAuthenticated() =>
-        _currentUserService.IsLoggedIn && _currentUserService.UserId > 0;
 
     private async Task<Result<ApplicationD>> GetTrackedApplicationAsync(
         int id,

@@ -1,7 +1,7 @@
 using Application.Common.Pagination;
 using Application.Common.Results;
 using Application.DTOs.PersonDTO;
-using Application.Mappings;
+using Application.Mappers;
 using Domain.Entities;
 using Microsoft.Extensions.Logging;
 
@@ -60,21 +60,8 @@ public sealed partial class PersonService
     GetAllInternalAsync(Func<Task<PagedResult<Person>>> fetcher)
     {
         var pagedEntities = await fetcher();
-
-        var items = pagedEntities.Items
-            .Select(PersonMapper.ToDto)
-            .ToList();
-
-        var result = new PagedResult<PersonDto>
-        {
-            Items = items,
-            PageNumber = pagedEntities.PageNumber,
-            PageSize = pagedEntities.PageSize,
-            TotalCount = pagedEntities.TotalCount
-        };
-
-        return Result<PagedResult<PersonDto>>
-            .Success(result);
+        return Result<PagedResult<PersonDto>>.Success(
+            pagedEntities.Map(PersonMapper.ToDto));
     }
 
     public async Task<Result<List<PersonDto>>>

@@ -31,9 +31,6 @@ public sealed partial class TestAppointmentService(
     private readonly ILogger<TestAppointmentService> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly IJordanClock _clock = clock ?? throw new ArgumentNullException(nameof(clock));
 
-    private bool IsAuthenticated() =>
-        _currentUserService.IsLoggedIn && _currentUserService.UserId > 0;
-
     private async Task<T> ExecuteTransactionAsync<T>(
         Func<IUnitOfWorkTransaction, Task<T>> operation,
         CancellationToken cancellationToken = default) =>

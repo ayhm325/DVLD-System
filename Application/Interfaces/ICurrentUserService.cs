@@ -25,3 +25,12 @@ public interface ICurrentUserService
 
     void Clear();
 }
+
+public static class CurrentUserServiceExtensions
+{
+    public static bool IsAuthenticated(this ICurrentUserService currentUserService)
+    {
+        ArgumentNullException.ThrowIfNull(currentUserService);
+        return currentUserService.IsLoggedIn && currentUserService.UserId > 0;
+    }
+}

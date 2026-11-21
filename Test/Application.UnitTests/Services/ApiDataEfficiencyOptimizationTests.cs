@@ -233,4 +233,96 @@ public sealed class ApiDataEfficiencyOptimizationTests
         mockRepo.Verify(r => r.GetAllLicensesAsync(It.IsAny<CancellationToken>()), Times.Once);
         mockRepo.Verify(r => r.GetAllLicensesAsync(It.IsAny<bool?>(), It.IsAny<DateOnly?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    [Fact]
+    public async Task LicenseQueryService_GetAllAsync_WhenIsExpiredTrue_ChecksExternalNewerLicenses()
+    {
+        // Arrange
+        var mockRepo = new Mock<ILicenseRepository>();
+        var mockLocalApp = new Mock<ILocalDrivingLicenseApplicationService>();
+        var mockDetained = new Mock<IDetainedLicenseRepository>();
+        var mockClock = new Mock<IJordanClock>();
+
+        var testToday = new DateOnly(2026, 11, 7);
+        mockClock.SetupGet(c => c.Today).Returns(testToday);
+
+        var expiredLicense = new License
+        {
+            LicenseID = 10,
+            DriverID = 5,
+            LicenseClass = 3,
+            ExpirationDate = new DateTime(2025, 1, 1),
+            IsActive = false
+        };
+
+        mockRepo.Setup(r => r.GetAllLicensesAsync(true, testToday, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([expiredLicense]);
+        mockDetained.Setup(d => d.GetActiveDetainedLicenseIdsAsync(It.IsAny<IEnumerable<int>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        mockRepo.Setup(r => r.GetNewerLicensesBatchAsync(It.IsAny<IEnumerable<License>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<int, License>
+            {
+                [10] = new License
+                {
+                    LicenseID = 20,
+                    DriverID = 5,
+                    LicenseClass = 3,
+                    IssueReason = Domain.Enums.IssueReason.Renew
+                }
+            });
+
+        var service = new LicenseQueryService(
+            mockRepo.Object,
+            mockLocalApp.Object,
+            mockDetained.Object,
+            mockClock.Object);
+
+        // Act
+        var result = await service.GetAllAsync(isExpired: true);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.Single(result.Value!);
+        Assert.False(result.Value![0].IsEligibleForRenewal);
+        Assert.Contains("License #20", result.Value![0].IneligibilityReason);
+        mockRepo.Verify(r => r.GetNewerLicensesBatchAsync(It.IsAny<IEnumerable<License>>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public void PagedResult_Map_PreservesMetadataAndProjectsItems()
+    {
+        var source = new Application.Common.Pagination.PagedResult<int>
+        {
+            Items = [1, 2, 3],
+            PageNumber = 2,
+            PageSize = 3,
+            TotalCount = 10
+        };
+
+        var mapped = source.Map(x => x * 10);
+
+        Assert.Equal([10, 20, 30], mapped.Items);
+        Assert.Equal(2, mapped.PageNumber);
+        Assert.Equal(3, mapped.PageSize);
+        Assert.Equal(10, mapped.TotalCount);
+        Assert.Equal(4, mapped.TotalPages);
+        Assert.True(mapped.HasPreviousPage);
+        Assert.True(mapped.HasNextPage);
+    }
+
+    [Fact]
+    public void CurrentUserServiceExtensions_IsAuthenticated_RequiresLoggedInAndPositiveUserId()
+    {
+        var mockUser = new Mock<ICurrentUserService>();
+        mockUser.SetupGet(u => u.IsLoggedIn).Returns(true);
+        mockUser.SetupGet(u => u.UserId).Returns(1);
+        Assert.True(mockUser.Object.IsAuthenticated());
+
+        mockUser.SetupGet(u => u.UserId).Returns(0);
+        Assert.False(mockUser.Object.IsAuthenticated());
+
+        mockUser.SetupGet(u => u.UserId).Returns(1);
+        mockUser.SetupGet(u => u.IsLoggedIn).Returns(false);
+        Assert.False(mockUser.Object.IsAuthenticated());
+    }
 }

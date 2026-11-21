@@ -11,7 +11,7 @@ namespace DVLD.Api.Controllers;
 [ApiController]
 [Authorize(Policy = "StaffOnly")]
 [Route("api/[controller]")]
-public sealed class LicensesController(ILicenseService service) : ControllerBase
+public sealed class LicensesController(ILicenseQueryService service) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> GetAll(

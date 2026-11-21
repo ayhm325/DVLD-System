@@ -489,7 +489,6 @@ public sealed class RepositoryConcurrencyLostUpdateTests : IClassFixture<SqlServ
             currentUser,
             licenseClassService,
             testWorkflowService,
-            NullLogger<LicenseIssuanceService>.Instance,
             _clock);
     }
 

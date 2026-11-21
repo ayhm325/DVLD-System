@@ -1,6 +1,7 @@
 using Application.Common.Results;
 using Application.DTOs.ApplicationDTO;
 using Application.DTOs.TestAppointmentDTO;
+using Application.Interfaces;
 using Application.Mappers;
 using Application.Validators;
 using Domain.Enums;
@@ -79,7 +80,7 @@ public sealed partial class TestAppointmentService
         if (validation.IsFailure)
             return validation;
 
-        if (!IsAuthenticated())
+        if (!_currentUserService.IsAuthenticated())
             return Result.Forbidden("You must be logged in first.");
 
         var testType = await _testTypeRepository.GetByIdAsync(dto.TestTypeID, cancellationToken);
@@ -155,7 +156,7 @@ public sealed partial class TestAppointmentService
         if (validation.IsFailure)
             return Result<ScheduleTestDto>.FromValidationFailure(validation.Error);
 
-        if (!IsAuthenticated())
+        if (!_currentUserService.IsAuthenticated())
             return Result<ScheduleTestDto>.FromForbidden(
                 "You must be logged in first.");
 
