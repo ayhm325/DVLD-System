@@ -63,35 +63,43 @@ public static class MiddlewareExtensions
 
         app.UseAuthorization();
 
-        app.MapControllers();
+        // React SPA fallback.
+        // Only rewrite unmatched browser page requests to index.html.
+        // Never override API responses, matched endpoints, or HTTP method mismatches.
+        app.Use(async (context, next) =>
+        {
+            await next();
 
-        // Client-side routes (for example /people or /applications/123) must load the SPA.
-        // Unknown /api routes must remain API 404 responses and must never receive index.html.
-        app.MapFallback(
-            "{*path:nonfile}",
-            async context =>
+            if (context.Response.HasStarted ||
+                context.Response.StatusCode != StatusCodes.Status404NotFound ||
+                context.GetEndpoint() is not null ||
+                context.Request.Path.StartsWithSegments("/api") ||
+                (!HttpMethods.IsGet(context.Request.Method) &&
+                 !HttpMethods.IsHead(context.Request.Method)) ||
+                Path.HasExtension(context.Request.Path.Value))
             {
-                if (context.Request.Path.StartsWithSegments("/api"))
-                {
-                    context.Response.StatusCode = StatusCodes.Status404NotFound;
-                    return;
-                }
+                return;
+            }
 
-                var webRootPath = app.Environment.WebRootPath
-                    ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot");
-                var indexPath = Path.Combine(webRootPath, "index.html");
+            var webRootPath = app.Environment.WebRootPath
+                ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot");
 
-                if (!File.Exists(indexPath))
-                {
-                    context.Response.StatusCode = StatusCodes.Status404NotFound;
-                    return;
-                }
+            var indexPath = Path.Combine(webRootPath, "index.html");
 
-                context.Response.ContentType = "text/html; charset=utf-8";
-                await context.Response.SendFileAsync(
-                    indexPath,
-                    context.RequestAborted);
-            });
+            if (!File.Exists(indexPath))
+            {
+                return;
+            }
+
+            context.Response.StatusCode = StatusCodes.Status200OK;
+            context.Response.ContentType = "text/html; charset=utf-8";
+
+            await context.Response.SendFileAsync(
+                indexPath,
+                context.RequestAborted);
+        });
+
+        app.MapControllers();
 
         return app;
     }
