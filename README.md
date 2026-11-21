@@ -4,6 +4,14 @@ An enterprise full-stack driver licensing, examination scheduling, and civic ide
 
 ---
 
+## Live Demo
+
+- **URL**: https://dvld-demo-ayhm-2026-frcwbghpadcccxaj.uaenorth-01.azurewebsites.net/
+- **Username**: `ajad`
+- **Password**: `12345678`
+
+---
+
 ## Key Capabilities
 
 - **Civic Identity & Driver Records**: Manage person records with optimistic concurrency (`RowVersion`), national ID uniqueness, country lookup, and disk-backed photo storage with ETag caching.
