@@ -96,40 +96,23 @@ export default function TestAppointmentsPage({
   const appointments = useMemo(() => page?.items ?? [], [page?.items])
   const totalCount = page?.totalCount ?? 0
 
-  const [tabCounts, setTabCounts] = useState<{ all?: number; today?: number; history?: number }>({})
-
-  const loadTabCounts = useCallback(async () => {
-    if (!accessToken) return
-    try {
-      const [allPage, todayPage, historyPage] = await Promise.all([
-        getAppointmentsPage(accessToken, 1, 1, undefined, undefined, undefined, 'all'),
-        getAppointmentsPage(accessToken, 1, 1, undefined, undefined, undefined, 'today'),
-        getAppointmentsPage(accessToken, 1, 1, undefined, undefined, undefined, 'history'),
-      ])
-      setTabCounts({
-        all: allPage.totalCount,
-        today: todayPage.totalCount,
-        history: historyPage.totalCount,
-      })
-    } catch {
-      // Non-blocking: active tab count still updates from `page.totalCount`
+  const countsFetcher = useCallback(async () => {
+    const [allPage, todayPage, historyPage] = await Promise.all([
+      getAppointmentsPage(accessToken, 1, 1, undefined, undefined, undefined, 'all'),
+      getAppointmentsPage(accessToken, 1, 1, undefined, undefined, undefined, 'today'),
+      getAppointmentsPage(accessToken, 1, 1, undefined, undefined, undefined, 'history'),
+    ])
+    return {
+      all: allPage.totalCount,
+      today: todayPage.totalCount,
+      history: historyPage.totalCount,
     }
   }, [accessToken])
 
-  useEffect(() => {
-    void loadTabCounts()
-  }, [loadTabCounts])
-
-  useEffect(() => {
-    if (
-      page &&
-      !debouncedSearch.trim() &&
-      testTypeFilter === 'all' &&
-      statusFilter === 'all'
-    ) {
-      setTabCounts((prev) => ({ ...prev, [activeTab]: page.totalCount }))
-    }
-  }, [page, activeTab, debouncedSearch, testTypeFilter, statusFilter])
+  const { data: tabCounts, refresh: refreshTabCounts } = useAsyncData(countsFetcher, {
+    enabled: Boolean(accessToken),
+    dependencies: [accessToken],
+  })
 
   // Current Jordan facility date string (YYYY-MM-DD)
   const todayJordanStr = useMemo(() => getJordanDateString(new Date(), 0), [])
@@ -158,13 +141,13 @@ export default function TestAppointmentsPage({
         message: `Appointment #${appointmentToCancel.testAppointmentId} has been successfully cancelled and locked.`,
       })
       setAppointmentToCancel(null)
-      await fetchData()
+      await Promise.all([fetchData(), refreshTabCounts()])
     } catch (err) {
       setCancelError(err instanceof Error ? err.message : 'Failed to cancel appointment.')
     } finally {
       setCancelling(false)
     }
-  }, [accessToken, appointmentToCancel, fetchData])
+  }, [accessToken, appointmentToCancel, fetchData, refreshTabCounts])
 
   const handleResetFilters = useCallback(() => {
     setSearchQuery('')
@@ -227,7 +210,7 @@ export default function TestAppointmentsPage({
                   activeTab === 'all' ? 'bg-black/30 text-white' : 'bg-[#1b2f52] text-cyan-300'
                 }`}
               >
-                {tabCounts.all ?? (activeTab === 'all' ? totalCount : 0)}
+                {tabCounts?.all ?? (activeTab === 'all' ? totalCount : 0)}
               </span>
             </button>
 
@@ -251,7 +234,7 @@ export default function TestAppointmentsPage({
                   activeTab === 'today' ? 'bg-black/30 text-white' : 'bg-[#1b2f52] text-cyan-300'
                 }`}
               >
-                {tabCounts.today ?? (activeTab === 'today' ? totalCount : 0)}
+                {tabCounts?.today ?? (activeTab === 'today' ? totalCount : 0)}
               </span>
             </button>
 
@@ -275,7 +258,7 @@ export default function TestAppointmentsPage({
                   activeTab === 'history' ? 'bg-black/30 text-white' : 'bg-[#1b2f52] text-cyan-300'
                 }`}
               >
-                {tabCounts.history ?? (activeTab === 'history' ? totalCount : 0)}
+                {tabCounts?.history ?? (activeTab === 'history' ? totalCount : 0)}
               </span>
             </button>
           </div>
