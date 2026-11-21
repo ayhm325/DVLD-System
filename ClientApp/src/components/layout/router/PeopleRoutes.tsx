@@ -28,7 +28,6 @@ export default function PeopleRoutes({
     selectedDriver,
     personDetailsSource,
     licenseHistorySource,
-    setSelectedPersonId,
     navigateToAddPerson,
     navigateToPersonDetails,
     navigateToEditPerson,
@@ -85,10 +84,7 @@ export default function PeopleRoutes({
         accessToken={accessToken}
         personId={selectedPersonId ?? null}
         onBack={() => navigate(personDetailsSource || "People")}
-        onEdit={(id) => {
-          setSelectedPersonId(id);
-          navigate("Edit Person");
-        }}
+        onEdit={navigateToEditPerson}
       />
     );
   }
