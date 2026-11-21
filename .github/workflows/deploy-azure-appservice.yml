@@ -1,0 +1,117 @@
+name: Build and Deploy DVLD Demo to Azure App Service
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: dvld-demo-production-deployment
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # A manual run on the deployment branch must never deploy unmerged code.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22.x
+          cache: npm
+          cache-dependency-path: ClientApp/package-lock.json
+          package-manager-cache: false
+
+      - name: Install frontend dependencies
+        working-directory: ClientApp
+        run: npm ci
+
+      - name: Lint frontend
+        working-directory: ClientApp
+        run: npm run lint
+
+      - name: Run frontend unit tests
+        working-directory: ClientApp
+        run: npm run test
+
+      - name: Build React production bundle
+        working-directory: ClientApp
+        run: npm run build
+
+      - name: Set up .NET SDK from global.json
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Restore API and referenced projects
+        run: dotnet restore API/DVLD.Api/DVLD.Api.csproj
+
+      - name: Build API and referenced projects
+        run: dotnet build API/DVLD.Api/DVLD.Api.csproj --configuration Release --no-restore
+
+      - name: Run backend unit tests
+        run: dotnet test Test/Application.UnitTests/Application.UnitTests.csproj --configuration Release
+
+      - name: Publish API
+        run: dotnet publish API/DVLD.Api/DVLD.Api.csproj --configuration Release --no-build --no-restore --output "${{ runner.temp }}/dvld-publish"
+
+      - name: Add React bundle to API publish output
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${{ runner.temp }}/dvld-publish/wwwroot"
+          cp -a ClientApp/dist/. "${{ runner.temp }}/dvld-publish/wwwroot/"
+          test -s "${{ runner.temp }}/dvld-publish/wwwroot/index.html"
+
+      - name: Upload deployable package
+        uses: actions/upload-artifact@v7
+        with:
+          name: dvld-appservice-package
+          path: ${{ runner.temp }}/dvld-publish/
+          if-no-files-found: error
+          retention-days: 1
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    timeout-minutes: 15
+
+    steps:
+      - name: Download deployable package
+        uses: actions/download-artifact@v8
+        with:
+          name: dvld-appservice-package
+          path: deploy-package
+
+      - name: Verify deploy package
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s deploy-package/DVLD.Api.dll
+          test -s deploy-package/wwwroot/index.html
+
+      - name: Sign in to Azure using GitHub OIDC
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3.0.8
+        with:
+          app-name: dvld-demo-ayhm-2026
+          package: deploy-package

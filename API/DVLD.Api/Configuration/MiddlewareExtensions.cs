@@ -48,6 +48,11 @@ public static class MiddlewareExtensions
 
         app.UseHttpsRedirection();
 
+        // Serve the React production bundle from the same origin as the API.
+        // The Vite development server and its cookie-rewriting proxy are not used in production.
+        app.UseDefaultFiles();
+        app.UseStaticFiles();
+
         app.UseRouting();
 
         app.UseCors("ReactApp");
@@ -59,6 +64,34 @@ public static class MiddlewareExtensions
         app.UseAuthorization();
 
         app.MapControllers();
+
+        // Client-side routes (for example /people or /applications/123) must load the SPA.
+        // Unknown /api routes must remain API 404 responses and must never receive index.html.
+        app.MapFallback(
+            "{*path:nonfile}",
+            async context =>
+            {
+                if (context.Request.Path.StartsWithSegments("/api"))
+                {
+                    context.Response.StatusCode = StatusCodes.Status404NotFound;
+                    return;
+                }
+
+                var webRootPath = app.Environment.WebRootPath
+                    ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+                var indexPath = Path.Combine(webRootPath, "index.html");
+
+                if (!File.Exists(indexPath))
+                {
+                    context.Response.StatusCode = StatusCodes.Status404NotFound;
+                    return;
+                }
+
+                context.Response.ContentType = "text/html; charset=utf-8";
+                await context.Response.SendFileAsync(
+                    indexPath,
+                    context.RequestAborted);
+            });
 
         return app;
     }
