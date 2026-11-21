@@ -92,10 +92,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const logoutAll = useCallback(() => {
-    void logoutAllSessions().finally(() => {
-      clearLocalState('All sessions have been revoked. Please log in again.')
-      channelRef.current?.postMessage({ type: 'logout' } satisfies AuthChannelMessage)
-    })
+    clearLocalState('All sessions have been revoked. Please log in again.')
+    channelRef.current?.postMessage({ type: 'logout' } satisfies AuthChannelMessage)
+    void logoutAllSessions()
   }, [clearLocalState])
 
   // Cross-tab coordination: one tab logging out clears every tab; a login in one

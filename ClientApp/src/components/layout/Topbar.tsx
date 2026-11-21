@@ -257,9 +257,9 @@ export default function Topbar({
         />
 
         <div className="topbar-page-heading">
-          <h1 className="topbar-title">
+          <span className="topbar-title">
             {activePage}
-          </h1>
+          </span>
 
           <nav
             aria-label="Breadcrumb"

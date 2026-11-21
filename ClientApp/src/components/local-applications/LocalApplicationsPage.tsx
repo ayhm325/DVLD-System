@@ -224,8 +224,11 @@ export default function LocalApplicationsPage({
   function returnToList(saved: boolean) {
     setView({ mode: 'list' })
     if (saved) {
-      pagination.resetPage()
-      void refresh()
+      if (pagination.page !== 1) {
+        pagination.resetPage()
+      } else {
+        void refresh()
+      }
       void refreshSummary()
     }
   }
@@ -387,10 +390,7 @@ export default function LocalApplicationsPage({
 
         <TableToolbar<SearchBy>
           searchValue={search}
-          onSearchChange={(val) => {
-            setSearch(val)
-            pagination.resetPage()
-          }}
+          onSearchChange={setSearch}
           searchPlaceholder={placeholderText}
           searchField={searchBy}
           searchFieldOptions={SEARCH_OPTIONS}

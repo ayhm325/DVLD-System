@@ -74,6 +74,8 @@ export default function TestAppointmentsPage({
     activeTab,
   ])
 
+  const [allTabCount, setAllTabCount] = useState<number | undefined>(undefined)
+
   const {
     data: page,
     loading,
@@ -90,6 +92,16 @@ export default function TestAppointmentsPage({
       statusFilter,
       activeTab,
     ],
+    onSuccess: (loadedPage) => {
+      if (
+        activeTab === 'all' &&
+        !debouncedSearch.trim() &&
+        testTypeFilter === 'all' &&
+        statusFilter === 'all'
+      ) {
+        setAllTabCount(loadedPage.totalCount)
+      }
+    },
     defaultErrorMessage: 'Failed to retrieve test appointments from server.',
   })
 
@@ -97,13 +109,11 @@ export default function TestAppointmentsPage({
   const totalCount = page?.totalCount ?? 0
 
   const countsFetcher = useCallback(async () => {
-    const [allPage, todayPage, historyPage] = await Promise.all([
-      getAppointmentsPage(accessToken, 1, 1, undefined, undefined, undefined, 'all'),
+    const [todayPage, historyPage] = await Promise.all([
       getAppointmentsPage(accessToken, 1, 1, undefined, undefined, undefined, 'today'),
       getAppointmentsPage(accessToken, 1, 1, undefined, undefined, undefined, 'history'),
     ])
     return {
-      all: allPage.totalCount,
       today: todayPage.totalCount,
       history: historyPage.totalCount,
     }
@@ -210,7 +220,7 @@ export default function TestAppointmentsPage({
                   activeTab === 'all' ? 'bg-black/30 text-white' : 'bg-[#1b2f52] text-cyan-300'
                 }`}
               >
-                {tabCounts?.all ?? (activeTab === 'all' ? totalCount : 0)}
+                {allTabCount ?? (activeTab === 'all' ? totalCount : 0)}
               </span>
             </button>
 

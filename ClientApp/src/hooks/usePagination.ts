@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 export const PAGE_SIZE_OPTIONS = [10, 20, 60, 80, 100] as const
 export type PageSizeOption = (typeof PAGE_SIZE_OPTIONS)[number]
@@ -77,23 +77,33 @@ export function usePagination<T = unknown>(
         ? page < totalPages
         : true
 
+  const onPageChangeRef = useRef(onPageChange)
+  const prevNotifiedPageRef = useRef(initialPage)
+
+  useEffect(() => {
+    onPageChangeRef.current = onPageChange
+  })
+
+  useEffect(() => {
+    if (prevNotifiedPageRef.current !== page) {
+      prevNotifiedPageRef.current = page
+      onPageChangeRef.current?.(page)
+    }
+  }, [page])
+
   const goToPage = useCallback(
     (targetPage: number) => {
-      setPage((prev) => {
+      setPage(() => {
         const max =
           explicitTotalPages !== undefined
             ? explicitTotalPages
             : explicitTotalCount !== undefined || data !== undefined
               ? totalPages
               : Infinity
-        const clamped = Math.max(1, Math.min(max, targetPage))
-        if (clamped !== prev) {
-          onPageChange?.(clamped)
-        }
-        return clamped
+        return Math.max(1, Math.min(max, targetPage))
       })
     },
-    [explicitTotalPages, explicitTotalCount, data, totalPages, onPageChange],
+    [explicitTotalPages, explicitTotalCount, data, totalPages],
   )
 
   const nextPage = useCallback(() => {
@@ -105,28 +115,17 @@ export function usePagination<T = unknown>(
             ? totalPages
             : Infinity
       const next = prev + 1
-      if (next <= max) {
-        onPageChange?.(next)
-        return next
-      }
-      return prev
+      return next <= max ? next : prev
     })
-  }, [explicitTotalPages, explicitTotalCount, data, totalPages, onPageChange])
+  }, [explicitTotalPages, explicitTotalCount, data, totalPages])
 
   const previousPage = useCallback(() => {
-    setPage((prev) => {
-      const next = Math.max(1, prev - 1)
-      if (next !== prev) {
-        onPageChange?.(next)
-      }
-      return next
-    })
-  }, [onPageChange])
+    setPage((prev) => Math.max(1, prev - 1))
+  }, [])
 
   const resetPage = useCallback(() => {
     setPage(initialPage)
-    onPageChange?.(initialPage)
-  }, [initialPage, onPageChange])
+  }, [initialPage])
 
   const setPageSize = useCallback(
     (newSize: number) => {

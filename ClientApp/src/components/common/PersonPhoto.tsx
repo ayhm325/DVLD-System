@@ -41,6 +41,32 @@ function PhotoLoadingIndicator() {
   )
 }
 
+const MAX_PHOTO_CACHE_ENTRIES = 100
+const photoBlobCache = new Map<string, Blob>()
+
+function getCachedPhotoBlob(
+  token: string,
+  personId: number,
+  photoKey?: string | null,
+): Promise<Blob> {
+  const cacheKey = `${personId}:${photoKey ?? ''}`
+  const cached = photoBlobCache.get(cacheKey)
+  if (cached) {
+    return Promise.resolve(cached)
+  }
+
+  return getPersonPhotoBlob(token, personId, photoKey).then((blob) => {
+    if (photoBlobCache.size >= MAX_PHOTO_CACHE_ENTRIES) {
+      const oldestKey = photoBlobCache.keys().next().value
+      if (oldestKey !== undefined) {
+        photoBlobCache.delete(oldestKey)
+      }
+    }
+    photoBlobCache.set(cacheKey, blob)
+    return blob
+  })
+}
+
 export default function PersonPhoto({
   personId,
   hasPhoto,
@@ -83,7 +109,7 @@ export default function PersonPhoto({
     let isMounted = true
     let currentObjectUrl: string | null = null
 
-    getPersonPhotoBlob(token, personId, photoKey)
+    getCachedPhotoBlob(token, personId, photoKey)
       .then((blob) => {
         if (!isMounted) return
         currentObjectUrl = URL.createObjectURL(blob)

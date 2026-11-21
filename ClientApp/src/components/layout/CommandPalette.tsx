@@ -228,6 +228,9 @@ export default function CommandPalette({
     })
   }, [query, userRole])
 
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const previousActiveElementRef = useRef<HTMLElement | null>(null)
+
   const handleQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setQuery(e.target.value)
     setSelectedIndex(0)
@@ -237,28 +240,58 @@ export default function CommandPalette({
     setQuery('')
     setSelectedIndex(0)
     onClose()
+    const prevEl = previousActiveElementRef.current
+    previousActiveElementRef.current = null
+    if (prevEl && typeof prevEl.focus === 'function') {
+      requestAnimationFrame(() => prevEl.focus())
+    }
   }
 
-  // Focus input automatically and immediately when opened
+  // Focus input automatically, lock body scroll, and restore focus on close
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) return
+
+    previousActiveElementRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    inputRef.current?.focus()
+    const raf = requestAnimationFrame(() => {
       inputRef.current?.focus()
-      const raf = requestAnimationFrame(() => {
-        inputRef.current?.focus()
-        inputRef.current?.select()
-      })
-      const timer = setTimeout(() => {
-        inputRef.current?.focus()
-      }, 0)
-      return () => {
-        cancelAnimationFrame(raf)
-        clearTimeout(timer)
-      }
+      inputRef.current?.select()
+    })
+    const timer = setTimeout(() => {
+      inputRef.current?.focus()
+    }, 0)
+
+    return () => {
+      cancelAnimationFrame(raf)
+      clearTimeout(timer)
+      document.body.style.overflow = previousOverflow
     }
   }, [isOpen])
 
   // Keyboard navigation within the modal
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Tab' && dialogRef.current) {
+      const focusables = dialogRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )
+      if (focusables.length > 0) {
+        const first = focusables[0]
+        const last = focusables[focusables.length - 1]
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault()
+          last.focus()
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault()
+          first.focus()
+        }
+      }
+      return
+    }
+
     if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'k' || e.code === 'KeyK')) {
       e.preventDefault()
       e.stopPropagation()
@@ -311,6 +344,7 @@ export default function CommandPalette({
       aria-label="Command Navigation Palette"
     >
       <div
+        ref={dialogRef}
         className="w-full max-w-xl overflow-hidden rounded-2xl bg-[#101A2D] border border-[#263750] shadow-2xl ring-1 ring-white/10 animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}

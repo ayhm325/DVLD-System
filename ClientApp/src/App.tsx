@@ -1,10 +1,11 @@
-import { useCallback, useState } from "react";
+import { Suspense, lazy, useCallback, useState } from "react";
 import "./App.css";
 
 import Login from "./components/auth/Login";
 import AppErrorBoundary from "./components/common/AppErrorBoundary";
 import LoadingSpinner from "./components/common/LoadingSpinner";
-import AppShell from "./components/layout/AppShell";
+
+const AppShell = lazy(() => import("./components/layout/AppShell"));
 
 import { useAuth } from "./context/useAuth";
 import { useNavigation } from "./context/useNavigation";
@@ -53,16 +54,24 @@ export default function App() {
 
   return (
     <AppErrorBoundary scope="app">
-      <AppShell
-        accessToken={accessToken}
-        user={user}
-        onLogout={handleLogout}
-        statisticsRefreshKey={statisticsRefreshKey}
-        onDashboardNavigate={handleDashboardNavigate}
-        onStatisticsRefresh={handleStatisticsRefresh}
-        internationalRefreshKey={internationalRefreshKey}
-        onInternationalIssued={handleInternationalIssued}
-      />
+      <Suspense
+        fallback={
+          <div className="login-page">
+            <LoadingSpinner message="Loading DVLD workspace..." size="lg" />
+          </div>
+        }
+      >
+        <AppShell
+          accessToken={accessToken}
+          user={user}
+          onLogout={handleLogout}
+          statisticsRefreshKey={statisticsRefreshKey}
+          onDashboardNavigate={handleDashboardNavigate}
+          onStatisticsRefresh={handleStatisticsRefresh}
+          internationalRefreshKey={internationalRefreshKey}
+          onInternationalIssued={handleInternationalIssued}
+        />
+      </Suspense>
     </AppErrorBoundary>
   );
 }

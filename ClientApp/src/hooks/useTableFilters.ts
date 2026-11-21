@@ -48,6 +48,8 @@ export interface UseTableFiltersResult<
  * memoized filtered outputs, and reset capabilities while keeping
  * entity-specific predicate logic completely under page control.
  */
+const EMPTY_FILTERS: Record<string, unknown> = {}
+
 export function useTableFilters<
   T,
   TField extends string = string,
@@ -55,7 +57,7 @@ export function useTableFilters<
 >({
   data,
   initialSearchField = 'all' as TField,
-  initialFilters = {} as TFilters,
+  initialFilters = EMPTY_FILTERS as TFilters,
   filterItem,
   onReset,
 }: UseTableFiltersOptions<T, TField, TFilters>): UseTableFiltersResult<

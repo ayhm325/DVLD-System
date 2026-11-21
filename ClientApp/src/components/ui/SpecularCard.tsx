@@ -240,13 +240,25 @@ export const SpecularCard = forwardRef<HTMLDivElement, SpecularCardProps>(
         }
       }
 
+      let docVisible = typeof document === 'undefined' ? true : !document.hidden
+      let cachedRect: DOMRect | null = null
+      let rectDirty = true
+
+      const readRect = (): DOMRect => {
+        if (rectDirty || !cachedRect) {
+          cachedRect = card.getBoundingClientRect()
+          rectDirty = false
+        }
+        return cachedRect
+      }
+
       const tick = (now: number) => {
         raf = 0
-        if (!visible) return
+        if (!visible || !docVisible) return
         const dt = last ? Math.min(0.05, (now - last) / 1000) : 1 / 60
         last = now
 
-        const rect = card.getBoundingClientRect()
+        const rect = readRect()
         const halfW = rect.width / 2
         const halfH = rect.height / 2
         const centerX = rect.left + halfW
@@ -279,8 +291,8 @@ export const SpecularCard = forwardRef<HTMLDivElement, SpecularCardProps>(
           // Smooth shortest-arc angular interpolation toward the cursor
           const diff = ((targetAngle - angle + 540) % 360) - 180
           angle = (angle + diff * (1 - Math.exp(-dt * 9)) + 360) % 360
-        } else if (orbital) {
-          // Gentle continuous orbital rotation along the card perimeter
+        } else if (orbital && active) {
+          // Gentle orbital rotation when card is active
           angle = (angle + dt * 28) % 360
         }
 
@@ -290,7 +302,7 @@ export const SpecularCard = forwardRef<HTMLDivElement, SpecularCardProps>(
 
         updateDom(localX, localY, angle, level, near)
 
-        if (orbital || near > 0.005 || Math.abs(targetLevel - level) > 0.002) {
+        if ((orbital && active) || near > 0.005 || Math.abs(targetLevel - level) > 0.002) {
           raf = requestAnimationFrame(tick)
         } else {
           last = 0
@@ -298,7 +310,7 @@ export const SpecularCard = forwardRef<HTMLDivElement, SpecularCardProps>(
       }
 
       const wake = () => {
-        if (!raf && visible && typeof requestAnimationFrame === 'function') {
+        if (!raf && visible && docVisible && typeof requestAnimationFrame === 'function') {
           raf = requestAnimationFrame(tick)
         }
       }
@@ -316,11 +328,30 @@ export const SpecularCard = forwardRef<HTMLDivElement, SpecularCardProps>(
         wake()
       }
 
+      const markDirty = () => {
+        rectDirty = true
+      }
+
+      const handleVisibilityChange = () => {
+        docVisible = !document.hidden
+        if (docVisible && (active || pointer.known)) {
+          last = 0
+          wake()
+        }
+      }
+
+      const resizeObserver =
+        typeof ResizeObserver !== 'undefined'
+          ? new ResizeObserver(markDirty)
+          : null
+      resizeObserver?.observe(card)
+
       let intersection: IntersectionObserver | null = null
       if (typeof IntersectionObserver !== 'undefined') {
         intersection = new IntersectionObserver((entries) => {
           visible = entries.some((entry) => entry.isIntersecting)
           if (visible) {
+            rectDirty = true
             last = 0
             wake()
           }
@@ -331,6 +362,8 @@ export const SpecularCard = forwardRef<HTMLDivElement, SpecularCardProps>(
       window.addEventListener('pointermove', handleWinPointerMove, {
         passive: true,
       })
+      window.addEventListener('scroll', markDirty, { passive: true, capture: true })
+      document.addEventListener('visibilitychange', handleVisibilityChange)
       document.documentElement.addEventListener('pointerleave', handleDocLeave)
       wake()
 
@@ -338,8 +371,11 @@ export const SpecularCard = forwardRef<HTMLDivElement, SpecularCardProps>(
         if (typeof cancelAnimationFrame === 'function') {
           cancelAnimationFrame(raf)
         }
+        resizeObserver?.disconnect()
         intersection?.disconnect()
         window.removeEventListener('pointermove', handleWinPointerMove)
+        window.removeEventListener('scroll', markDirty, true)
+        document.removeEventListener('visibilitychange', handleVisibilityChange)
         document.documentElement.removeEventListener(
           'pointerleave',
           handleDocLeave,

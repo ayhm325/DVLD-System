@@ -70,17 +70,28 @@ export function useStatCardEffects(): UseStatCardEffectsResult {
     let raf = 0;
     let last = 0;
     let visible = true;
+    let docVisible = typeof document === "undefined" ? true : !document.hidden;
     let angle = 315;
     let level = 0.42;
+    let cachedRect: DOMRect | null = null;
+    let rectDirty = true;
     const pointer = { x: -9999, y: -9999, known: false };
+
+    const readRect = (): DOMRect => {
+      if (rectDirty || !cachedRect) {
+        cachedRect = card.getBoundingClientRect();
+        rectDirty = false;
+      }
+      return cachedRect;
+    };
 
     const tick = (now: number) => {
       raf = 0;
-      if (disposed || !visible) return;
+      if (disposed || !visible || !docVisible) return;
       const dt = last ? Math.min(0.05, (now - last) / 1000) : 1 / 60;
       last = now;
 
-      const rect = card.getBoundingClientRect();
+      const rect = readRect();
       const halfW = rect.width / 2;
       const halfH = rect.height / 2;
       const centerX = rect.left + halfW;
@@ -107,8 +118,6 @@ export function useStatCardEffects(): UseStatCardEffectsResult {
       if (near > 0.02) {
         const diff = ((targetAngle - angle + 540) % 360) - 180;
         angle = (angle + diff * (1 - Math.exp(-dt * 9)) + 360) % 360;
-      } else {
-        angle = (angle + dt * 32) % 360;
       }
 
       const targetLevel = 0.42 + 0.58 * near;
@@ -124,8 +133,14 @@ export function useStatCardEffects(): UseStatCardEffectsResult {
         );
       }
 
-      if (!disposed && typeof requestAnimationFrame === "function") {
+      if (
+        !disposed &&
+        (near > 0.005 || Math.abs(targetLevel - level) > 0.002) &&
+        typeof requestAnimationFrame === "function"
+      ) {
         raf = requestAnimationFrame(tick);
+      } else {
+        last = 0;
       }
     };
 
@@ -134,6 +149,7 @@ export function useStatCardEffects(): UseStatCardEffectsResult {
         !disposed &&
         !raf &&
         visible &&
+        docVisible &&
         typeof requestAnimationFrame === "function"
       ) {
         raf = requestAnimationFrame(tick);
@@ -148,12 +164,31 @@ export function useStatCardEffects(): UseStatCardEffectsResult {
       wake();
     };
 
+    const markDirty = () => {
+      rectDirty = true;
+    };
+
+    const handleVisibilityChange = () => {
+      docVisible = !document.hidden;
+      if (docVisible && pointer.known) {
+        last = 0;
+        wake();
+      }
+    };
+
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(markDirty)
+        : null;
+    resizeObserver?.observe(card);
+
     let intersection: IntersectionObserver | null = null;
     if (typeof IntersectionObserver !== "undefined") {
       intersection = new IntersectionObserver((entries) => {
         if (disposed) return;
         visible = entries.some((entry) => entry.isIntersecting);
         if (visible) {
+          rectDirty = true;
           last = 0;
           wake();
         }
@@ -164,6 +199,8 @@ export function useStatCardEffects(): UseStatCardEffectsResult {
     window.addEventListener("pointermove", handleWinPointerMove, {
       passive: true,
     });
+    window.addEventListener("scroll", markDirty, { passive: true, capture: true });
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     wake();
 
     return () => {
@@ -172,8 +209,11 @@ export function useStatCardEffects(): UseStatCardEffectsResult {
         cancelAnimationFrame(raf);
         raf = 0;
       }
+      resizeObserver?.disconnect();
       intersection?.disconnect();
       window.removeEventListener("pointermove", handleWinPointerMove);
+      window.removeEventListener("scroll", markDirty, true);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [reducedMotion]);
 
