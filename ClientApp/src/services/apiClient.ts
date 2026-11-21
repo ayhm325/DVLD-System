@@ -301,9 +301,16 @@ export async function logoutAllSessions(): Promise<void> {
   const currentToken = getAccessToken()
   invalidateSession()
   try {
-    await apiRequest<void>('/Auth/logout-all', currentToken ?? undefined, {
+    const headers = buildHeaders(
+      {
+        headers: { [CSRF_HEADER]: '1' },
+      },
+      currentToken ?? undefined,
+    )
+    await fetch(`${API_BASE_URL}/Auth/logout-all`, {
       method: 'POST',
-      headers: { [CSRF_HEADER]: '1' },
+      credentials: 'include',
+      headers,
     })
   } catch {
     // The local session is cleared regardless of the server response.
@@ -329,25 +336,87 @@ function buildHeaders(init: RequestInit, token?: string): Headers {
   return headers
 }
 
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
+
+function isAuthLifecyclePath(normalizedPath: string): boolean {
+  const lower = normalizedPath.toLowerCase()
+  return (
+    lower === '/auth/login' ||
+    lower === '/auth/refresh' ||
+    lower === '/auth/logout' ||
+    lower === '/auth/logout-all'
+  )
+}
+
+function isAbortError(err: unknown): boolean {
+  return (
+    (err instanceof DOMException && err.name === 'AbortError') ||
+    (err instanceof Error && err.name === 'AbortError')
+  )
+}
+
+function createRequestSignal(callerSignal?: AbortSignal | null): {
+  signal: AbortSignal | undefined
+  cleanup: () => void
+} {
+  if (typeof AbortController === 'undefined') {
+    return { signal: callerSignal ?? undefined, cleanup: () => {} }
+  }
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => {
+    controller.abort(new DOMException('Request timed out', 'TimeoutError'))
+  }, DEFAULT_REQUEST_TIMEOUT_MS)
+
+  const onCallerAbort = () => {
+    controller.abort(callerSignal?.reason)
+  }
+
+  if (callerSignal) {
+    if (callerSignal.aborted) {
+      clearTimeout(timeoutId)
+      controller.abort(callerSignal.reason)
+      return { signal: controller.signal, cleanup: () => {} }
+    }
+    callerSignal.addEventListener('abort', onCallerAbort, { once: true })
+  }
+
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      clearTimeout(timeoutId)
+      callerSignal?.removeEventListener('abort', onCallerAbort)
+    },
+  }
+}
+
 async function send(
   path: string,
   init: RequestInit,
   token?: string,
 ): Promise<Response> {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  const { signal, cleanup } = createRequestSignal(init.signal)
 
   try {
     return await fetch(`${API_BASE_URL}${normalizedPath}`, {
       ...init,
+      signal,
       credentials: 'include',
       headers: buildHeaders(init, token),
     })
-  } catch {
+  } catch (err) {
+    if (init.signal?.aborted || isAbortError(err)) {
+      throw err instanceof Error ? err : new DOMException('The operation was aborted.', 'AbortError')
+    }
+
     throw new ApiError(
       0,
       'Network error',
       'Unable to connect to the DVLD API. Check that the API is running and the base URL is correct.',
     )
+  } finally {
+    cleanup()
   }
 }
 
@@ -356,17 +425,22 @@ async function sendWithRefresh(
   init: RequestInit,
   token?: string,
 ): Promise<Response> {
-  let response = await send(path, init, token)
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  let response = await send(normalizedPath, init, token)
 
-  if (response.status !== 401) {
+  if (response.status !== 401 || isAuthLifecyclePath(normalizedPath)) {
     return response
   }
 
   const refreshResult = await refreshSession()
 
+  if (init.signal?.aborted) {
+    throw new DOMException('The operation was aborted.', 'AbortError')
+  }
+
   if (refreshResult.success) {
     // Retry the original request exactly once with the new access token.
-    response = await send(path, init, refreshResult.session.accessToken)
+    response = await send(normalizedPath, init, refreshResult.session.accessToken)
     return response
   }
 

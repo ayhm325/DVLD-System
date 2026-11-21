@@ -408,8 +408,18 @@ const SpecularButton = forwardRef<HTMLButtonElement, SpecularButtonProps>(
 
       const { gl, program, uniforms, vao, toRgb, canvas: sharedCanvas } =
         renderer;
-      const reduce =
-        window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+      let docVisible = typeof document === 'undefined' ? true : !document.hidden;
+      const mq =
+        typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+          ? window.matchMedia('(prefers-reduced-motion: reduce)')
+          : null;
+      let reduce = Boolean(mq?.matches);
+
+      const onMotionChange = (event: MediaQueryListEvent) => {
+        reduce = event.matches;
+        if (!reduce) wake();
+      };
+      mq?.addEventListener('change', onMotionChange);
       const view = { width: 1, height: 1, ratio: 1 };
       const pointer = { x: 0, y: 0, known: false };
       const state = { spot: 0, level: 0, press: 0, ready: false };
@@ -536,7 +546,7 @@ const SpecularButton = forwardRef<HTMLButtonElement, SpecularButtonProps>(
 
       const frame = (now: number) => {
         raf = 0;
-        if (!visible) return;
+        if (!visible || !docVisible || reduce) return;
         const s = settingsRef.current;
         const dt = last ? Math.min(0.05, (now - last) / 1000) : 1 / 60;
         last = now;
@@ -572,7 +582,17 @@ const SpecularButton = forwardRef<HTMLButtonElement, SpecularButtonProps>(
       };
 
       const wake = () => {
-        if (!raf && visible) raf = requestAnimationFrame(frame);
+        if (!raf && visible && docVisible && !reduce) {
+          raf = requestAnimationFrame(frame);
+        }
+      };
+
+      const onVisibilityChange = () => {
+        docVisible = !document.hidden;
+        if (docVisible && !reduce) {
+          last = 0;
+          wake();
+        }
       };
 
       const measure = (entry?: ResizeObserverEntry) => {
@@ -641,6 +661,7 @@ const SpecularButton = forwardRef<HTMLButtonElement, SpecularButtonProps>(
       window.addEventListener('pointermove', onPointerMove, { passive: true });
       window.addEventListener('pointerup', onPointerEnd, { passive: true });
       window.addEventListener('pointercancel', onPointerEnd, { passive: true });
+      document.addEventListener('visibilitychange', onVisibilityChange);
       document.documentElement.addEventListener(
         'pointerleave',
         onPointerLeave,
@@ -654,9 +675,11 @@ const SpecularButton = forwardRef<HTMLButtonElement, SpecularButtonProps>(
         wakeRef.current = null;
         resizeObserver?.disconnect();
         intersection?.disconnect();
+        mq?.removeEventListener('change', onMotionChange);
         window.removeEventListener('pointermove', onPointerMove);
         window.removeEventListener('pointerup', onPointerEnd);
         window.removeEventListener('pointercancel', onPointerEnd);
+        document.removeEventListener('visibilitychange', onVisibilityChange);
         document.documentElement.removeEventListener(
           'pointerleave',
           onPointerLeave,
@@ -667,7 +690,7 @@ const SpecularButton = forwardRef<HTMLButtonElement, SpecularButtonProps>(
 
     useEffect(() => {
       wakeRef.current?.();
-    });
+    }, [autoAnimate, disabled, followMouse]);
 
     return (
       <button

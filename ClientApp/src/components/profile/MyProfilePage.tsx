@@ -352,6 +352,7 @@ export default function MyProfilePage({ accessToken, onNavigate }: MyProfilePage
                   <PersonPhoto
                     personId={profile.personId}
                     photoKey={profile.imagePath}
+                    hasPhoto={Boolean(profile.imagePath)}
                     fullName={profile.fullName}
                     size="xl"
                     accessToken={accessToken}

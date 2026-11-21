@@ -1,6 +1,5 @@
 import { lazy, useCallback } from "react";
 import { useNavigation } from "../../../context/useNavigation";
-import { usePeopleData } from "../../../context/usePeopleData";
 
 const PeoplePage = lazy(() => import("../../people/PeoplePage"));
 const AddPersonPage = lazy(() => import("../../people/AddPersonPage"));
@@ -34,16 +33,10 @@ export default function PeopleRoutes({
     navigateToPersonLicenseHistory,
   } = useNavigation();
 
-  const { refreshPeople } = usePeopleData();
-
-  const handlePersonSaved = useCallback(async () => {
-    try {
-      await refreshPeople();
-    } finally {
-      onPersonAdded?.();
-      navigate("People");
-    }
-  }, [navigate, refreshPeople, onPersonAdded]);
+  const handlePersonSaved = useCallback(() => {
+    onPersonAdded?.();
+    navigate("People");
+  }, [navigate, onPersonAdded]);
 
   if (activePage === "People") {
     return (

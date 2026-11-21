@@ -69,6 +69,7 @@ export function useAsyncData<T>(
   const fetcherRef = useRef(fetcher)
   const onSuccessRef = useRef(onSuccess)
   const onErrorRef = useRef(onError)
+  const pendingRefreshResolversRef = useRef<Array<() => void>>([])
 
   useEffect(() => {
     fetcherRef.current = fetcher
@@ -78,11 +79,14 @@ export function useAsyncData<T>(
 
   useEffect(() => {
     if (!enabled) {
+      const resolvers = pendingRefreshResolversRef.current.splice(0)
+      resolvers.forEach((resolve) => resolve())
       return
     }
 
     const controller = new AbortController()
     let cancelled = false
+    const activeResolvers = pendingRefreshResolversRef.current.splice(0)
 
     async function load() {
       setLoading(true)
@@ -105,6 +109,7 @@ export function useAsyncData<T>(
         if (!cancelled && !controller.signal.aborted) {
           setLoading(false)
         }
+        activeResolvers.forEach((resolve) => resolve())
       }
     }
 
@@ -113,17 +118,24 @@ export function useAsyncData<T>(
     return () => {
       cancelled = true
       controller.abort()
+      activeResolvers.forEach((resolve) => resolve())
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, refreshIndex, defaultErrorMessage, ...dependencies])
 
-  const refresh = useCallback(async () => {
-    setRefreshIndex((prev) => prev + 1)
-  }, [])
+  const refresh = useCallback(() => {
+    if (!enabled) {
+      return Promise.resolve()
+    }
+    return new Promise<void>((resolve) => {
+      pendingRefreshResolversRef.current.push(resolve)
+      setRefreshIndex((prev) => prev + 1)
+    })
+  }, [enabled])
 
   return {
     data,
-    loading,
+    loading: enabled ? loading : false,
     error,
     refresh,
     setData,

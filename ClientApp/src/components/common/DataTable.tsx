@@ -266,7 +266,10 @@ export default function DataTable<T>({
 
               const isClickable = Boolean(onRowClick)
               const isContextMenuOpen =
-                contextMenuState.open && contextMenuState.row === row
+                contextMenuState.open &&
+                contextMenuState.row !== null &&
+                (contextMenuState.row === row ||
+                  getRowKey(contextMenuState.row, -1) === rowKey)
 
               return (
                 <tr

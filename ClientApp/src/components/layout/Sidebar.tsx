@@ -48,7 +48,7 @@ export default function Sidebar({
   const previousOpenRef = useRef(false);
   const initial = (user?.fullName || user?.userName || "U").charAt(0).toUpperCase();
 
-  const [mousePos, setMousePos] = useState({ x: 120, y: 180 });
+  const sidebarRef = useRef<HTMLElement>(null);
   const [isHovered, setIsHovered] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
@@ -63,23 +63,21 @@ export default function Sidebar({
     return () => mq.removeEventListener("change", listener);
   }, []);
 
+  const updatePointerCssVars = (el: HTMLElement, clientX: number, clientY: number) => {
+    const rect = el.getBoundingClientRect();
+    el.style.setProperty("--sidebar-mouse-x", `${clientX - rect.left}px`);
+    el.style.setProperty("--sidebar-mouse-y", `${clientY - rect.top}px`);
+  };
+
   const handlePointerMove = (e: React.PointerEvent<HTMLElement>) => {
     if (reducedMotion) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    setMousePos({
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-    });
+    updatePointerCssVars(e.currentTarget, e.clientX, e.clientY);
   };
 
   const handlePointerEnter = (e: React.PointerEvent<HTMLElement>) => {
     setIsHovered(true);
     if (reducedMotion) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    setMousePos({
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-    });
+    updatePointerCssVars(e.currentTarget, e.clientX, e.clientY);
   };
 
   const handlePointerLeave = () => {
@@ -197,6 +195,7 @@ export default function Sidebar({
         <button type="button" className="sidebar-backdrop" onClick={onCloseMobile} aria-label="Close navigation menu" />
       )}
       <aside
+        ref={sidebarRef}
         className={`sidebar dvld-sidebar${isDesktopCollapsed ? " is-collapsed" : ""}${isOpen ? " sidebar-open" : ""}`}
         id="dvld-primary-sidebar"
         aria-label="Primary navigation"
@@ -212,7 +211,7 @@ export default function Sidebar({
             className="dvld-sidebar-specular-border pointer-events-none absolute inset-0 rounded-[inherit] transition-opacity duration-200 z-30"
             style={{
               border: "2px solid transparent",
-              background: `radial-gradient(340px circle at ${mousePos.x}px ${mousePos.y}px, #ffffff 0%, #38bdf8 30%, rgba(59, 130, 246, 0.45) 55%, transparent 75%) border-box`,
+              background: `radial-gradient(340px circle at var(--sidebar-mouse-x, 120px) var(--sidebar-mouse-y, 180px), #ffffff 0%, #38bdf8 30%, rgba(59, 130, 246, 0.45) 55%, transparent 75%) border-box`,
               WebkitMask:
                 "linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0)",
               WebkitMaskComposite: "destination-out",
@@ -229,7 +228,7 @@ export default function Sidebar({
             className="dvld-sidebar-specular-glare pointer-events-none absolute inset-0 rounded-[inherit] transition-opacity duration-300 z-10"
             style={{
               opacity: isHovered ? 0.7 : 0.15,
-              background: `radial-gradient(420px circle at ${mousePos.x}px ${mousePos.y}px, rgba(255, 255, 255, 0.1) 0%, rgba(59, 130, 246, 0.08) 35%, transparent 70%)`,
+              background: `radial-gradient(420px circle at var(--sidebar-mouse-x, 120px) var(--sidebar-mouse-y, 180px), rgba(255, 255, 255, 0.1) 0%, rgba(59, 130, 246, 0.08) 35%, transparent 70%)`,
             }}
             aria-hidden="true"
           />
